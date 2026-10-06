@@ -44,17 +44,25 @@ const nav: { id: View; label: string; icon: IconType }[] = [
 ];
 
 function AppContent() {
-  const { user, signOut } = useAuth();
-  const [mode, setMode] = useState<'admin' | 'storefront'>('admin');
+  const { user, ready, signOut } = useAuth();
+  const navigate = useNavigate();
+  const setMode = (_m: 'storefront') => { void navigate({ to: '/' }); };
   const [view, setView] = useState<View>('dashboard');
   const [mobileNav, setMobileNav] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(null), 2800); };
 
+  if (!ready) return <div className="login-screen" dir="rtl"><div style={{ margin: 'auto' }}><Loading /></div></div>;
   if (!user) return <Login />;
-
-  if (mode === 'storefront') return <Storefront onExit={() => setMode('admin')} />;
+  if (!user.isStaff) return (
+    <div className="login-screen" dir="rtl"><div className="login-right" style={{ margin: 'auto' }}><div className="login-form">
+      <h1>لا تملك صلاحية الإدارة</h1>
+      <p>حسابك ({user.email}) حساب عميل. لوحة التحكم متاحة لفريق الأغبري فقط.</p>
+      <button className="login-submit" onClick={() => setMode('storefront')}>الذهاب إلى المتجر</button>
+      <button className="login-submit" style={{ marginTop: 10, opacity: .8 }} onClick={() => void signOut()}>تسجيل الخروج</button>
+    </div></div></div>
+  );
 
   return (
     <div className="app-shell" dir="rtl">
@@ -89,8 +97,8 @@ function AppContent() {
   );
 }
 
-function App() {
-  return <AuthProvider><AppContent /></AuthProvider>;
+export function AdminApp() {
+  return <AppContent />;
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
