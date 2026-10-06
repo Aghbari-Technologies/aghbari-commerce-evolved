@@ -164,30 +164,16 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
   const [error, setError] = useState('');
 
   async function submit() {
-    if (!name.trim() || !phone.trim()) { setError('الاسم ورقم الهاتف مطلوبان'); return; }
+    if (!user) { setError('سجّل الدخول أو أنشئ حساباً لإتمام الطلب'); return; }
+    if (name.trim().length < 2 || phone.trim().length < 6) { setError('الاسم ورقم الهاتف مطلوبان'); return; }
     setSubmitting(true); setError('');
     try {
-      const { data: existing } = await supabase.from('customers').select('id').eq('business_name', business || name).limit(1).maybeSingle();
-      let customerId = existing?.id;
-      if (!customerId) {
-        const { data: newCust } = await supabase.from('customers').insert({
-          organization_id: ORG_ID,
-          customer_code: `CUST-${Date.now().toString().slice(-6)}`,
-          business_name: business || name,
-          contact_name: name,
-          phone,
-          tier: 'retail',
-          status: 'pending',
-        }).select().single();
-        customerId = newCust?.id;
-      }
-      if (!customerId) throw new Error('تعذر إنشاء العميل');
-      const order = await createOrder({
-        customer_id: customerId,
-        items: cart.map((i) => ({ product_id: i.product.id, item_code: i.product.item_code, product_name: i.product.name, unit: i.product.unit, quantity: i.quantity, unit_price: i.product.base_price })),
-        notes,
+      const { data, error: rpcError } = await supabase.rpc('place_order', {
+        _items: cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })),
+        _notes: notes.trim(), _business_name: business.trim(), _contact_name: name.trim(), _phone: phone.trim(),
       });
-      onComplete(order.order_number);
+      if (rpcError) throw new Error(rpcError.message || 'تعذر إرسال الطلب');
+      onComplete((data as { order_number: string }).order_number);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذر إرسال الطلب');
     } finally { setSubmitting(false); }
