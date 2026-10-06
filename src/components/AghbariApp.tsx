@@ -14,9 +14,10 @@ import {
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber } from '@/lib/format';
 import type { Category, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
-import { AuthProvider, useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
+import { useNavigate } from '@tanstack/react-router';
 import { Login } from '@/components/Login';
-import { Storefront } from '@/components/Storefront';
+
 import {
   AiCenter, Devices, Field, Loading, ErrorBox, Empty, Button,
   TableWrap, Modal, Notifications, OrderDetail, SettingsPage, Suppliers,
@@ -165,4 +166,4 @@ function ReportMetric({ label, value, icon: Icon }: { label: string; value: stri
 
 function DataCenter({ onNotice }: { onNotice: (m: string) => void }) { const { data: categories, loading, refetch } = useFetch(fetchCategories); const [name, setName] = useState(''); async function add() { if (!name.trim()) return; try { await createCategory({ name, is_active: true, sort_order: (categories?.length ?? 0) + 1 }); setName(''); refetch(); onNotice('تمت إضافة التصنيف'); } catch (e) { onNotice(e instanceof Error ? e.message : 'تعذر إضافة التصنيف'); } } return <><Heading eyebrow="إدارة البيانات" title="مركز البيانات الموحد" description="تنظيم التصنيفات ومراجعة البيانات الأساسية من مكان واحد" icon={Database} /><div className="data-layout"><section className="panel"><div className="panel-head"><div><h2>التصنيفات</h2><p>تستخدم لتنظيم المنتجات والتقارير</p></div></div><div className="inline-form"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم التصنيف الجديد" /><Button onClick={add}><Plus size={16} /> إضافة</Button></div>{loading ? <Loading /> : <div className="category-list">{categories?.map((c: Category) => <div key={c.id}><span>{c.name}</span><small>{c.code ?? 'بدون رمز'}</small></div>)}</div>}</section><section className="panel data-info"><Database size={28} /><h2>بيانات موحدة وآمنة</h2><p>تعمل المنتجات والعملاء والطلبات والمخزون من مصدر بيانات واحد، لتقليل التعارض ورفع دقة القرارات.</p><div className="data-status"><Check size={16} /> الاتصال بقاعدة البيانات نشط</div></section></div></>; }
 
-export default App;
+
