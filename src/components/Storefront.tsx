@@ -9,12 +9,15 @@ import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
+import { Link } from '@tanstack/react-router';
+import { FileText } from 'lucide-react';
 import { supabase, ORG_ID } from '@/lib/supabase';
 
 type CartItem = { product: ProductWithInventory; quantity: number };
 type StoreView = 'shop' | 'product' | 'wishlist' | 'compare' | 'cart' | 'checkout' | 'confirm';
 
 export function Storefront({ onExit }: { onExit: () => void }) {
+  const { user } = useAuth();
   const { data: products } = useFetch(fetchProducts);
   const { data: categories } = useFetch(fetchCategories);
   const { data: promotions } = useFetch(fetchPromotions);
@@ -64,7 +67,7 @@ export function Storefront({ onExit }: { onExit: () => void }) {
           <div className="sf-brand"><div className="sf-brand-icon"><Activity size={22} /></div><div><strong>{(settings?.store_name as string) ?? 'الأغبري'}</strong><span>{(settings?.store_tagline as string) ?? 'مواد غذائية بالجملة'}</span></div></div>
           <button className="sf-admin-btn" onClick={onExit}><Activity size={16} /> لوحة التحكم</button>
           <div className="sf-search"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث عن منتج..." /></div>
-          <div className="sf-header-links"><button onClick={() => setView('wishlist')}><Heart size={16} /> المفضلة <b>{wishlist.length}</b></button><button onClick={() => setView('compare')}><GitCompare size={16} /> مقارنة</button></div>
+          <div className="sf-header-links"><button onClick={() => setView('wishlist')}><Heart size={16} /> المفضلة <b>{wishlist.length}</b></button><button onClick={() => setView('compare')}><GitCompare size={16} /> مقارنة</button><Link to="/orders" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'inherit', textDecoration: 'none' }}><FileText size={16} /> طلباتي</Link>{!user && <Link to="/login" style={{ color: 'inherit', fontWeight: 700 }}>دخول</Link>}</div>
           <button className="sf-cart-btn" onClick={() => setView('cart')}><ShoppingCart size={20} /> {cartCount > 0 && <b>{cartCount}</b>}</button>
           <button className="sf-mobile-toggle" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={22} /></button>
         </div>
