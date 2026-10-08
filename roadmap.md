@@ -8,3 +8,4 @@
 - [ ] PDF invoices/statements, barcode scanner, command palette
 - [ ] AI assistant / insights via Lovable AI
 - [ ] Offline field-sales mode
+- [ ] Push code to GitHub (blocked: user connects GitHub from Lovable settings)
