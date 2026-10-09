@@ -412,24 +412,24 @@ export async function fetchCentralSynonyms() {
 }
 
 export async function saveCentralSynonym(input: {
-  sourceHeader: string; normalizedHeader: string; canonicalField: string; profileId?: string | null; locale?: string;
+  sourceHeader: string; normalizedHeader?: string; canonicalField: string; profileId?: string | null; locale?: string;
 }) {
-  const { data, error } = await supabase.from('central_synonym_dictionary').insert({
-    source_header: input.sourceHeader.trim(),
-    normalized_header: input.normalizedHeader.trim().toLowerCase(),
-    canonical_field: input.canonicalField.trim(),
-    profile_id: input.profileId ?? null,
-    locale: input.locale ?? 'ar',
-  }).select().single();
+  // Tenant identity and normalized key are derived server-side; the browser cannot supply organization_id.
+  const { data, error } = await supabase.rpc('create_central_synonym', {
+    p_source_header: input.sourceHeader.trim(),
+    p_canonical_field: input.canonicalField.trim(),
+    p_profile_id: input.profileId ?? null,
+    p_locale: input.locale ?? 'ar',
+  });
   if (error) throw error;
   return data;
 }
 
-export async function finalizeImportJob(jobId: string): Promise<{
+export async function finalizeImportJob(jobId: string, duplicateAction: 'ignore' | 'replace' | 'merge' | 'new_version' = 'new_version'): Promise<{
   job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
   snapshot_id: string | null; review_required: boolean;
 }> {
-  const { data, error } = await supabase.rpc('finalize_import_job', { p_job_id: jobId });
+  const { data, error } = await supabase.rpc('finalize_import_job', { p_job_id: jobId, p_duplicate_action: duplicateAction });
   if (error) throw error;
   return data as {
     job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
