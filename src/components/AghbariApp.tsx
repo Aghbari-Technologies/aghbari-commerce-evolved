@@ -433,7 +433,7 @@ function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       </div>
       <p style={{ color: '#71868a', fontSize: 12, lineHeight: 1.7 }}>الحفظ لا يغيّر قائمة الأسعار يدويًا؛ قاعدة البيانات تحسب الجملة والتجزئة وتكتب سجل التدقيق. لا تُطبّق القاعدة إلا ضمن النطاق والشريحة والكمية والفترة المختارة.</p>
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="modal-actions"><Button variant="outline" onClick={onClose} disabled={saving}>إلغاء</Button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : 'حفظ قاعدة التسعير'}</Button></div>
+      <div className="modal-actions"><button type="button" className="btn outline" onClick={onClose} disabled={saving}>إلغاء</button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : 'حفظ قاعدة التسعير'}</Button></div>
     </form>
   </Modal>;
 }
