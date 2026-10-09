@@ -465,18 +465,18 @@ export async function runInventoryReconciliation(snapshotId: string) {
 }
 
 export async function insertImportRows(jobId: string, rows: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors?: string[] }>): Promise<void> {
-  const { error } = await supabase.from('import_job_rows').insert(rows.map((row) => ({
+  const { error } = await supabase.from('import_job_rows').upsert(rows.map((row) => ({
     import_job_id: jobId,
     row_number: row.rowNumber,
     data: row.data,
     status: row.status,
     errors: row.errors ?? null,
-  })));
+  })), { onConflict: 'import_job_id,row_number' });
   if (error) throw error;
 }
 
 export async function updateImportJob(id: string, updates: Partial<ImportJob>): Promise<void> {
-  const { error } = await supabase.from('import_jobs').update(updates).eq('id', id).eq('organization_id', ORG_ID);
+  const { error } = await supabase.from('import_jobs').update(updates).eq('id', id);
   if (error) throw error;
 }
 
