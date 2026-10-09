@@ -50,7 +50,7 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
     pending: ['confirmed', 'cancelled'],
     confirmed: ['processing', 'shipped', 'delivered', 'cancelled'],
     processing: ['shipped', 'delivered', 'cancelled'],
-    shipped: ['delivered', 'cancelled'],
+    shipped: ['delivered'],
     delivered: [],
     cancelled: [],
   };
