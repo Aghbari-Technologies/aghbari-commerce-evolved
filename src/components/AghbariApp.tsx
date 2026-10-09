@@ -9,7 +9,7 @@ import {
   createCategory, createCustomer, createProduct, createPricingRule, deletePricingRule, deleteProduct, fetchAiAlerts,
   fetchCategories, fetchCustomers, fetchDashboardStats, fetchOrders, fetchPricingRules,
   fetchProducts, fetchPromotions, togglePricingRule, togglePromotion,
-  updateCustomerStatus, updateProduct,
+  updateCustomerStatus, updatePricingRule, updateProduct,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber } from '@/lib/format';
@@ -256,6 +256,7 @@ function pricingTargetLabel(rule: PricingRule): string {
 function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
   const { data, loading, error, refetch } = useFetch(fetchPricingRules);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingRule, setEditingRule] = useState<PricingRule | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function toggle(rule: PricingRule) {
@@ -323,13 +324,15 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
           {awaitingApproval && <p role="status" style={{ color: '#9a5b13', fontWeight: 800 }}>بانتظار الموافقة — لن تدخل القاعدة في الاحتساب قبل اعتمادها.</p>}
           {unsupported && <p role="alert" style={{ color: '#9a5b13' }}>هذه قاعدة قديمة بنطاق غير مدعوم في المحرك الحالي. لن يُسمح بتفعيلها مجددًا.</p>}
           {locked && <p role="status">قاعدة مقفلة يدويًا؛ التعديل والحذف معطلان.</p>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+            <Button variant="outline" disabled={locked || unsupported || Boolean(rule.requires_approval) || busyId === rule.id} onClick={() => setEditingRule(rule)}><Pencil size={15} /> تعديل القاعدة</Button>
             <Button variant="danger" disabled={locked || busyId === rule.id} onClick={() => void remove(rule)}><Trash2 size={15} /> حذف القاعدة</Button>
           </div>
         </article>;
       })}
     </div>}
-    {showCreate && <PricingRuleModal onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
+    {showCreate && <PricingRuleModal key="create" onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
+    {editingRule && <PricingRuleModal key={editingRule.id} rule={editingRule} onClose={() => setEditingRule(null)} onSaved={async () => { await refetch(); setEditingRule(null); onNotice('تم تحديث القاعدة وإعادة احتساب الأسعار وفق التغييرات'); }} />}
   </>;
 }
 
