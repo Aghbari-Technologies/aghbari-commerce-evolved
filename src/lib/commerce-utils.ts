@@ -11,9 +11,13 @@ export function summarizeAccount(invoices: InvoiceAmount[], payments: PaymentAmo
   for (const payment of payments) {
     paidByInvoice.set(payment.invoice_id, (paidByInvoice.get(payment.invoice_id) ?? 0) + money(payment.amount));
   }
-  const invoiced = invoices.reduce((sum, invoice) => sum + money(invoice.total_amount), 0);
-  const paid = payments.reduce((sum, payment) => sum + money(payment.amount), 0);
-  const outstanding = invoices.reduce(
+  const activeInvoices = invoices.filter((invoice) => invoice.status !== 'void');
+  const activeIds = new Set(activeInvoices.map((invoice) => invoice.id));
+  const invoiced = activeInvoices.reduce((sum, invoice) => sum + money(invoice.total_amount), 0);
+  const paid = payments
+    .filter((payment) => activeIds.has(payment.invoice_id))
+    .reduce((sum, payment) => sum + money(payment.amount), 0);
+  const outstanding = activeInvoices.reduce(
     (sum, invoice) => sum + Math.max(0, money(invoice.total_amount) - (paidByInvoice.get(invoice.id) ?? 0)),
     0,
   );
