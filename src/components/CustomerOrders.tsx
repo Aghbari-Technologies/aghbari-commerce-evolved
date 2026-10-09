@@ -119,8 +119,30 @@ function OrderInvoiceInner({ id }: { id: string }) {
             </tr>;
           })}</tbody>
         </table>
+        {order.quantity_review_required && <p role="alert" style={{ marginTop: 14, fontWeight: 800, color: '#9a5b13' }}>تنبيه: تم تعديل الأصناف/الكميات بحسب الكميات المتوفرة.</p>}
+        {order.customer_adjustment_note && <p role="status" style={{ marginTop: 8, fontWeight: 700 }}>{order.customer_adjustment_note}</p>}
+        {order.customer_payment_requested_at && order.payment_request_status === 'requested' && <p role="status" style={{ marginTop: 14, padding: 12, borderRadius: 10, background: '#edf9f2', color: '#17684d', fontWeight: 800 }}>تم تأكيد الطلب من جهة الإدارة. يرجى إرسال المبلغ وفق تعليمات الشركة؛ هذا ليس إشعارًا باستلام الدفع.</p>}
         {order.notes && <p style={{ marginTop: 14 }}>ملاحظات: {order.notes}</p>}
-        {history.length > 0 && <section style={{ marginTop: 18 }}><h3 style={{ fontSize: 15 }}>مسار الطلب</h3><ol>{history.map((h) => <li key={h.id}>{STATUS_LABELS[h.to_status] ?? h.to_status} — {formatDate(h.created_at)}</li>)}</ol></section>}
+        <section style={{ marginTop: 18 }}>
+          <h3 style={{ fontSize: 15 }}>متابعة الطلب</h3>
+          <div aria-label="مسار حالة الطلب" style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 6, margin: '14px 0' }}>
+            {[
+              ['pending','تم استلام الطلب'],
+              ['confirmed','تمت المراجعة'],
+              ['processing','قيد التجهيز'],
+              ['shipped','تم الشحن'],
+              ['delivered','تم التسليم'],
+            ].map(([status,label], index, all) => {
+              const current = all.findIndex((item) => item[0] === order.status);
+              const complete = current >= index || order.status === 'delivered';
+              return <div key={status} style={{ textAlign: 'center', color: complete ? '#087f8d' : '#9aabad', fontSize: 11 }}>
+                <div aria-label={complete ? 'مكتمل' : 'لم يكتمل'} style={{ width: 25, height: 25, borderRadius: 999, margin: '0 auto 6px', display: 'grid', placeItems: 'center', background: complete ? '#dff5ed' : '#edf1f2', color: complete ? '#087f8d' : '#84979b', fontWeight: 900 }}>{complete ? '✓' : index + 1}</div>
+                <span>{label}</span>
+              </div>;
+            })}
+          </div>
+          {history.length > 0 && <ol>{history.map((h) => <li key={h.id}>{STATUS_LABELS[h.to_status] ?? h.to_status} — {formatDate(h.created_at)}</li>)}</ol>}
+        </section>
       </article>
     </Shell>
   );
