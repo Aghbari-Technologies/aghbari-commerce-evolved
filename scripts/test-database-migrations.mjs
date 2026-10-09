@@ -600,7 +600,7 @@ async function main() {
   );
   await expectFailure(
     "ordinary staff cannot change roles through the admin RPC",
-    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [secondProfileId, db.array(["accountant"], "text")]),
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [secondProfileId, "{accountant}"]),
     /admin role required/i,
   );
 
@@ -634,22 +634,22 @@ async function main() {
     "admin user listing must not include another organization's profiles");
   await expectFailure(
     "administrator cannot change their own roles through role-management RPC",
-    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [staffProfileId, db.array(["staff"], "text")]),
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [staffProfileId, "{staff}"]),
     /cannot change their own roles/i,
   );
   await expectFailure(
     "administrator cannot assign a role outside the organization",
-    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [foreignProfileId, db.array(["accountant"], "text")]),
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [foreignProfileId, "{accountant}"]),
     /outside the current organization/i,
   );
   await expectFailure(
     "customer role cannot be combined with operational/accountant roles",
-    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [secondProfileId, db.array(["customer","accountant"], "text")]),
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [secondProfileId, "{customer,accountant}"]),
     /customer role cannot be combined/i,
   );
   const assignedAccountant = await db.unsafe(
     "select public.set_organization_user_roles($1::uuid,$2::text[]) as result",
-    [operationsStaffProfileId, db.array(["accountant"], "text")],
+    [operationsStaffProfileId, "{accountant}"],
   );
   assert.deepEqual(assignedAccountant[0].result.roles.sort(), ["accountant"],
     "admin can assign the accountant finance-only role");
@@ -660,7 +660,7 @@ async function main() {
   assert.ok(auditedRoleChange.some((row) => row.action === "user.roles.changed"), "role assignment must be audited");
   const restoredOperationsRole = await db.unsafe(
     "select public.set_organization_user_roles($1::uuid,$2::text[]) as result",
-    [operationsStaffProfileId, db.array(["staff"], "text")],
+    [operationsStaffProfileId, "{staff}"],
   );
   assert.deepEqual(restoredOperationsRole[0].result.roles.sort(), ["staff"],
     "admin can restore the operations role after the role assignment test");
