@@ -852,9 +852,9 @@ async function main() {
     `insert into public.pricing_rules(
        organization_id,name,scope_type,scope_value,base_type,base_source,adjustment_type,
        calculation_method,adjustment_value,target_tier,min_quantity,min_price,max_price,
-       priority,is_active,requires_approval,manually_locked,version
+       priority,is_active
      ) values($1,'CI pricing calculation rule','product',$2,'base_price','base_price','percentage',
-       'add_percentage',10,'both',1,null,null,1,true,false,false,1)
+       'add_percentage',10,'both',1,null,null,1,true)
      returning id`,
     [organizationId, productId],
   );
@@ -932,7 +932,7 @@ async function main() {
   await setIdentity(operationsStaffAuthUserId, "ci-operations-staff@example.test");
   await db.unsafe("set role authenticated");
   const submittedRuleRows = await db.unsafe(
-    "insert into public.pricing_rules(organization_id,name,scope_type,scope_value,base_type,base_source,adjustment_type,calculation_method,adjustment_value,target_tier,min_quantity,min_price,max_price,priority,is_active,requires_approval,manually_locked,version,approved_by,approved_at) values($1,'CI approval workflow rule','product',$2,'base_price','base_price','percentage','add_percentage',5,'both',1,null,null,1,true,false,false,1,null,null) returning id,requires_approval,submitted_by,approved_at",
+    "insert into public.pricing_rules(organization_id,name,scope_type,scope_value,base_type,base_source,adjustment_type,calculation_method,adjustment_value,target_tier,min_quantity,min_price,max_price,priority,is_active) values($1,'CI approval workflow rule','product',$2,'base_price','base_price','percentage','add_percentage',5,'both',1,null,null,1,true) returning id,requires_approval,submitted_by,approved_at",
     [organizationId, previewProductId],
   );
   const submittedRule = submittedRuleRows[0];
@@ -948,6 +948,11 @@ async function main() {
     "ordinary staff cannot switch a submitted pricing rule out of approval",
     () => db.unsafe("update public.pricing_rules set requires_approval=false where id=$1", [submittedRule.id]),
     /permission denied|requires_approval can only be changed by the governed creation path/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot edit an existing pricing rule in place",
+    () => db.unsafe("update public.pricing_rules set adjustment_value=6 where id=$1", [submittedRule.id]),
+    /ordinary staff must submit a new pricing rule for approval/i,
   );
   await expectFailure(
     "ordinary staff cannot approve submitted pricing rule",

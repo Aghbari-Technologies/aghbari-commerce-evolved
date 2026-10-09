@@ -82,15 +82,32 @@ BEGIN
     OR NEW.is_active IS DISTINCT FROM OLD.is_active;
 
   IF v_price_fields_changed THEN
+    IF NOT v_manager THEN
+      RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='ordinary staff must submit a new pricing rule for approval instead of editing an existing rule';
+    END IF;
+    IF OLD.requires_approval AND NOT (
+      OLD.approved_at IS NOT NULL
+      AND NEW.is_active IS DISTINCT FROM OLD.is_active
+      AND NEW.name IS NOT DISTINCT FROM OLD.name
+      AND NEW.scope_type IS NOT DISTINCT FROM OLD.scope_type
+      AND NEW.scope_value IS NOT DISTINCT FROM OLD.scope_value
+      AND NEW.base_type IS NOT DISTINCT FROM OLD.base_type
+      AND NEW.base_source IS NOT DISTINCT FROM OLD.base_source
+      AND NEW.adjustment_type IS NOT DISTINCT FROM OLD.adjustment_type
+      AND NEW.calculation_method IS NOT DISTINCT FROM OLD.calculation_method
+      AND NEW.adjustment_value IS NOT DISTINCT FROM OLD.adjustment_value
+      AND NEW.target_tier IS NOT DISTINCT FROM OLD.target_tier
+      AND NEW.min_quantity IS NOT DISTINCT FROM OLD.min_quantity
+      AND NEW.min_price IS NOT DISTINCT FROM OLD.min_price
+      AND NEW.max_price IS NOT DISTINCT FROM OLD.max_price
+      AND NEW.priority IS NOT DISTINCT FROM OLD.priority
+      AND NEW.effective_from IS NOT DISTINCT FROM OLD.effective_from
+      AND NEW.effective_until IS NOT DISTINCT FROM OLD.effective_until
+    ) THEN
+      RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='approval-governed pricing rules cannot be edited; submit a new pricing rule version';
+    END IF;
     NEW.version := greatest(coalesce(NEW.version,OLD.version),OLD.version+1);
     NEW.updated_at := pg_catalog.now();
-    IF NOT v_manager OR OLD.requires_approval THEN
-      NEW.requires_approval := true;
-      NEW.approved_by := NULL;
-      NEW.approved_at := NULL;
-      NEW.approval_note := NULL;
-      NEW.submitted_by := v_actor;
-    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -101,7 +118,12 @@ CREATE TRIGGER pricing_rules_governance_guard BEFORE INSERT OR UPDATE ON public.
   FOR EACH ROW EXECUTE FUNCTION public.guard_pricing_rule_governance();
 
 -- Remove broad table UPDATE and replace it with a precise allowlist that cannot set approval metadata.
-REVOKE UPDATE ON TABLE public.pricing_rules FROM PUBLIC, anon, authenticated;
+REVOKE INSERT, UPDATE ON TABLE public.pricing_rules FROM PUBLIC, anon, authenticated;
+GRANT INSERT (
+  organization_id, name, scope_type, scope_value, base_type, base_source, adjustment_type,
+  calculation_method, adjustment_value, target_tier, min_quantity, min_price, max_price,
+  priority, is_active, effective_from, effective_until
+) ON public.pricing_rules TO authenticated;
 GRANT UPDATE (
   name, scope_type, scope_value, base_type, base_source, adjustment_type, calculation_method,
   adjustment_value, target_tier, min_quantity, min_price, max_price, priority, is_active,

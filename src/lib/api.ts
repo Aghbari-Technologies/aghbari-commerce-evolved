@@ -335,12 +335,6 @@ export async function createPricingRule(input: CreatePricingRuleInput): Promise<
   const { error } = await supabase.from('pricing_rules').insert({
     organization_id: ORG_ID,
     ...fields,
-    requires_approval: false,
-    approved_by: null,
-    approved_at: null,
-    manually_locked: false,
-    is_active: true,
-    version: 1,
   });
   if (error) throw new Error('تعذر إنشاء قاعدة التسعير: ' + error.message);
 }

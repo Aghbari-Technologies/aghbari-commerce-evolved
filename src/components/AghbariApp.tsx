@@ -342,7 +342,7 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div><span className="rule-number">أولوية {rule.priority}</span><h2>{rule.name}</h2></div>
             <label className="switch" title={locked ? 'القاعدة مقفلة يدويًا' : unsupported && !rule.is_active ? 'لا يمكن تفعيل نطاق قديم غير مدعوم' : rule.is_active ? 'إيقاف القاعدة' : 'تفعيل القاعدة'}>
-              <input type="checkbox" aria-label={(rule.is_active ? "إيقاف قاعدة " : "تفعيل قاعدة ") + rule.name} checked={rule.is_active} disabled={locked || busyId === rule.id || (unsupported && !rule.is_active) || awaitingApproval} onChange={() => void toggle(rule)} />
+              <input type="checkbox" aria-label={(rule.is_active ? "إيقاف قاعدة " : "تفعيل قاعدة ") + rule.name} checked={rule.is_active} disabled={!canApprovePricing || locked || busyId === rule.id || (unsupported && !rule.is_active) || awaitingApproval} onChange={() => void toggle(rule)} />
               <span />
             </label>
           </div>
@@ -359,7 +359,7 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
           {unsupported && <p role="alert" style={{ color: '#9a5b13' }}>هذه قاعدة قديمة بنطاق غير مدعوم في المحرك الحالي. لن يُسمح بتفعيلها مجددًا.</p>}
           {locked && <p role="status">قاعدة مقفلة يدويًا؛ التعديل والحذف معطلان.</p>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-            <Button variant="outline" disabled={locked || unsupported || Boolean(rule.requires_approval) || busyId === rule.id} onClick={() => setEditingRule(rule)}><Pencil size={15} /> تعديل القاعدة</Button>
+            <Button variant="outline" disabled={!canApprovePricing || locked || unsupported || Boolean(rule.requires_approval) || busyId === rule.id} onClick={() => setEditingRule(rule)}><Pencil size={15} /> تعديل القاعدة</Button>
             <Button variant="danger" disabled={!canApprovePricing || locked || busyId === rule.id} onClick={() => void remove(rule)}><Trash2 size={15} /> حذف القاعدة</Button>
           </div>
         </article>;
