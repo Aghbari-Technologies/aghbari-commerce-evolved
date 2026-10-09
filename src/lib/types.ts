@@ -60,6 +60,12 @@ export type Order = {
   total_items: number;
   notes: string | null;
   created_at: string;
+  quantity_review_required?: boolean;
+  customer_adjustment_note?: string | null;
+  customer_payment_requested_at?: string | null;
+  customer_confirmed_at?: string | null;
+  admin_adjusted_at?: string | null;
+  payment_request_status?: 'not_requested' | 'requested' | 'reported' | 'verified' | 'cancelled';
 };
 
 export type OrderItem = {
