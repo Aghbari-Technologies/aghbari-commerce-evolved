@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity, Minus, Plus, Search, ShoppingCart, Trash2,
   Package, Tag, Phone, MapPin, Mail, Check, ChevronLeft, Menu,
@@ -217,17 +217,41 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
   const [phone, setPhone] = useState('');
   const [business, setBusiness] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState<'cash_on_delivery' | 'credit'>('cash_on_delivery');
+  const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  function getIdempotencyKey() {
+    const items = cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })).sort((a, b) => a.product_id.localeCompare(b.product_id));
+    const signature = JSON.stringify({ profile_id: user?.profileId, payment_terms: paymentTerms, items });
+    if (idempotencyRef.current?.signature === signature) return idempotencyRef.current.key;
+    const storageKey = 'aghbari:checkout-attempt:v1';
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null') as { signature?: unknown; key?: unknown } | null;
+      if (saved?.signature === signature && typeof saved.key === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(saved.key)) {
+        idempotencyRef.current = { signature, key: saved.key };
+        return saved.key;
+      }
+    } catch { /* session storage is best-effort; the component ref still protects in-page retries */ }
+    const key = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : 'checkout_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+    idempotencyRef.current = { signature, key };
+    try { window.sessionStorage.setItem(storageKey, JSON.stringify({ signature, key })); } catch { /* optional persistence */ }
+    return key;
+  }
 
   async function submit() {
     if (!user) { setError('سجّل الدخول أو أنشئ حساباً لإتمام الطلب'); return; }
     if (name.trim().length < 2 || phone.trim().length < 6) { setError('الاسم ورقم الهاتف مطلوبان'); return; }
     setSubmitting(true); setError('');
+    const requestKey = getIdempotencyKey();
     try {
       const { data, error: rpcError } = await supabase.rpc('place_order', {
         _items: cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })),
         _notes: notes.trim(), _business_name: business.trim(), _contact_name: name.trim(), _phone: phone.trim(),
+        _payment_terms: paymentTerms, _idempotency_key: requestKey,
       });
       if (rpcError) throw new Error(rpcError.message || 'تعذر إرسال الطلب');
       const result = data as { id?: unknown; order_number?: unknown; total_amount?: unknown } | null;
@@ -235,6 +259,12 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
       if (!result || typeof result.id !== 'string' || !result.id || typeof result.order_number !== 'string' || !result.order_number || !Number.isFinite(serverTotal) || serverTotal < 0) {
         throw new Error('استجابة الخادم غير مكتملة؛ لم نعرض الطلب كتأكيد ناجح. راجع طلباتي قبل إعادة الإرسال.');
       }
+      try {
+        const storageKey = 'aghbari:checkout-attempt:v1';
+        const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null') as { key?: unknown } | null;
+        if (saved?.key === requestKey) window.sessionStorage.removeItem(storageKey);
+      } catch { /* request is already confirmed; cleanup is best-effort */ }
+      idempotencyRef.current = null;
       onComplete({ id: result.id, order_number: result.order_number, total_amount: serverTotal });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذر إرسال الطلب');
@@ -249,6 +279,11 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
           <label className="sf-form-field"><span>الاسم الكامل *</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسمك الكامل" /></label>
           <label className="sf-form-field"><span>رقم الهاتف *</span><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="7XX XXX XXX" /></label>
           <label className="sf-form-field"><span>اسم المنشأة</span><input value={business} onChange={(e) => setBusiness(e.target.value)} placeholder="اسم المتجر أو الشركة" /></label>
+          <fieldset className="sf-form-field" style={{ border: '1px solid #d8e8e8', borderRadius: 12, padding: 12, margin: 0 }}><legend style={{ padding: '0 6px', fontWeight: 800 }}>شروط الدفع</legend>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}><input type="radio" name="paymentTerms" value="cash_on_delivery" checked={paymentTerms === 'cash_on_delivery'} onChange={() => setPaymentTerms('cash_on_delivery')} /> الدفع عند الاستلام</label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="radio" name="paymentTerms" value="credit" checked={paymentTerms === 'credit'} onChange={() => setPaymentTerms('credit')} /> الدفع الآجل وفق حد الائتمان المعتمد</label>
+            <small style={{ color: '#71868a' }}>يتحقق الخادم من اعتماد حسابك وحد الائتمان عند اختيار الدفع الآجل.</small>
+          </fieldset>
           <label className="sf-form-field"><span>ملاحظات</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي ملاحظات على الطلب..." /></label>
           {error && <div className="sf-form-error">{error}</div>}
           <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting}>{submitting ? 'جار الإرسال...' : 'تأكيد الطلب'}</button></div>
@@ -256,7 +291,8 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
         <aside className="sf-checkout-summary">
           <h3>ملخص الطلب</h3>
           {cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>{i.quantity} × {formatCurrency(i.product.base_price)}</small></div>)}
-          <div className="sf-summary-total"><span>الإجمالي</span><strong>{formatCurrency(total)}</strong></div>
+          <div className="sf-summary-total"><span>الإجمالي التقديري</span><strong>{formatCurrency(total)}</strong></div>
+          <small style={{ color: '#71868a', lineHeight: 1.7 }}>قد يختلف الإجمالي النهائي عن تقدير السلة؛ يعتمد الخادم سعر شريحة حسابك والكميات قبل تسجيل الطلب.</small>
         </aside>
       </div>
     </section>
