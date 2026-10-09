@@ -83,7 +83,6 @@ describe('commerce completion utilities', () => {
     expect(result.score).toBe(100);
     expect(result.label).toBe('excellent');
     expect(chooseImportStatus(result.score)).toBe('completed');
-
     expect(chooseImportStatus(74)).toBe('manual_review');
     expect(chooseImportStatus(49)).toBe('rejected');
   });
@@ -100,14 +99,7 @@ describe('commerce completion utilities', () => {
       { field: 'quantity', operation: 'to_number' },
       { field: 'date', operation: 'date_iso' },
     ], [
-      { field: 'item_code', rule: 'safe_pattern', value: '^[0-9]{6}
-    expect(classifyAssistantIntent('أين فاتورتي؟')).toBe('invoice_help');
-    expect(classifyAssistantIntent('ما حالة طلبي؟')).toBe('order_status');
-    expect(classifyAssistantIntent('هل يوجد مخزون من السكر؟')).toBe('catalog_search');
-    expect(classifyAssistantIntent('كيف أستخدمه بدون اتصال؟')).toBe('offline_help');
-  });
-});
- },
+      { field: 'item_code', rule: 'safe_pattern', value: '^000125' },
       { field: 'quantity', rule: 'numeric' },
       { field: 'quantity', rule: 'min', value: 1 },
       { field: 'product_name', rule: 'enum', values: ['rice', 'sugar'] },
@@ -133,14 +125,7 @@ describe('commerce completion utilities', () => {
   it('rejects unsupported or unsafe profile rules before reading data', () => {
     expect(() => validateImportProfileRules([{ field: 'name', operation: 'execute_code' }], []))
       .toThrow('قاعدة تحويل');
-    expect(() => validateImportProfileRules([], [{ field: 'name', rule: 'safe_pattern', value: '(a+)+
-    expect(classifyAssistantIntent('أين فاتورتي؟')).toBe('invoice_help');
-    expect(classifyAssistantIntent('ما حالة طلبي؟')).toBe('order_status');
-    expect(classifyAssistantIntent('هل يوجد مخزون من السكر؟')).toBe('catalog_search');
-    expect(classifyAssistantIntent('كيف أستخدمه بدون اتصال؟')).toBe('offline_help');
-  });
-});
- }]))
+    expect(() => validateImportProfileRules([], [{ field: 'name', rule: 'safe_pattern', value: '(a+)+' }]))
       .toThrow('نمط التحقق غير آمن');
     expect(() => validateImportProfileRules([], [{ field: 'quantity', rule: 'enum', values: Array(101).fill('x') }]))
       .toThrow('قاعدة enum');
