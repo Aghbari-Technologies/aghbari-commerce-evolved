@@ -4,7 +4,7 @@ import {
   Gauge, History, Package, RefreshCw, ShieldCheck, Upload, Zap,
 } from 'lucide-react';
 import {
-  fetchCentralSynonyms, fetchImportProfiles, fetchOnyxSnapshots, fetchOnyxSnapshotRows,
+  fetchCentralSynonyms, fetchImportProfiles, fetchOnyxSnapshotAnalytics, fetchOnyxSnapshots, fetchOnyxSnapshotRows,
   runInventoryReconciliation, fetchInventoryReconciliationRuns, fetchInventoryReconciliationItems,
   saveCentralSynonym,
 } from '@/lib/api';
@@ -56,23 +56,16 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
   const selectedId = selectedSnapshotId || snapshots?.[0]?.id || '';
   const selected = snapshots?.find((snapshot) => snapshot.id === selectedId);
-  const { data: rows, loading: rowsLoading, refetch: refetchRows } = useFetch(
+  const { data: rows, loading: rowsLoading, error: rowsError, refetch: refetchRows } = useFetch(
     () => selectedId ? fetchOnyxSnapshotRows(selectedId) : Promise.resolve([]),
     [selectedId],
   );
+  const { data: summary, loading: summaryLoading, error: summaryError, refetch: refetchSummary } = useFetch(
+    () => selectedId ? fetchOnyxSnapshotAnalytics(selectedId) : Promise.resolve(null),
+    [selectedId],
+  );
   const [reconciling, setReconciling] = useState(false);
-  const analytics = useMemo(() => {
-    const validRows = rows ?? [];
-    const quantities = validRows.map((row) => Number(row.data?.quantity ?? 0)).filter((value) => Number.isFinite(value));
-    const revenue = validRows.reduce((sum, row) => sum + Number(row.data?.revenue ?? 0), 0);
-    const uniqueItems = new Set(validRows.map((row) => String(row.canonical_key ?? row.data?.item_code ?? '')).filter(Boolean)).size;
-    return {
-      rows: validRows.length,
-      uniqueItems,
-      quantity: quantities.reduce((sum, value) => sum + value, 0),
-      revenue,
-    };
-  }, [rows]);
+  const metrics = summary?.metrics;
 
   async function reconcileNow() {
     if (!selectedId || reconciling) return;
@@ -90,31 +83,33 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
   return <div className="onyx-dashboard">
     <div className="onyx-banner"><div><span>بيئة تحليلية معزولة</span><h2>أونكس برو — لقطات مستوردة مستقلة</h2><p>تعتمد التحليلات هنا على Snapshot ثابت من الاستيراد؛ لا تعدّل هذه الشاشة المنتجات أو المخزون التشغيلي.</p></div><ShieldCheck size={42} /></div>
     <section className="panel" style={{ margin: '14px 0' }}>
-      <div className="panel-head"><div><h2>مصدر التحليل</h2><p>اختر لقطة معتمدة. لا تُحلّل دفعات staging أو قيد المراجعة.</p></div><Button variant="outline" onClick={() => { refetch(); refetchRows(); }}><RefreshCw size={15} /> تحديث</Button></div>
+      <div className="panel-head"><div><h2>مصدر التحليل</h2><p>اختر لقطة معتمدة. لا تُحلّل دفعات staging أو قيد المراجعة.</p></div><Button variant="outline" onClick={() => { refetch(); refetchRows(); refetchSummary(); }}><RefreshCw size={15} /> تحديث</Button></div>
       {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !snapshots?.length ? <Empty text="لا توجد لقطات Onyx معتمدة. أكمل استيرادًا بجودة مقبولة أولًا." /> :
         <label className="form-field"><span>Snapshot</span><select value={selectedId} onChange={(event) => setSelectedSnapshotId(event.target.value)}>{snapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.source_file_name ?? 'ملف مستورد'} — v{snapshot.snapshot_version} — {new Date(snapshot.created_at).toLocaleString('ar')}</option>)}</select></label>}
     </section>
     {selected && !loading && <>
       <div className="onyx-source"><History size={16} /> المصدر: <strong>{selected.source_file_name ?? '—'}</strong><span>Snapshot #{selected.id.slice(0, 8)} • Version {selected.snapshot_version}</span><span>جودة المصدر {selected.data_quality_score}/100</span></div>
-      {rowsLoading ? <Loading /> : <section className="onyx-kpis">
-        <Metric icon={Database} label="السجلات في اللقطة" value={formatNumber(analytics.rows)} />
-        <Metric icon={Package} label="مفاتيح فريدة" value={formatNumber(analytics.uniqueItems)} />
-        <Metric icon={Gauge} label="إجمالي الكمية" value={formatNumber(analytics.quantity)} />
-        <Metric icon={BarChart3} label="الإيراد المحسوب" value={formatNumber(analytics.revenue)} />
-      </section>}
+      {summaryLoading ? <Loading /> : summaryError ? <ErrorBox message={summaryError} /> : metrics ? <section className="onyx-kpis">
+        <Metric icon={Database} label="السجلات الكاملة" value={formatNumber(metrics.row_count)} />
+        <Metric icon={Package} label="مفاتيح فريدة" value={formatNumber(metrics.unique_keys)} />
+        <Metric icon={Gauge} label="إجمالي الكمية" value={formatNumber(Number(metrics.quantity_total))} />
+        <Metric icon={BarChart3} label="الإيراد المحسوب" value={formatNumber(Number(metrics.revenue_total || metrics.sales_total))} />
+      </section> : null}
       <section className="onyx-section">
         <div className="onyx-section-head"><div><span>تحليل حتمي</span><h3>مصدر البيانات وجودتها</h3></div></div>
         <div className="onyx-insight-grid">
           <Insight icon={ShieldCheck} title="العزل التشغيلي" body="هذه الصفحة تقرأ onyx_snapshot_rows ولا تكتب إلى المنتجات أو العملاء أو المخزون المباشر." />
-          <Insight icon={Zap} title="جودة المصدر" body={'Snapshot ' + selected.id.slice(0, 8) + ' — DQS ' + selected.data_quality_score + '/100. الأرقام محسوبة برمجيًا من الصفوف المنظمة.'} />
-          <Insight icon={Activity} title="التنبؤ" body="Forecast Unavailable: Insufficient Historical Data. لقطة واحدة لا تكفي لإسناد تنبؤ زمني موثوق." />
+          <Insight icon={Zap} title="جودة المصدر" body={'Snapshot ' + selected.id.slice(0, 8) + ' — DQS ' + selected.data_quality_score + '/100. الإجماليات مجمعة على الخادم من كامل اللقطة، وليس من عينة الشاشة.'} />
+          <Insight icon={Activity} title="التنبؤ" body={summary?.forecast_status ?? 'Forecast Unavailable: Insufficient Historical Data'} />
         </div>
       </section>
       <section className="onyx-section">
         <div className="onyx-section-head"><div><span>مطابقة المخزون</span><h3>قارن هذا Snapshot مع المخزون المباشر</h3></div></div>
         <div className="action-card"><div className="action-card-icon"><AlertTriangle size={20} /></div><div><strong>مطابقة قراءة فقط</strong><p>يُنشأ سجل تدقيق دائم للفروقات. لا يتغير المخزون المباشر من هذه الخطوة.</p></div><Button disabled={reconciling || rowsLoading} onClick={() => void reconcileNow()}>{reconciling ? 'جارٍ تنفيذ المطابقة...' : 'مطابقة الآن'}</Button></div>
       </section>
-      {rows?.length ? <section className="onyx-section panel"><div className="panel-head"><div><h3>عينة من صفوف اللقطة الثابتة</h3><p>عرض أول 50 صفًا فقط في الواجهة؛ بيانات المصدر محفوظة منفصلة.</p></div></div><TableWrap><table><thead><tr><th>رقم الصف</th><th>المفتاح القياسي</th><th>الحالة</th><th>بيانات الصف</th></tr></thead><tbody>{rows.slice(0,50).map((row) => <tr key={row.id}><td>{row.row_number}</td><td><code>{row.canonical_key ?? '—'}</code></td><td>{row.status}</td><td><code>{JSON.stringify(row.data).slice(0,220)}</code></td></tr>)}</tbody></table></TableWrap></section> : null}
+      {summary && <section className="onyx-section panel"><div className="panel-head"><div><h3>مؤشرات الجودة حسب المسار</h3><p>النتائج التالية محسوبة على كامل Snapshot.</p></div></div><div className="onyx-insight-grid"><Insight icon={Check} title="صفوف صحيحة" body={formatNumber(metrics?.valid_rows ?? 0)} /><Insight icon={AlertTriangle} title="مرفوضة" body={formatNumber(metrics?.rejected_rows ?? 0)} /><Insight icon={History} title="تحذيرات" body={formatNumber(metrics?.warning_rows ?? 0)} /></div><div className="report-grid" style={{ marginTop: 14 }}>{summary.top_items.map((item) => <article className="report-metric" key={item.item_code}><Package size={20} /><span>{item.item_code}</span><strong>{item.name ?? '—'}</strong><small>الكمية {formatNumber(Number(item.quantity))} · الإيراد {formatNumber(Number(item.revenue))}</small></article>)}</div></section>}
+      {rowsError && <ErrorBox message={rowsError} />}
+      {rows?.length ? <section className="onyx-section panel"><div className="panel-head"><div><h3>عينة من صفوف اللقطة الثابتة</h3><p>عرض أول 50 صفًا فقط في الواجهة؛ المؤشرات أعلى الصفحة تحسب جميع الصفوف.</p></div></div><TableWrap><table><thead><tr><th>رقم الصف</th><th>المفتاح القياسي</th><th>الحالة</th><th>بيانات الصف</th></tr></thead><tbody>{rows.slice(0,50).map((row) => <tr key={row.id}><td>{row.row_number}</td><td><code>{row.canonical_key ?? '—'}</code></td><td>{row.status}</td><td><code>{JSON.stringify(row.data).slice(0,220)}</code></td></tr>)}</tbody></table></TableWrap></section> : null}
     </>}
   </div>;
 }
