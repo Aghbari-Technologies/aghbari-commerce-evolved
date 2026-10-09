@@ -68,6 +68,87 @@ export function validateQuickOrderLines(lines: QuickOrderLineInput[]): QuickOrde
   return { valid: true };
 }
 
+const ARABIC_DIACRITICS = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+
+/** Normalize Arabic and Latin text consistently for storefront and customer-workspace search. */
+export function normalizeArabicSearchText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFKC')
+    .replace(/\u0640/g, '')
+    .replace(ARABIC_DIACRITICS, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .toLocaleLowerCase('ar')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function editDistanceAtMostOne(left: string, right: string): boolean {
+  if (Math.abs(left.length - right.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    edits++;
+    if (edits > 1) return false;
+    if (left.length === right.length) {
+      i++;
+      j++;
+    } else if (left.length > right.length) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  if (i < left.length || j < right.length) edits++;
+  return edits <= 1;
+}
+
+export type ArabicCatalogSearchRecord = {
+  name?: unknown;
+  item_code?: unknown;
+  barcode?: unknown;
+};
+
+/**
+ * Empty queries show all records. SKU/barcode are exact-or-prefix only;
+ * product names additionally support normalized substrings and one-edit token typos.
+ */
+export function matchesArabicCatalogSearch(
+  product: ArabicCatalogSearchRecord,
+  query: string,
+): boolean {
+  const normalized = normalizeArabicSearchText(query);
+  if (!normalized) return true;
+
+  const codeQuery = normalized.replace(/\s+/g, '');
+  if (codeQuery) {
+    const codes = [product.item_code, product.barcode]
+      .map((value) => normalizeArabicSearchText(value).replace(/\s+/g, ''))
+      .filter(Boolean);
+    if (codes.some((code) => code === codeQuery || code.startsWith(codeQuery))) return true;
+  }
+
+  const name = normalizeArabicSearchText(product.name);
+  if (!name) return false;
+  if (name.includes(normalized)) return true;
+
+  const queryTokens = normalized.split(' ').filter(Boolean);
+  const nameTokens = name.split(' ').filter(Boolean);
+  return queryTokens.every((queryToken) => nameTokens.some((nameToken) =>
+    nameToken.includes(queryToken) ||
+    (queryToken.length >= 4 && editDistanceAtMostOne(nameToken, queryToken)),
+  ));
+}
+
 export type CustomerOrderStatusSnapshot = { order_number: string | number; status: string; created_at: string };
 export type CustomerInvoiceStatusSnapshot = { invoice_number: string; status: string; issued_at: string };
 

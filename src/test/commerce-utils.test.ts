@@ -1,6 +1,6 @@
 import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
 function makeStoredZip(files: Record<string, string>): Blob {
   const encoder = new TextEncoder();
@@ -248,6 +248,27 @@ describe('commerce completion utilities', () => {
       .toThrow('نمط التحقق غير آمن');
     expect(() => validateImportProfileRules([], [{ field: 'quantity', rule: 'enum', values: Array(101).fill('x') }]))
       .toThrow('قاعدة enum');
+  });
+
+  it('normalizes Arabic diacritics, tatweel, alef forms and alif maqsura', () => {
+    expect(normalizeArabicSearchText('إِبْرَاهِيمـ ى')).toBe('ابراهيم ي');
+    expect(normalizeArabicSearchText('آلـرُزّ')).toBe('الرز');
+  });
+
+  it('supports Arabic name prefixes and one-character fuzzy matching', () => {
+    const product = { name: 'أرز بسمتي فاخر', item_code: '000125', barcode: '6281234567890' };
+    expect(matchesArabicCatalogSearch(product, 'ارز بسم')).toBe(true);
+    expect(matchesArabicCatalogSearch({ name: 'Sugar white', item_code: 'SUG-001' }, 'sugr white')).toBe(true);
+    expect(matchesArabicCatalogSearch({ name: 'Sugar white', item_code: 'SUG-001' }, 'sugrrrr white')).toBe(false);
+  });
+
+  it('matches SKU and barcode exactly or by prefix without fuzzy identifier matches', () => {
+    const product = { name: 'Rice', item_code: '000125', barcode: '6281234567890' };
+    expect(matchesArabicCatalogSearch(product, '000125')).toBe(true);
+    expect(matchesArabicCatalogSearch(product, '0001')).toBe(true);
+    expect(matchesArabicCatalogSearch(product, '628123')).toBe(true);
+    expect(matchesArabicCatalogSearch(product, '000126')).toBe(false);
+    expect(matchesArabicCatalogSearch(product, '')).toBe(true);
   });
 
   it('keeps customer assistant order and invoice summaries free of monetary fields', () => {
