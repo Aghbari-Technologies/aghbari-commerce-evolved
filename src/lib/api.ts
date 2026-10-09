@@ -723,7 +723,7 @@ export async function fetchDashboardStats() {
   const [products, customers, orders, alerts, lowStock] = await Promise.all([
     supabase.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('status', 'active'),
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID),
-    supabase.from('orders').select('id, status, total_amount', { count: 'exact' }).eq('organization_id', ORG_ID),
+    supabase.rpc('fetch_staff_orders'),
     supabase.from('ai_alerts').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('is_resolved', false),
     supabase.from('inventory_balances').select('quantity_on_hand, reorder_point, product_id').eq('warehouse_id', WAREHOUSE_ID),
   ]);
@@ -732,14 +732,15 @@ export async function fetchDashboardStats() {
     (inv: { quantity_on_hand: number; reorder_point: number }) => inv.quantity_on_hand <= inv.reorder_point
   ).length;
 
-  const ordersData = orders.data || [];
-  const totalSales = ordersData.reduce((sum: number, o: { total_amount: number }) => sum + (o.total_amount || 0), 0);
-  const processingCount = ordersData.filter((o: { status: string }) => o.status === 'processing' || o.status === 'pending').length;
+  if (orders.error) throw orders.error;
+  const ordersData = (orders.data || []) as Array<{ id: string; status: string; total_amount: number }>;
+  const totalSales = ordersData.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const processingCount = ordersData.filter((o) => o.status === 'processing' || o.status === 'pending').length;
 
   return {
     productCount: products.count || 0,
     customerCount: customers.count || 0,
-    orderCount: orders.count || 0,
+    orderCount: ordersData.length,
     totalSales,
     processingCount,
     alertCount: alerts.count || 0,
