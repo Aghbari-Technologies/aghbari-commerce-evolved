@@ -660,10 +660,43 @@ function resolveXlsxSheetPath(target: string): string {
   return result;
 }
 
+async function readXlsxBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  const nativeArrayBuffer = (blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
+  if (typeof nativeArrayBuffer === 'function') return nativeArrayBuffer.call(blob);
+  if (typeof FileReader === 'undefined') throw new Error('المتصفح لا يوفر واجهة قراءة أجزاء ملف XLSX.');
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error('تعذر قراءة جزء من ملف XLSX.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('تعذر قراءة جزء من ملف XLSX.'));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function xlsxBlobStream(blob: Blob): ReadableStream<Uint8Array> {
+  const nativeStream = (blob as Blob & { stream?: () => ReadableStream<Uint8Array> }).stream;
+  if (typeof nativeStream === 'function') return nativeStream.call(blob);
+  // Fallback is only for test/legacy Blob implementations. Modern browsers use Blob.stream().
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      void readXlsxBlobArrayBuffer(blob).then((buffer) => {
+        const bytes = new Uint8Array(buffer);
+        const segmentBytes = 64 * 1024;
+        for (let offset = 0; offset < bytes.length; offset += segmentBytes) {
+          controller.enqueue(bytes.slice(offset, Math.min(bytes.length, offset + segmentBytes)));
+        }
+        controller.close();
+      }).catch((cause: unknown) => controller.error(cause));
+    },
+  });
+}
+
 async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntry>> {
   if (file.size < 22) throw new Error('ملف XLSX تالف أو أقصر من ترويسة ZIP المطلوبة.');
   const tailStart = Math.max(0, file.size - 22 - 65_535);
-  const tail = new Uint8Array(await file.slice(tailStart).arrayBuffer());
+  const tail = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(tailStart)));
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
   let endOffset = -1;
   for (let offset = tail.length - 22; offset >= Math.max(0, tail.length - 22 - 65_535); offset -= 1) {
@@ -685,7 +718,7 @@ async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntr
   if (entryCount < 1 || entryCount > MAX_XLSX_ENTRY_COUNT || directorySize > 8 * 1024 * 1024 ||
       directoryOffset + directorySize > eocdAbsolute) throw new Error('فهرس XLSX غير صالح أو يتجاوز الحدود الآمنة.');
 
-  const bytes = new Uint8Array(await file.slice(directoryOffset, directoryOffset + directorySize).arrayBuffer());
+  const bytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(directoryOffset, directoryOffset + directorySize)));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const entries = new Map<string, XlsxZipEntry>();
@@ -742,7 +775,7 @@ export async function parseXlsxFirstWorksheet(
     if (entry.uncompressedSize > expandedLimit || expandedBytes + entry.uncompressedSize > expandedLimit) {
       throw new Error('محتوى XLSX بعد فك الضغط يتجاوز الحد الآمن؛ تم إيقاف القراءة قبل اعتماد أي لقطة.');
     }
-    const localBytes = new Uint8Array(await file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30).arrayBuffer());
+    const localBytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
     if (localBytes.length !== 30) throw new Error('ترويسة مكون XLSX ناقصة.');
     const local = new DataView(localBytes.buffer, localBytes.byteOffset, localBytes.byteLength);
     if (local.getUint32(0, true) !== 0x04034b50 || local.getUint16(8, true) !== entry.compressionMethod) {
@@ -754,11 +787,11 @@ export async function parseXlsxFirstWorksheet(
     const member = file.slice(dataStart, dataEnd);
     let stream: ReadableStream<Uint8Array>;
     if (entry.compressionMethod === 0) {
-      stream = member.stream() as ReadableStream<Uint8Array>;
+      stream = xlsxBlobStream(member);
     } else {
       if (typeof DecompressionStream === 'undefined') throw new Error('المتصفح لا يدعم فك ضغط XLSX؛ استخدم CSV أو اطلب تحويل الملف.');
       try {
-        stream = member.stream().pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat)) as ReadableStream<Uint8Array>;
+        stream = xlsxBlobStream(member).pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat)) as ReadableStream<Uint8Array>;
       } catch {
         throw new Error('تعذر تهيئة فك ضغط XLSX في هذا المتصفح.');
       }
