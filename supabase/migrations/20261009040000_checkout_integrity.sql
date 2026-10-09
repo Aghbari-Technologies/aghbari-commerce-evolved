@@ -1,7 +1,11 @@
 -- Checkout integrity: tenant-safe tier pricing, request idempotency, credit checks,
 -- and stock reservation/consumption inside the order status transaction.
 ALTER TABLE public.orders
-  ADD COLUMN IF NOT EXISTS payment_terms text NOT NULL DEFAULT 'cash_on_delivery';
+  ADD COLUMN IF NOT EXISTS payment_terms text NOT NULL DEFAULT 'cash_on_delivery',
+  ADD COLUMN IF NOT EXISTS business_name_snapshot text,
+  ADD COLUMN IF NOT EXISTS contact_name_snapshot text,
+  ADD COLUMN IF NOT EXISTS phone_snapshot text,
+  ADD COLUMN IF NOT EXISTS idempotency_payload_hash text;
 
 DO $$
 BEGIN
@@ -48,6 +52,9 @@ DECLARE
   v_total_items integer := 0;
   v_line jsonb;
   v_aggregated record;
+  v_payload_hash text;
+  v_existing_hash text;
+  v_existing_terms text;
   v_product_id uuid;
   v_quantity numeric(15,3);
   v_product public.products%ROWTYPE;
@@ -73,6 +80,35 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='الاسم ورقم الهاتف مطلوبان';
   END IF;
 
+  -- Validate all lines before computing a stable payload fingerprint or looking up a replay.
+  FOR v_line IN SELECT value FROM pg_catalog.jsonb_array_elements(_items) LOOP
+    BEGIN
+      v_product_id := (v_line->>'product_id')::uuid;
+      v_quantity := (v_line->>'quantity')::numeric;
+    EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='رمز المنتج أو الكمية غير صالح';
+    END;
+    IF v_product_id IS NULL OR v_quantity IS NULL OR v_quantity<>pg_catalog.trunc(v_quantity)
+       OR v_quantity<1 OR v_quantity>10000 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='الكمية يجب أن تكون عددًا صحيحًا بين 1 و10000';
+    END IF;
+  END LOOP;
+
+  SELECT pg_catalog.md5(pg_catalog.jsonb_build_object(
+    'items',coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('product_id',item.product_id::text,'quantity',item.quantity) ORDER BY item.product_id),'[]'::jsonb),
+    'notes',pg_catalog.left(coalesce(_notes,''),1000),
+    'business_name',pg_catalog.left(coalesce(nullif(pg_catalog.btrim(_business_name),''),pg_catalog.btrim(_contact_name)),200),
+    'contact_name',pg_catalog.left(pg_catalog.btrim(_contact_name),120),
+    'phone',pg_catalog.left(pg_catalog.btrim(_phone),40),
+    'payment_terms',v_terms
+  )::text) INTO v_payload_hash
+  FROM (
+    SELECT (entry.value->>'product_id')::uuid AS product_id,
+           sum((entry.value->>'quantity')::numeric)::numeric(15,3) AS quantity
+      FROM pg_catalog.jsonb_array_elements(_items) AS entry(value)
+     GROUP BY (entry.value->>'product_id')::uuid
+  ) AS item;
+
   -- Serialize submissions from the same authenticated profile using the same retry key.
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_profile::text || ':' || v_key,0));
 
@@ -87,15 +123,18 @@ BEGIN
   END IF;
 
   -- If the same submission already committed, return the original server result.
-  SELECT o.id,o.order_number,o.total_amount
-    INTO v_order,v_order_no,v_total
+  SELECT o.id,o.order_number,o.total_amount,o.idempotency_payload_hash,o.payment_terms
+    INTO v_order,v_order_no,v_total,v_existing_hash,v_existing_terms
     FROM public.orders o
    WHERE o.organization_id=v_org AND o.created_by=v_profile AND o.idempotency_key=v_key
    LIMIT 1;
   IF FOUND THEN
+    IF v_existing_hash IS DISTINCT FROM v_payload_hash THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='مفتاح منع التكرار استُخدم سابقًا لبيانات طلب مختلفة؛ راجع طلباتك قبل إنشاء طلب جديد';
+    END IF;
     RETURN pg_catalog.jsonb_build_object(
       'id',v_order,'order_number',v_order_no,'total_amount',v_total,
-      'payment_terms',v_terms,'idempotent_replay',true
+      'payment_terms',v_existing_terms,'idempotent_replay',true
     );
   END IF;
 
@@ -122,13 +161,6 @@ BEGIN
     )
     RETURNING id,tier,status,coalesce(credit_limit,0),coalesce(current_balance,0)
       INTO v_customer,v_tier,v_customer_status,v_credit_limit,v_current_balance;
-  ELSE
-    UPDATE public.customers
-       SET business_name=coalesce(nullif(pg_catalog.left(pg_catalog.btrim(_business_name),200),''),business_name),
-           contact_name=pg_catalog.left(pg_catalog.btrim(_contact_name),120),
-           phone=pg_catalog.left(pg_catalog.btrim(_phone),40),
-           updated_at=pg_catalog.now()
-     WHERE id=v_customer AND organization_id=v_org;
   END IF;
 
   v_tier := coalesce(nullif(v_tier,''),'retail');
@@ -136,27 +168,16 @@ BEGIN
     pg_catalog.upper(pg_catalog.substr(pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-',''),1,8));
 
   INSERT INTO public.orders(
-    organization_id,customer_id,order_number,status,notes,created_by,idempotency_key,payment_terms
+    organization_id,customer_id,order_number,status,notes,created_by,idempotency_key,payment_terms,
+    business_name_snapshot,contact_name_snapshot,phone_snapshot,idempotency_payload_hash
   )
   VALUES(
     v_org,v_customer,v_order_no,'pending',
-    pg_catalog.left(coalesce(_notes,''),1000),v_profile,v_key,v_terms
+    pg_catalog.left(coalesce(_notes,''),1000),v_profile,v_key,v_terms,
+    pg_catalog.left(coalesce(nullif(pg_catalog.btrim(_business_name),''),pg_catalog.btrim(_contact_name)),200),
+    pg_catalog.left(pg_catalog.btrim(_contact_name),120),pg_catalog.left(pg_catalog.btrim(_phone),40),v_payload_hash
   )
   RETURNING id INTO v_order;
-
-  -- Validate every client-provided line before any price is accepted.
-  FOR v_line IN SELECT value FROM pg_catalog.jsonb_array_elements(_items) LOOP
-    BEGIN
-      v_product_id := (v_line->>'product_id')::uuid;
-      v_quantity := (v_line->>'quantity')::numeric;
-    EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='رمز المنتج أو الكمية غير صالح';
-    END;
-    IF v_product_id IS NULL OR v_quantity IS NULL OR v_quantity<>pg_catalog.trunc(v_quantity)
-       OR v_quantity<1 OR v_quantity>10000 THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='الكمية يجب أن تكون عددًا صحيحًا بين 1 و10000';
-    END IF;
-  END LOOP;
 
   -- Consolidate duplicate product rows and price each aggregate using the customer's tier.
   FOR v_aggregated IN
@@ -168,6 +189,9 @@ BEGIN
   LOOP
     v_product_id := v_aggregated.product_id;
     v_quantity := v_aggregated.quantity;
+    IF v_quantity>10000 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='إجمالي كمية الصنف الواحد لا يمكن أن يتجاوز 10000';
+    END IF;
 
     SELECT p.* INTO v_product
       FROM public.products p
