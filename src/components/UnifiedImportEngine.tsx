@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Check, FileDown, Pause, Play, RefreshCw, ShieldCheck, Upload, XCircle } from "lucide-react";
 import {
   cancelImportUploadSession, createImportJob, createImportUploadSession, fetchCentralSynonyms, fetchImportJobs, fetchImportProfiles,
@@ -46,10 +46,27 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) => void }) {
+function formatTransferRate(bytesPerSecond: number): string {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return "جارٍ القياس";
+  if (bytesPerSecond >= 1024 * 1024) return (bytesPerSecond / (1024 * 1024)).toFixed(1) + " MB/s";
+  if (bytesPerSecond >= 1024) return (bytesPerSecond / 1024).toFixed(1) + " KB/s";
+  return Math.round(bytesPerSecond) + " B/s";
+}
+
+function formatEstimatedTime(seconds: number): string {
+  const remaining = Math.max(0, Math.ceil(seconds));
+  if (remaining < 60) return remaining + " ثانية";
+  if (remaining < 3600) return Math.floor(remaining / 60) + " دقيقة " + (remaining % 60) + " ثانية";
+  return Math.floor(remaining / 3600) + " ساعة " + Math.floor((remaining % 3600) / 60) + " دقيقة";
+}
+
+export function UnifiedImportEngine({ onNotice, refreshRevision = 0 }: {
+  onNotice: (message: string) => void;
+  refreshRevision?: number;
+}) {
   const { data: jobs, loading, error, refetch } = useFetch(fetchImportJobs);
-  const { data: profiles } = useFetch(fetchImportProfiles);
-  const { data: storedSynonyms } = useFetch(fetchCentralSynonyms);
+  const { data: profiles, refetch: refetchProfiles } = useFetch(fetchImportProfiles);
+  const { data: storedSynonyms, refetch: refetchSynonyms } = useFetch(fetchCentralSynonyms);
   const [stage, setStage] = useState<Stage | null>(null);
   const [progress, setProgress] = useState(0);
   const [processed, setProcessed] = useState(0);
@@ -60,9 +77,65 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
   const [periodKey, setPeriodKey] = useState("");
   const [qualityPreview, setQualityPreview] = useState<QualityResult | null>(null);
   const [duplicatePrompt, setDuplicatePrompt] = useState<DuplicatePrompt | null>(null);
+  const [hashingFile, setHashingFile] = useState(false);
+  const [sourceBytesProcessed, setSourceBytesProcessed] = useState(0);
+  const [sourceBytesTotal, setSourceBytesTotal] = useState(0);
+  const [bytesPerSecond, setBytesPerSecond] = useState(0);
+  const [rowsPerSecond, setRowsPerSecond] = useState(0);
+  const progressSampleRef = useRef<{ at: number; bytes: number; rows: number }>({ at: 0, bytes: 0, rows: 0 });
   const pausedRef = useRef(false);
   const cancelRef = useRef(false);
   const runningRef = useRef(false);
+  const preflightRef = useRef(false);
+
+  useEffect(() => {
+    if (refreshRevision === 0) return;
+    void refetch();
+    void refetchProfiles();
+    void refetchSynonyms();
+  }, [refreshRevision, refetch, refetchProfiles, refetchSynonyms]);
+
+  function resetProgressTelemetry(totalBytes: number) {
+    progressSampleRef.current = { at: performance.now(), bytes: 0, rows: 0 };
+    setSourceBytesProcessed(0);
+    setSourceBytesTotal(totalBytes);
+    setBytesPerSecond(0);
+    setRowsPerSecond(0);
+  }
+
+  function recordProgressTelemetry(bytes: number, rows: number) {
+    const safeBytes = Math.max(0, bytes);
+    const safeRows = Math.max(0, rows);
+    setSourceBytesProcessed(safeBytes);
+    const now = performance.now();
+    const previous = progressSampleRef.current;
+    const elapsedMs = now - previous.at;
+    if (elapsedMs >= 250) {
+      const elapsedSeconds = elapsedMs / 1000;
+      setBytesPerSecond(Math.max(0, (safeBytes - previous.bytes) / elapsedSeconds));
+      setRowsPerSecond(Math.max(0, (safeRows - previous.rows) / elapsedSeconds));
+      progressSampleRef.current = { at: now, bytes: safeBytes, rows: safeRows };
+    } else if (previous.at === 0) {
+      progressSampleRef.current = { at: now, bytes: safeBytes, rows: safeRows };
+    }
+  }
+
+  function finishPreflightCancellation() {
+    cancelRef.current = false;
+    pausedRef.current = false;
+    preflightRef.current = false;
+    setPaused(false);
+    setHashingFile(false);
+    setStage(null);
+    setProgress(0);
+    setProcessed(0);
+    setSourceBytesProcessed(0);
+    setSourceBytesTotal(0);
+    setBytesPerSecond(0);
+    setRowsPerSecond(0);
+    setErrorMessage("");
+    setStatusMessage("تم إلغاء قراءة الملف قبل إنشاء دفعة الاستيراد. لم يُحفظ الملف الخام ولم تُنشأ لقطة.");
+  }
 
   const activeProfileId = profileId || (profiles ?? []).find((p: ImportProfile) => p.profile_name === "Unified CSV" && p.status === "active")?.id || null;
   const synonymMap = useMemo(() => {
@@ -86,7 +159,11 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
   function updatePaused(next: boolean) {
     pausedRef.current = next;
     setPaused(next);
-    setStatusMessage(next ? "تم الإيقاف المؤقت؛ آخر شريحة معتمدة محفوظة ويمكن الاستئناف بإعادة اختيار الملف نفسه." : "استؤنفت المعالجة.");
+    setStatusMessage(next
+      ? hashingFile
+        ? "أُوقف حساب بصمة الملف مؤقتًا بين شرائح القراءة؛ لم يُرسل الملف الخام إلى الخادم."
+        : "تم الإيقاف المؤقت عند نقطة آمنة؛ الشرائح المؤكدة محفوظة ويمكن الاستئناف بإعادة اختيار الملف نفسه."
+      : "استؤنفت المعالجة.");
   }
 
   async function processFile(
@@ -102,10 +179,12 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
     pausedRef.current = false;
     cancelRef.current = false;
     setPaused(false);
+    setHashingFile(false);
     setErrorMessage("");
     setStatusMessage("");
     setProgress(10);
     setProcessed(0);
+    resetProgressTelemetry(file.size);
     setQualityPreview(null);
     let job: ImportJob | null = existingJob ?? null;
     let uploadSession: { id: string; import_job_id: string; organization_id: string; profile_id: string | null; profile_version: number | null; period_key: string | null; chunk_size_bytes: number; total_chunks: number; verified_chunks: number; status: string; file_hash: string; file_size: number } | null = null;
@@ -265,6 +344,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         batch = [];
         await insertImportRows(job!.id, toSave);
         setProcessed(dataRows);
+        recordProgressTelemetry(processedBytes, dataRows);
         if (quality) setQualityPreview(quality.result());
       };
 
@@ -300,7 +380,10 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           batch.push({ rowNumber: parsed.row_number, data: parsed.data, status: parsed.status, errors: parsed.errors });
           if (batch.length >= PROCESSING_CHUNK_ROWS) await flushBatch();
         }
-        if (dataRows % 100 === 0) setProcessed(dataRows);
+        if (dataRows % 100 === 0) {
+          setProcessed(dataRows);
+          recordProgressTelemetry(processedBytes, dataRows);
+        }
         setStage("validating");
       };
 
@@ -333,6 +416,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           }
           processedBytes += bytes.byteLength;
           setProcessed(dataRows);
+          recordProgressTelemetry(processedBytes, dataRows);
           setStage("normalizing");
           setProgress(Math.min(82, 10 + Math.round((processedBytes / Math.max(file.size, 1)) * 72)));
         }
@@ -351,6 +435,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           worksheetRows += 1;
           if (worksheetRows % 100 === 0) {
             setProcessed(dataRows);
+            recordProgressTelemetry(processedBytes, dataRows);
             setProgress(Math.min(70, 18 + Math.round((worksheetRows / (MAX_IMPORT_ROWS + 1)) * 52)));
           }
         });
@@ -377,6 +462,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
               chunkHash,
             });
             processedBytes += bytes.byteLength;
+            recordProgressTelemetry(processedBytes, dataRows);
             setProgress(Math.min(82, 72 + Math.round((processedBytes / Math.max(file.size, 1)) * 10)));
           }
         }
@@ -468,22 +554,36 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || runningRef.current) return;
+    if (!file || runningRef.current || preflightRef.current) return;
     if (file.size === 0) { setErrorMessage('الملف فارغ. اختر ملفًا يحتوي على بيانات.'); return; }
     if (file.size > MAX_IMPORT_FILE_BYTES) {
       setErrorMessage("حجم الملف يتجاوز الحد المسموح 100MB.");
       return;
     }
+    preflightRef.current = true;
+    cancelRef.current = false;
+    pausedRef.current = false;
+    setPaused(false);
+    setHashingFile(true);
     setErrorMessage("");
     setStatusMessage("");
     setStage("reading");
     setProgress(0);
+    setProcessed(0);
+    resetProgressTelemetry(file.size);
     try {
       const fileHash = await hashFileSha256(file, (bytes) => {
         setProgress(Math.round((bytes / Math.max(file.size, 1)) * 10));
+        recordProgressTelemetry(bytes, 0);
+      }, {
+        isPaused: () => pausedRef.current,
+        isCancelled: () => cancelRef.current,
       });
+      setHashingFile(false);
+      if (cancelRef.current) { finishPreflightCancellation(); return; }
       setStage("detecting");
       const duplicate = await findImportDuplicate(fileHash, activeProfileId, periodKey.trim() || null) as DuplicateResult;
+      if (cancelRef.current) { finishPreflightCancellation(); return; }
       if (duplicate.duplicate) {
         setDuplicatePrompt({
           file,
@@ -498,8 +598,16 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       }
       await processFile(file, fileHash, "new_version", undefined, activeProfileId, periodKey.trim() || null);
     } catch (cause) {
+      if (cancelRef.current || (cause instanceof Error && cause.message.includes("تم إلغاء حساب بصمة الملف"))) {
+        finishPreflightCancellation();
+        return;
+      }
+      setHashingFile(false);
       setStage(null);
       setErrorMessage(cause instanceof Error ? cause.message : "تعذر قراءة بصمة الملف.");
+    } finally {
+      preflightRef.current = false;
+      setHashingFile(false);
     }
   }
 
@@ -528,20 +636,49 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
   async function resumeFromHistory(event: ChangeEvent<HTMLInputElement>, job: ImportJob & { upload_session_id?: string | null }) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || runningRef.current) return;
+    if (!file || runningRef.current || preflightRef.current) return;
     if (file.size !== job.file_size) {
       setErrorMessage("حجم الملف لا يطابق الدفعة السابقة.");
       return;
     }
+    preflightRef.current = true;
+    cancelRef.current = false;
+    pausedRef.current = false;
+    setPaused(false);
+    setHashingFile(true);
+    setErrorMessage("");
+    setStatusMessage("");
+    setStage("reading");
+    setProgress(0);
+    setProcessed(0);
+    resetProgressTelemetry(file.size);
     try {
-      const fileHash = await hashFileSha256(file);
+      const fileHash = await hashFileSha256(file, (bytes) => {
+        setProgress(Math.round((bytes / Math.max(file.size, 1)) * 10));
+        recordProgressTelemetry(bytes, 0);
+      }, {
+        isPaused: () => pausedRef.current,
+        isCancelled: () => cancelRef.current,
+      });
+      setHashingFile(false);
+      if (cancelRef.current) { finishPreflightCancellation(); return; }
       if (fileHash !== job.file_hash) {
+        setStage(null);
         setErrorMessage("بصمة الملف لا تطابق الدفعة السابقة؛ اختر الملف الأصلي نفسه.");
         return;
       }
       await processFile(file, fileHash, "new_version", job, job.profile_id ?? activeProfileId, job.period_key ?? null);
     } catch (cause) {
+      if (cancelRef.current || (cause instanceof Error && cause.message.includes("تم إلغاء حساب بصمة الملف"))) {
+        finishPreflightCancellation();
+        return;
+      }
+      setHashingFile(false);
+      setStage(null);
       setErrorMessage(cause instanceof Error ? cause.message : "تعذر استئناف الدفعة.");
+    } finally {
+      preflightRef.current = false;
+      setHashingFile(false);
     }
   }
 
@@ -566,7 +703,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
             </label>
           </div>
           <label className="import-dropzone">
-            <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={handleFile} disabled={Boolean(stage && stage !== "complete")} />
+            <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={handleFile} disabled={Boolean(stage && stage !== "complete") || Boolean(duplicatePrompt)} />
             <FileDown size={22} /><strong>اختر CSV أو XLSX أو XLS أو PDF</strong>
             <span>100MB كحد أقصى • شرائح 4MB • دفعات معالجة 1,000 صف</span>
           </label>
@@ -592,10 +729,14 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         <section className="panel pipeline-panel">
           <div className="panel-head">
             <div><h2>مراحل المعالجة</h2><p>تقدم فعلي من القراءة والصفوف المحفوظة إلى قرار الخادم واللقطة.</p></div>
-            {stage && stage !== "complete" && <div style={{ display: "flex", gap: 8 }}>
-              <button className="pause-button" onClick={() => updatePaused(!pausedRef.current)}>{paused ? <Play size={16} /> : <Pause size={16} />}{paused ? "استئناف" : "إيقاف مؤقت"}</button>
-              <button className="pause-button" onClick={() => { cancelRef.current = true; pausedRef.current = false; setPaused(false); }}>إلغاء</button>
+            {stage && stage !== "complete" && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {["reading", "mapping", "validating", "normalizing"].includes(stage) &&
+                <button type="button" className="pause-button" aria-pressed={paused} onClick={() => updatePaused(!pausedRef.current)}>{paused ? <Play size={16} /> : <Pause size={16} />}{paused ? "استئناف" : "إيقاف مؤقت"}</button>}
+              {["reading", "detecting", "mapping", "validating", "normalizing"].includes(stage) &&
+                <button type="button" className="pause-button" onClick={() => { cancelRef.current = true; pausedRef.current = false; setPaused(false); }}>{hashingFile ? "إلغاء قراءة الملف" : "إلغاء آمن"}</button>}
             </div>}
+            {stage && ["deduplicating", "merging", "analytics"].includes(stage) &&
+              <small role="status" style={{ color: "#8b5e22" }}>بدأت مرحلة التحقق/الاعتماد الخادمي؛ أُخفي زر الإلغاء لأن إنهاء المعاملة بأمان أهم من قطعها في منتصف العملية.</small>}
           </div>
           <div className="pipeline">{STAGES.map((item, index) => {
             const current = stage === item.id;
@@ -606,9 +747,16 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           })}</div>
           {stage && <div className="progress-area">
             <div className="progress-label"><span>المرحلة الحالية: {STAGES.find((item) => item.id === stage)?.label ?? "اكتملت المعالجة"}</span><b>{progress}%</b></div>
-            <div className="progress-track"><i style={{ width: progress + "%" }} /></div>
-            <small>{formatNumber(processed)} صف تمت معالجته {qualityPreview ? "• DQS أولي " + qualityPreview.score + "/100 (" + (qualityPreview.score >= 90 ? 'ممتاز' : qualityPreview.score >= 75 ? 'مقبول' : qualityPreview.score >= 50 ? 'تحذير' : 'مرفوض') + ")" : ""}</small>
-          </div>}
+            <div className="progress-track" role="progressbar" aria-label="تقدم الاستيراد" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, Math.max(0, progress))}><i style={{ width: progress + "%" }} /></div>
+            <small>{formatNumber(processed)} صف تمت قراءته {qualityPreview ? "• DQS أولي " + qualityPreview.score + "/100 (" + qualityPreview.label + ")" : ""}</small>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(165px,1fr))", gap: 8, marginTop: 10, fontSize: 12 }}>
+              <span>الصفوف المتبقية: {stage === "complete" ? "0 — اكتملت القراءة" : ["deduplicating", "merging", "analytics"].includes(stage) ? "0 — بانتظار قرار الخادم" : "يُحدد بعد اكتمال القراءة"}</span>
+              <span>سرعة قراءة الملف: {formatTransferRate(bytesPerSecond)}</span>
+              <span>سرعة الصفوف: {rowsPerSecond > 0 ? formatNumber(Number(rowsPerSecond.toFixed(1))) + " صف/ث" : "جارٍ القياس"}</span>
+              <span>الوقت المتبقي التقريبي: {stage === "complete" ? "اكتملت المعالجة" : ["deduplicating", "merging", "analytics"].includes(stage) ? "مرحلة الاعتماد الخادمي" : bytesPerSecond > 0 && sourceBytesTotal > sourceBytesProcessed ? formatEstimatedTime((sourceBytesTotal - sourceBytesProcessed) / bytesPerSecond) : "جارٍ حساب التقدير"}</span>
+              <span>حجم الملف: {(sourceBytesProcessed / (1024 * 1024)).toFixed(1)} / {(sourceBytesTotal / (1024 * 1024)).toFixed(1)} MB</span>
+            </div>
+          </div>
         </section>
 
         <section className="panel import-jobs-panel">
@@ -622,7 +770,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
               <td>{formatNumber(job.processed_rows)} / {formatNumber(job.total_rows)}</td>
               <td>{new Date(job.created_at).toLocaleDateString("ar")}</td>
               <td>{["staging", "failed"].includes(job.status) && job.upload_session_id &&
-                <label className="sf-link" style={{ cursor: "pointer" }}>اختر الملف الأصلي<input type="file" accept=".csv" style={{ display: "none" }} onChange={(event) => void resumeFromHistory(event, job)} /></label>}</td>
+                <label className="sf-link" style={{ cursor: "pointer" }}>اختر الملف الأصلي<input type="file" accept=".csv" style={{ display: "none" }} disabled={Boolean(stage && stage !== "complete")} onChange={(event) => void resumeFromHistory(event, job)} /></label>}</td>
             </tr>)}</tbody>
           </table></TableWrap> : <Empty text="لا توجد دفعات مستوردة بعد" />}
         </section>
