@@ -298,8 +298,6 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
         const unsupported = !PRICING_SCOPES.has(rule.scope_type);
         const awaitingApproval = Boolean(rule.requires_approval && !rule.approved_at);
         const locked = Boolean(rule.manually_locked);
-        const target = rule.target_tier ?? 'both';
-        const method = rule.calculation_method;
         return <article className="rule-card" key={rule.id}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div><span className="rule-number">أولوية {rule.priority}</span><h2>{rule.name}</h2></div>
