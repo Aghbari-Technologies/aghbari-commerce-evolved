@@ -270,13 +270,18 @@ export interface FileRoutesByTo {
   '/admin/suppliers': typeof AdminSuppliersRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
+  '/cart': typeof CartRoute
+  '/checkout': typeof CheckoutRoute
+  '/compare': typeof CompareRoute
   '/invoices': typeof InvoicesRoute
+  '/product/$id': typeof ProductIdRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/quotes': typeof QuotesRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
+  '/wishlist': typeof WishlistRoute
   '/orders': typeof OrdersIndexRoute
   '/orders/$id': typeof OrdersIdRoute
 }
@@ -302,7 +307,11 @@ export interface FileRoutesById {
   '/admin_/suppliers': typeof AdminSuppliersRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
+  '/cart': typeof CartRoute
+  '/checkout': typeof CheckoutRoute
+  '/compare': typeof CompareRoute
   '/invoices': typeof InvoicesRoute
+  '/product/$id': typeof ProductIdRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/orders': typeof OrdersRouteWithChildren
@@ -310,6 +319,7 @@ export interface FileRoutesById {
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
+  '/wishlist': typeof WishlistRoute
   '/orders/': typeof OrdersIndexRoute
   '/orders/$id': typeof OrdersIdRoute
 }

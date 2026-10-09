@@ -10,7 +10,7 @@ import { formatCurrency, formatNumber } from '@/lib/format';
 import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { FileText } from 'lucide-react';
 import { supabase, ORG_ID } from '@/lib/supabase';
 
