@@ -497,6 +497,18 @@ export async function createImportUploadSession(jobId: string) {
   };
 }
 
+export async function fetchImportUploadChunks(sessionId: string): Promise<Array<{
+  chunk_number: number; byte_offset: number; byte_size: number; chunk_hash: string;
+}>> {
+  const { data, error } = await supabase
+    .from('import_upload_chunks')
+    .select('chunk_number,byte_offset,byte_size,chunk_hash')
+    .eq('session_id', sessionId)
+    .order('chunk_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Array<{ chunk_number: number; byte_offset: number; byte_size: number; chunk_hash: string }>;
+}
+
 export async function cancelImportUploadSession(sessionId: string): Promise<void> {
   const { error } = await supabase.from('import_upload_sessions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', sessionId);
   if (error) throw error;
