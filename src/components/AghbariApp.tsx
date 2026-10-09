@@ -304,7 +304,7 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div><span className="rule-number">أولوية {rule.priority}</span><h2>{rule.name}</h2></div>
             <label className="switch" title={locked ? 'القاعدة مقفلة يدويًا' : unsupported && !rule.is_active ? 'لا يمكن تفعيل نطاق قديم غير مدعوم' : rule.is_active ? 'إيقاف القاعدة' : 'تفعيل القاعدة'}>
-              <input type="checkbox" checked={rule.is_active} disabled={locked || busyId === rule.id || (unsupported && !rule.is_active) || awaitingApproval} onChange={() => void toggle(rule)} />
+              <input type="checkbox" aria-label={(rule.is_active ? "إيقاف قاعدة " : "تفعيل قاعدة ") + rule.name} checked={rule.is_active} disabled={locked || busyId === rule.id || (unsupported && !rule.is_active) || awaitingApproval} onChange={() => void toggle(rule)} />
               <span />
             </label>
           </div>
@@ -323,7 +323,7 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
         </article>;
       })}
     </div>}
-    {showCreate && <PricingRuleModal onClose={() => setShowCreate(false)} onSaved={async () => { setShowCreate(false); await refetch(); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
+    {showCreate && <PricingRuleModal onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
   </>;
 }
 
