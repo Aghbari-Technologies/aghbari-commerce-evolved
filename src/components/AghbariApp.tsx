@@ -62,13 +62,17 @@ const adminPaths: Record<View, string> = {
 function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const { user, ready, signOut } = useAuth();
   const navigate = useNavigate();
-  const setMode = (_m: 'storefront') => { void navigate({ to: '/' }); };
   const [view, setView] = useState<View>(initialView);
   const [mobileNav, setMobileNav] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
+  const [navigationBlocked, setNavigationBlocked] = useState(false);
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(null), 2800); };
+  const setMode = (_m: 'storefront') => {
+    if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل مغادرة مراجعة الطلب.'); return; }
+    void navigate({ to: '/' });
+  };
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -83,6 +87,10 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
 
   const runAdminCommand = (id: View) => {
     setCommandOpen(false);
+    if (navigationBlocked) {
+      showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الانتقال إلى قسم آخر.');
+      return;
+    }
     setView(id);
     setOrderDetailId(null);
     setMobileNav(false);
@@ -105,8 +113,8 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
       <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
         <div className="brand" onClick={() => setMode('storefront')} style={{ cursor: 'pointer' }}><div className="brand-icon"><Activity size={22} /></div><div><strong>الأغبري</strong><span>منصة التوزيع الذكية</span></div></div>
         <div className="user-card"><div className="avatar">{user.name.charAt(0)}</div><div><strong>{user.name}</strong><span>مدير النظام</span></div><span className="online-dot" /></div>
-        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); setOrderDetailId(null); setMobileNav(false); void navigate({ to: adminPaths[id] as never }); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
-        <div className="sidebar-bottom"><button onClick={() => setMode('storefront')}><Store size={18} /> عرض المتجر</button><button onClick={signOut}><LogOut size={18} /> خروج</button><div className="secure"><span /> النظام متصل وآمن</div></div>
+        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} aria-disabled={navigationBlocked || undefined} onClick={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الانتقال إلى قسم آخر.'); return; } setView(id); setOrderDetailId(null); setMobileNav(false); void navigate({ to: adminPaths[id] as never }); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
+        <div className="sidebar-bottom"><button onClick={() => setMode('storefront')}><Store size={18} /> عرض المتجر</button><button onClick={() => { if (navigationBlocked) { showNotice('لا يمكن تسجيل الخروج قبل اعتماد تغييرات الطلب أو إلغائها.'); return; } void signOut(); }}><LogOut size={18} /> خروج</button><div className="secure"><span /> النظام متصل وآمن</div></div>
       </aside>
       <main className="main">
         <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)}><Menu size={20} /></button><div className="topbar-title"><span className="live" /> مركز تشغيل الأغبري <small>الطلبات والمخزون والأسعار والعملاء</small></div><div className="top-actions"><button type="button" className="search-button" aria-haspopup="dialog" aria-label="بحث سريع (Ctrl K)" onClick={() => setCommandOpen(true)}><Search size={16} /> بحث سريع <kbd>Ctrl K</kbd></button><button className="notification" aria-label="فتح التنبيهات" onClick={() => runAdminCommand('notifications')}><Bell size={18} /></button></div></header>
@@ -115,7 +123,7 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
           {view === 'products' && <Products onNotice={showNotice} />}
           {view === 'customers' && <Customers onNotice={showNotice} />}
           {view === 'orders' && !orderDetailId && <Orders onViewDetail={setOrderDetailId} />}
-          {view === 'orders' && orderDetailId && <OrderDetail orderId={orderDetailId} onBack={() => setOrderDetailId(null)} onNotice={showNotice} />}
+          {view === 'orders' && orderDetailId && <OrderDetail orderId={orderDetailId} onBack={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الرجوع.'); return; } setOrderDetailId(null); }} onNotice={showNotice} onBlockedChange={setNavigationBlocked} />}
           {view === 'pricing' && <Pricing onNotice={showNotice} />}
           {view === 'offers' && <Offers onNotice={showNotice} />}
           {view === 'suppliers' && <Suppliers onNotice={showNotice} />}
