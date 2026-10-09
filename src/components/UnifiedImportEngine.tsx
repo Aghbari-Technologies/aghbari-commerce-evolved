@@ -109,6 +109,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
     setQualityPreview(null);
     let job: ImportJob | null = existingJob ?? null;
     let uploadSession: { id: string; chunk_size_bytes: number; total_chunks: number; verified_chunks: number; status: string; file_hash: string; file_size: number } | null = null;
+    let processingConfigFingerprint: string | null = null;
+    let checkpointFingerprintPersisted = false;
 
     try {
       if (!job) {
@@ -167,6 +169,25 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       const ignoredColumns = new Set((profile?.ignored_columns ?? []).map((field) => normalizeHeader(String(field), profileSynonyms)));
       const requiredColumns = Array.isArray(profile?.required_columns) ? profile.required_columns.map(String) : ["item_code"];
       const matchingKey = String(profile?.matching_key ?? "item_code");
+      const processingConfig = {
+        profileId: selectedProfile,
+        profileVersion: profile?.version ?? null,
+        reportType: profile?.report_type ?? null,
+        source: profile?.source ?? null,
+        requiredColumns,
+        optionalColumns: profile?.optional_columns ?? [],
+        ignoredColumns: [...ignoredColumns].sort(),
+        matchingKey,
+        mergeStrategy: profile?.merge_strategy ?? "manual_review",
+        isFullDataset: profile?.is_full_dataset ?? false,
+        dateRules: profile?.date_rules ?? {},
+        synonyms: Object.entries(profileSynonyms).sort(([a], [b]) => a.localeCompare(b)),
+        transformations,
+        validations,
+      };
+      processingConfigFingerprint = new IncrementalSha256()
+        .update(new TextEncoder().encode(JSON.stringify(processingConfig)))
+        .digestHex();
 
       setStage("reading");
       uploadSession = await createImportUploadSession(job.id);
@@ -187,6 +208,25 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       if (verifiedChunkNumbers.length !== uploadSession.verified_chunks) {
         throw new Error("عدد الشرائح المؤكدة لا يطابق سجل الشرائح؛ تعذر الاستئناف الآمن.");
       }
+      const previousSummary = (job.error_summary ?? {}) as Record<string, unknown>;
+      const savedFingerprint = previousSummary.processing_config_fingerprint;
+      if (verifiedChunkNumbers.length > 0 && typeof savedFingerprint !== "string") {
+        throw new Error("هذه دفعة قديمة لا تحفظ بصمة إعدادات المعالجة. ابدأ نسخة استيراد جديدة بدل دمج بيانات ربما استخدمت تعيين أعمدة مختلفًا.");
+      }
+      if (typeof savedFingerprint === "string" && savedFingerprint !== processingConfigFingerprint) {
+        throw new Error("تغير الملف التعريفي أو المرادفات أو قواعد المعالجة منذ بدء الدفعة. تم إيقاف الاستئناف لتجنب خلط صفوف بمعايير مختلفة؛ ابدأ نسخة جديدة.");
+      }
+      await updateImportJob(job.id, {
+        error_summary: {
+          ...previousSummary,
+          processing_config_fingerprint: processingConfigFingerprint,
+          profile_id: selectedProfile,
+          profile_version: profile?.version ?? null,
+          source_file_hash: fileHash,
+          no_raw_file_retained: true,
+        },
+      });
+      checkpointFingerprintPersisted = true;
       const verifiedChunks = new Set(verifiedChunkNumbers);
       if (verifiedChunks.size > 0) {
         setStatusMessage("استئناف آمن: سيعاد بناء حالة قراءة CSV محليًا، وتُتجاوز كتابة الشرائح المؤكدة، ويستمر الحفظ من أول شريحة غير مؤكدة.");
@@ -303,6 +343,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           no_raw_file_retained: true,
           source_file_hash: fileHash,
           profile_id: selectedProfile,
+          profile_version: profile?.version ?? null,
+          processing_config_fingerprint: processingConfigFingerprint,
           period_key: selectedPeriod,
           parser: "streaming-csv",
           processing_chunk_rows: PROCESSING_CHUNK_ROWS,
@@ -331,10 +373,17 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       setErrorMessage(message);
       if (job) {
         try {
-          await updateImportJob(job.id, {
-            status: "failed",
-            error_summary: { code: "IMPORT_PROCESSING_FAILED", message, resumable: true, no_raw_file_retained: true },
-          });
+          const failureSummary: Record<string, unknown> = {
+            ...((job.error_summary ?? {}) as Record<string, unknown>),
+            code: "IMPORT_PROCESSING_FAILED",
+            message,
+            resumable: true,
+            no_raw_file_retained: true,
+          };
+          if (checkpointFingerprintPersisted && processingConfigFingerprint) {
+            failureSummary.processing_config_fingerprint = processingConfigFingerprint;
+          }
+          await updateImportJob(job.id, { status: "failed", error_summary: failureSummary });
         } catch { /* preserve the original error */ }
       }
       await refetch();
