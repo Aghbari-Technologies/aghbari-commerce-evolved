@@ -95,6 +95,16 @@ async function main() {
     "update public.profiles set auth_user_id=$1 where id=$2 and auth_user_id is null",
     [staffAuthUserId, staffProfileId],
   );
+  const operationsStaffProfileId = "f4444444-4444-4444-8444-444444444444";
+  const operationsStaffAuthUserId = "44444444-4444-4444-8444-444444444444";
+  await db.unsafe(
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Operations Staff','ci-operations-staff@example.test',true) on conflict(id) do nothing",
+    [operationsStaffProfileId, operationsStaffAuthUserId, organizationId],
+  );
+  await db.unsafe(
+    "insert into public.user_roles(profile_id,role) values($1,'staff') on conflict(profile_id,role) do nothing",
+    [operationsStaffProfileId],
+  );
   await db.unsafe(
     "insert into public.organizations(id,name,currency) values($1,'Foreign organization','YER') on conflict(id) do nothing",
     [otherOrganizationId],
@@ -487,7 +497,36 @@ async function main() {
   await expectFailure(
     "customer cannot call staff finance RPC",
     () => db.unsafe("select public.fetch_staff_finance_data()"),
-    /staff role required/i,
+    /finance permission required/i,
+  );
+
+  await db.unsafe("reset role");
+  await setIdentity(operationsStaffAuthUserId, "ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "ordinary staff cannot read finance aggregates",
+    () => db.unsafe("select public.fetch_staff_finance_data()"),
+    /finance permission required/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot record customer payments",
+    () => db.unsafe("select public.record_customer_payment($1::uuid,$2::numeric,$3,$4,$5)", [invoice.id, 1, "cash", "CI-STAFF-PAY", "must be denied"]),
+    /finance permission required/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot update invoices directly",
+    () => db.unsafe("update public.customer_invoices set status='void' where id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot update invoice lines directly",
+    () => db.unsafe("update public.customer_invoice_items set quantity=99 where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot write payment ledger directly",
+    () => db.unsafe("insert into public.customer_payments(organization_id,customer_id,invoice_id,amount,payment_method,created_by) values($1,$2,$3,1,'cash',$4)", [organizationId, invoice.customer_id, invoice.id, operationsStaffProfileId]),
+    /permission denied/i,
   );
 
   await db.unsafe("reset role");

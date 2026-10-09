@@ -61,6 +61,8 @@ const adminPaths: Record<View, string> = {
 
 function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const { user, ready, signOut } = useAuth();
+  const canManageFinance = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
+  const visibleNav = nav.filter(({ id }) => id !== 'finance' || canManageFinance);
   const navigate = useNavigate();
   const [view, setView] = useState<View>(initialView);
   const [mobileNav, setMobileNav] = useState(false);
@@ -87,6 +89,10 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
 
   const runAdminCommand = (id: View) => {
     setCommandOpen(false);
+    if (id === 'finance' && !canManageFinance) {
+      showNotice('لا تملك صلاحية الوصول إلى الفواتير والتحصيل.');
+      return;
+    }
     if (navigationBlocked) {
       showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الانتقال إلى قسم آخر.');
       return;
@@ -113,7 +119,7 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
       <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
         <div className="brand" onClick={() => setMode('storefront')} style={{ cursor: 'pointer' }}><div className="brand-icon"><Activity size={22} /></div><div><strong>الأغبري</strong><span>منصة التوزيع الذكية</span></div></div>
         <div className="user-card"><div className="avatar">{user.name.charAt(0)}</div><div><strong>{user.name}</strong><span>مدير النظام</span></div><span className="online-dot" /></div>
-        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} aria-disabled={navigationBlocked || undefined} onClick={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الانتقال إلى قسم آخر.'); return; } setView(id); setOrderDetailId(null); setMobileNav(false); void navigate({ to: adminPaths[id] as never }); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
+        <nav>{visibleNav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} aria-disabled={navigationBlocked || undefined} onClick={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الانتقال إلى قسم آخر.'); return; } setView(id); setOrderDetailId(null); setMobileNav(false); void navigate({ to: adminPaths[id] as never }); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
         <div className="sidebar-bottom"><button onClick={() => setMode('storefront')}><Store size={18} /> عرض المتجر</button><button onClick={() => { if (navigationBlocked) { showNotice('لا يمكن تسجيل الخروج قبل اعتماد تغييرات الطلب أو إلغائها.'); return; } void signOut(); }}><LogOut size={18} /> خروج</button><div className="secure"><span /> النظام متصل وآمن</div></div>
       </aside>
       <main className="main">
@@ -145,7 +151,7 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
         <CommandList dir="rtl">
           <CommandEmpty>لا توجد نتائج مطابقة.</CommandEmpty>
           <CommandGroup heading="أقسام لوحة التحكم">
-            {nav.map(({ id, label, icon: Icon }) => (
+            {visibleNav.map(({ id, label, icon: Icon }) => (
               <CommandItem key={id} value={`${label} ${id} ${adminPaths[id]}`} onSelect={() => runAdminCommand(id)}>
                 <Icon size={17} aria-hidden="true" />
                 <span>{label}</span>
