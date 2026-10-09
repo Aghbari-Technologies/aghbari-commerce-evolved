@@ -337,7 +337,8 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$;
+REVOKE ALL ON FUNCTION public.guard_order_confirmation() FROM PUBLIC,anon,authenticated;
 
 DROP TRIGGER IF EXISTS orders_guard_confirmation_before_status_update ON public.orders;
 CREATE TRIGGER orders_guard_confirmation_before_status_update
@@ -462,6 +463,8 @@ BEGIN
 END;
 $$;
 REVOKE ALL ON FUNCTION public.issue_invoice_for_confirmed_order() FROM PUBLIC,anon;
+
+REVOKE ALL ON FUNCTION public.refresh_customer_invoice_payment_status() FROM PUBLIC,anon,authenticated;
 
 CREATE OR REPLACE FUNCTION public.apply_customer_payment_balance_delta()
 RETURNS trigger
