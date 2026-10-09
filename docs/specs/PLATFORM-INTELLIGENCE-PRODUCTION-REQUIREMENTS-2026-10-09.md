@@ -153,8 +153,8 @@ Definition of Done:
 - Hide prices/totals from customer order/invoice views at all stages (pre-submit, pending, approved, confirmed and My Orders); preserve catalog prices and staff accounting.
 - Four calculation modes apply to wholesale and retail (or selected tier): percentage on base; margin percentage of selling price; fixed price; add/subtract amount. Priority/scope/tier must be explicit and audited.
 - Removing/deactivating the last applicable rule resets derived wholesale and retail columns to base_price.
-- **ADDED / CI VERIFICATION PENDING:** derived wholesale/retail columns and pricing calculation methods. Explicit legacy quantity-tier prices remain supported to avoid silently breaking previous checkout contracts.
-- **NOT PROVEN:** full rule create/edit/delete UI, rule approval, customer-tier preview integration, regression after deleting final rule.
+- **EXISTING ENGINE + NEW ADMIN UI / CI VERIFICATION PENDING:** the administration now supports create, activate/deactivate, and delete actions for pricing rules, including scope (all/product/category), tier target, four calculation methods, base source, quantity threshold, price bounds, priority and effective period. Database triggers refresh derived wholesale/retail columns and the new audit trigger records rule mutations. The change adds isolated database acceptance tests for each formula, wholesale-only targeting and resetting both derived columns to `base_price` after deleting the final applicable rule. Editing an existing rule in place, a governed approval action, and customer-tier price preview are still open. Explicit legacy quantity-tier prices remain supported to avoid silently breaking previous checkout contracts.
+- **NOT PROVEN UNTIL CI PASSES:** isolated acceptance tests for the new rule CRUD/audit migration and tier-price reset. **STILL OPEN:** edit existing rule in place, authenticated approval workflow, customer-tier price preview integration, and live-production pricing regression proof.
 
 ## Change log
 
@@ -162,3 +162,5 @@ Definition of Done:
 - 2026-10-09: additive platform migration adds import/profile metadata, server-side quality scoring and snapshot creation, isolated Onyx rows, comparison-only reconciliation, queue/AI-governance schemas, tenant policies, and pricing/order-review foundations. Live rollout is blocked pending exact project identity.
 - 2026-10-09: incremental SHA-256, streaming CSV parsing, limits, leading-zero-safe normalization, DQS accumulator and acceptance-threshold helpers added. CI/runtime must be checked against the exact final commit.
 - 2026-10-09: customer assistant privacy hardening avoids fetching order/invoice monetary columns in the customer assistant paths; targeted regression coverage added. Build and unit CI proof pending for this patch; authenticated browser/runtime proof remains separate.
+
+- 2026-10-09: follow-up pricing administration adds tenant-scoped rule creation/status/deletion, form validation, visible legacy-scope warnings, audit logging, and database acceptance scenarios for all four formulas, retail/wholesale targeting, and base-price reset. Production database changes remain blocked pending confirmation of the exact Supabase project.

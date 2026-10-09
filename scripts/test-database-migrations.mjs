@@ -420,7 +420,77 @@ async function main() {
   assert.equal(onyxAnalytics[0].result.forecast_status, "Forecast Unavailable: Insufficient Historical Data");
   process.stdout.write("PASS import profile, tenant-scoped synonyms, resumable chunk manifest, duplicate detection, DQS finalization and full-snapshot Onyx analytics\n");
 
-  process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle.\n");
+  // The rule UI must reuse the existing deterministic pricing engine and reset to base price
+  // when its last applicable rule is deleted.
+  const previouslyActiveRules = await db.unsafe(
+    "select id from public.pricing_rules where organization_id=$1 and is_active=true",
+    [organizationId],
+  );
+  await db.unsafe("update public.pricing_rules set is_active=false where organization_id=$1 and is_active=true", [organizationId]);
+  const pricingBaseRow = await db.unsafe(
+    "select base_price,retail_price,wholesale_price from public.products where id=$1 and organization_id=$2",
+    [productId, organizationId],
+  );
+  assert.equal(pricingBaseRow.length, 1, "pricing acceptance product should exist in the active organization");
+  const pricingBase = Number(pricingBaseRow[0].base_price);
+  assert.equal(Number(pricingBaseRow[0].retail_price), pricingBase, "no active rules must reset retail price to base_price");
+  assert.equal(Number(pricingBaseRow[0].wholesale_price), pricingBase, "no active rules must reset wholesale price to base_price");
+
+  const insertedRule = await db.unsafe(
+    `insert into public.pricing_rules(
+       organization_id,name,scope_type,scope_value,base_type,base_source,adjustment_type,
+       calculation_method,adjustment_value,target_tier,min_quantity,min_price,max_price,
+       priority,is_active,requires_approval,manually_locked,version
+     ) values($1,'CI pricing calculation rule','product',$2,'base_price','base_price','percentage',
+       'add_percentage',10,'both',1,null,null,1,true,false,false,1)
+     returning id`,
+    [organizationId, productId],
+  );
+  const pricingRuleId = insertedRule[0].id;
+  let derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  const addPercentageExpected = Math.round(pricingBase * 1.1 * 100) / 100;
+  assert.equal(Number(derivedPrices[0].retail_price), addPercentageExpected, "percentage addition must recalculate retail");
+  assert.equal(Number(derivedPrices[0].wholesale_price), addPercentageExpected, "percentage addition must recalculate wholesale");
+
+  await db.unsafe("update public.pricing_rules set calculation_method='margin_percentage',adjustment_type='margin',adjustment_value=25 where id=$1", [pricingRuleId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  const marginExpected = Math.round((pricingBase / 0.75) * 100) / 100;
+  assert.equal(Number(derivedPrices[0].retail_price), marginExpected, "margin percentage must calculate margin on sale price");
+  assert.equal(Number(derivedPrices[0].wholesale_price), marginExpected, "margin percentage must update both selected tiers");
+
+  await db.unsafe("update public.pricing_rules set calculation_method='fixed_price',adjustment_type='fixed',adjustment_value=123.45 where id=$1", [pricingRuleId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  assert.equal(Number(derivedPrices[0].retail_price), 123.45, "fixed price must update retail");
+  assert.equal(Number(derivedPrices[0].wholesale_price), 123.45, "fixed price must update wholesale");
+
+  await db.unsafe("update public.pricing_rules set calculation_method='add_subtract_amount',adjustment_type='amount',adjustment_value=-12.50 where id=$1", [pricingRuleId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  assert.equal(Number(derivedPrices[0].retail_price), pricingBase - 12.5, "negative amount must deduct from retail base");
+  assert.equal(Number(derivedPrices[0].wholesale_price), pricingBase - 12.5, "negative amount must deduct from wholesale base");
+
+  await db.unsafe("update public.pricing_rules set target_tier='wholesale',calculation_method='fixed_price',adjustment_type='fixed',adjustment_value=111.10 where id=$1", [pricingRuleId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  assert.equal(Number(derivedPrices[0].retail_price), pricingBase, "wholesale-only rule must leave retail at base when no other rules apply");
+  assert.equal(Number(derivedPrices[0].wholesale_price), 111.1, "wholesale-only rule must update wholesale");
+
+  await db.unsafe("delete from public.pricing_rules where id=$1", [pricingRuleId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  assert.equal(Number(derivedPrices[0].retail_price), pricingBase, "deleting last applicable rule must reset retail exactly to base_price");
+  assert.equal(Number(derivedPrices[0].wholesale_price), pricingBase, "deleting last applicable rule must reset wholesale exactly to base_price");
+  const pricingAudit = await db.unsafe(
+    "select action from public.audit_logs where organization_id=$1 and entity_type='pricing_rule' and entity_id=$2",
+    [organizationId, pricingRuleId],
+  );
+  assert.ok(pricingAudit.some((row) => row.action === 'pricing_rule.created'), "rule creation must be audited");
+  assert.ok(pricingAudit.filter((row) => row.action === 'pricing_rule.updated').length >= 4, "rule updates must be audited");
+  assert.ok(pricingAudit.some((row) => row.action === 'pricing_rule.deleted'), "rule deletion must be audited");
+
+  if (previouslyActiveRules.length) {
+    await db.unsafe("update public.pricing_rules set is_active=true where id=any($1::uuid[])", [previouslyActiveRules.map((row) => row.id)]);
+  }
+  process.stdout.write("PASS pricing rules: all four formulas, tier targeting, deletion resets both derived tier prices to base, and audited mutations\n");
+
+  process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle and pricing-rule CRUD semantics.\n");
 }
 
 try {

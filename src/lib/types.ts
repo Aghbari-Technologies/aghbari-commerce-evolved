@@ -101,12 +101,46 @@ export type InventoryBalance = {
 
 export type PricingRule = {
   id: string;
+  organization_id?: string;
   name: string;
   scope_type: string;
+  scope_value?: string | null;
+  base_type?: string;
+  base_source?: 'base_price' | 'cost_price' | string;
   adjustment_type: string;
   adjustment_value: number;
+  calculation_method?: 'add_percentage' | 'margin_percentage' | 'fixed_price' | 'add_subtract_amount' | string;
+  target_tier?: 'both' | 'wholesale' | 'retail' | string;
+  min_quantity?: number;
+  min_price?: number | null;
+  max_price?: number | null;
+  requires_approval?: boolean;
+  manually_locked?: boolean;
+  effective_from?: string | null;
+  effective_until?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  version?: number;
   is_active: boolean;
   priority: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CreatePricingRuleInput = {
+  name: string;
+  scope_type: 'default' | 'all' | 'product' | 'category';
+  scope_value: string | null;
+  target_tier: 'both' | 'wholesale' | 'retail';
+  calculation_method: 'add_percentage' | 'margin_percentage' | 'fixed_price' | 'add_subtract_amount';
+  base_source: 'base_price' | 'cost_price';
+  adjustment_value: number;
+  min_quantity: number;
+  min_price: number | null;
+  max_price: number | null;
+  priority: number;
+  effective_from: string | null;
+  effective_until: string | null;
 };
 
 export type Promotion = {
