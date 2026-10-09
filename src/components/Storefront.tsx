@@ -433,7 +433,7 @@ function QuickOrderMatrix({ products, quantities, feedback, onQuantityChange, on
         <div className="sf-discovery-links"><button onClick={onCart}><ShoppingCart size={15} /> عرض السلة</button></div>
       </div>
       <p style={{ margin: '0 0 14px', color: '#667b80', fontSize: 12 }} role="note">
-        الأسعار المعروضة أساسية للتوجيه فقط؛ يعيد الخادم حساب سعر فئة العميل وشرائح الكمية والتحقق من المخزون عند مراجعة الطلب.
+        لا تُعرض الأسعار أو إجماليات الطلب هنا؛ يتحقق الخادم من الأصناف والكميات والمخزون ويعيد احتساب السعر داخليًا عند إرسال الطلب.
       </p>
       {feedback && <div role={feedback.kind === 'error' ? 'alert' : 'status'} style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, border: `1px solid ${feedback.kind === 'error' ? '#efc5c5' : '#b8e5d4'}`, background: feedback.kind === 'error' ? '#fff6f6' : '#f0fbf6', color: feedback.kind === 'error' ? '#9b2626' : '#17684d', fontSize: 13 }}>{feedback.message}</div>}
       {!products.length ? <div className="sf-empty"><Package size={30} /><span>لا توجد منتجات مطابقة للبحث الحالي</span><small>غيّر البحث أو التصنيف ثم حاول مجددًا.</small></div> :
