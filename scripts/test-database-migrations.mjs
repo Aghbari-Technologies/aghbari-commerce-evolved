@@ -52,7 +52,8 @@ async function main() {
     .sort();
   assert.ok(migrations.length >= 7, "expected the original schema and six completion migrations");
   const migrationVersions = migrations.map((name) => name.slice(0, 14));
-  assert.ok(migrationVersions.every((version) => /^\\d{14}$/.test(version)),
+  assert.ok(migrationVersions.every((version) =>
+    version.length === 14 && [...version].every((digit) => digit >= '0' && digit <= '9')),
     "each Supabase migration filename must start with a 14-digit version");
   assert.equal(new Set(migrationVersions).size, migrationVersions.length,
     "Supabase migration version prefixes must be unique; duplicate versions break migration tracking");
