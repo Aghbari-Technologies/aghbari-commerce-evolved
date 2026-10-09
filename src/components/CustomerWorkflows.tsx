@@ -77,7 +77,60 @@ export function BarcodeWorkspacePage(){return <Gate><Barcode/></Gate>;}
 function Barcode(){
  const [value,setValue]=useState('');const [product,setProduct]=useState<Product|null>(null);const [error,setError]=useState('');const [cameraError,setCameraError]=useState('');const [busy,setBusy]=useState(false);const [scanning,setScanning]=useState(false);const videoRef=useRef<HTMLVideoElement|null>(null);const navigate=useNavigate();
  const lookup=useCallback(async(raw=value)=>{const code=raw.trim();if(!code){setError('أدخل رقم الباركود أو رمز الصنف.');return;}if(code.length>100){setError('الرمز يتجاوز الحد المسموح.');return;}setBusy(true);setError('');setProduct(null);let r=await supabase.from('products').select('id,name,item_code,barcode,unit,base_price,status').eq('organization_id',ORG_ID).eq('status','active').eq('barcode',code).maybeSingle();if(!r.data&&!r.error)r=await supabase.from('products').select('id,name,item_code,barcode,unit,base_price,status').eq('organization_id',ORG_ID).eq('status','active').eq('item_code',code).maybeSingle();if(r.error)setError('تعذر البحث في الكتالوج.');else if(!r.data)setError('لم نعثر على صنف بهذا الرمز.');else setProduct(r.data as Product);setBusy(false);},[value]);
- useEffect(()=>{if(!scanning)return;let active=true;let stream:MediaStream|null=null;let frame=0;type Detector={detect:(source:HTMLVideoElement)=>Promise<Array<{rawValue:string}>>};type Ctor=new(options:{formats:string[]})=>Detector;const setup=async()=>{try{const BarcodeCtor=(window as unknown as {BarcodeDetector?:Ctor}).BarcodeDetector;if(!BarcodeCtor){setCameraError('هذا المتصفح لا يدعم قراءة الباركود بالكاميرا. استخدم الإدخال اليدوي.');setScanning(false);return;}stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});if(!active||!videoRef.current)return;videoRef.current.srcObject=stream;await videoRef.current.play();const detector=new BarcodeCtor({formats:['ean_13','ean_8','upc_a','upc_e','code_128','qr_code']});const scan=async()=>{if(!active||!videoRef.current)return;try{const hits=await detector.detect(videoRef.current);if(hits[0]?.rawValue){setValue(hits[0].rawValue);setScanning(false);return;}}catch{/* Ignore a single unreadable camera frame and try the next one. */}frame=requestAnimationFrame(()=>void scan());};void scan();}catch{setCameraError('تعذر فتح الكاميرا. اسمح بالوصول إليها عبر HTTPS أو استخدم الإدخال اليدوي.');setScanning(false);}};void setup();return()=>{active=false;if(frame)cancelAnimationFrame(frame);stream?.getTracks().forEach(t=>t.stop());if(videoRef.current)videoRef.current.srcObject=null;};},[scanning]);
+ useEffect(() => {
+   if (!scanning) return;
+   let active = true;
+   let stream: MediaStream | null = null;
+   let frame = 0;
+   let video: HTMLVideoElement | null = null;
+   type Detector = { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> };
+   type DetectorCtor = new (options: { formats: string[] }) => Detector;
+
+   const setup = async () => {
+     try {
+       const BarcodeCtor = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
+       if (!BarcodeCtor) {
+         setCameraError('هذا المتصفح لا يدعم قراءة الباركود بالكاميرا. استخدم الإدخال اليدوي.');
+         setScanning(false);
+         return;
+       }
+       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+       video = videoRef.current;
+       if (!active || !video) {
+         stream.getTracks().forEach((track) => track.stop());
+         return;
+       }
+       video.srcObject = stream;
+       await video.play();
+       const detector = new BarcodeCtor({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
+       const scan = async () => {
+         if (!active || !video) return;
+         try {
+           const hits = await detector.detect(video);
+           if (hits[0]?.rawValue) {
+             setValue(hits[0].rawValue);
+             setScanning(false);
+             return;
+           }
+         } catch {
+           // Ignore one unreadable frame and continue scanning.
+         }
+         frame = requestAnimationFrame(() => void scan());
+       };
+       void scan();
+     } catch {
+       setCameraError('تعذر فتح الكاميرا. اسمح بالوصول إليها عبر HTTPS أو استخدم الإدخال اليدوي.');
+       setScanning(false);
+     }
+   };
+   void setup();
+   return () => {
+     active = false;
+     if (frame) cancelAnimationFrame(frame);
+     stream?.getTracks().forEach((track) => track.stop());
+     if (video) video.srcObject = null;
+   };
+ }, [scanning]);
  async function add(){if(!product)return;try{localStorage.setItem('aghbari:cart-restore:v1',JSON.stringify([{product_id:product.id,quantity:1}]));void navigate({to:'/'});}catch{setError('تعذر حفظ الصنف في السلة على هذا الجهاز.');}}
  return <WorkspaceShell title="ماسح الباركود" subtitle="اقرأ بالكاميرا في المتصفحات المدعومة أو استخدم البحث اليدوي.">{error&&<ErrorBox message={error}/ >}{cameraError&&<ErrorBox message={cameraError}/>}<section style={{...card,display:'grid',gap:12}}><form onSubmit={e=>{e.preventDefault();void lookup();}} style={{display:'flex',gap:8,flexWrap:'wrap'}}><input autoComplete="off" aria-label="رقم الباركود" style={{...field,flex:'1 1 260px'}} value={value} onChange={e=>setValue(e.target.value)} placeholder="امسح الرمز أو اكتب رقم الباركود"/><button type="submit" style={primary} disabled={busy}><Search size={16}/>{busy?'جارٍ البحث...':'بحث'}</button><button type="button" style={secondary} onClick={()=>{setCameraError('');setScanning(v=>!v);}}><ScanLine size={16}/>{scanning?'إيقاف الكاميرا':'فتح الكاميرا'}</button></form>{scanning&&<div style={{maxWidth:520,margin:'0 auto',width:'100%'}}><video ref={videoRef} muted playsInline style={{width:'100%',borderRadius:12,background:'#111'}}/><p style={quiet}>وجّه الكاميرا نحو الباركود بإضاءة جيدة.</p></div>}{product&&<article style={{...card,borderColor:'#a8d8c6'}}><h2 style={{margin:'0 0 6px'}}>{product.name}</h2><p style={quiet}>رمز الصنف: {product.item_code} · الباركود: {product.barcode??'غير مسجل'}</p><strong style={{fontSize:22,color:'#087f8d'}}>{formatCurrency(Number(product.base_price))}</strong><span style={{marginInlineStart:8}}>/ {product.unit}</span><div style={{marginTop:14}}><button style={primary} onClick={()=>void add()}><ShoppingCart size={16}/> أضف إلى السلة</button></div></article>}</section></WorkspaceShell>;
 }
