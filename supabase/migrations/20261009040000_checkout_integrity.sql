@@ -33,7 +33,7 @@ RETURNS numeric(15,2)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_base_price numeric(15,2);
   v_price numeric(15,2);
@@ -67,7 +67,7 @@ BEGIN
   END IF;
   RETURN pg_catalog.round(v_price,2);
 END;
-$;
+$$;
 REVOKE ALL ON FUNCTION public.customer_product_unit_price(uuid,uuid,text,numeric) FROM PUBLIC,anon,authenticated;
 
 DROP FUNCTION IF EXISTS public.place_order(jsonb,text,text,text,text);
@@ -288,7 +288,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $$
 DECLARE
   v_profile uuid := public.current_profile_id();
   v_org uuid;
@@ -387,7 +387,7 @@ BEGIN
     'price_basis','server'
   );
 END;
-$;
+$$;
 REVOKE ALL ON FUNCTION public.preview_order_pricing(jsonb) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.preview_order_pricing(jsonb) TO authenticated;
 
@@ -477,7 +477,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$;
+$$;
 REVOKE ALL ON FUNCTION public.guard_order_confirmation() FROM PUBLIC,anon,authenticated;
 
 DROP TRIGGER IF EXISTS orders_guard_confirmation_before_status_update ON public.orders;
