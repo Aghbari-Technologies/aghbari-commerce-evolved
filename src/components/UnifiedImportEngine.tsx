@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Check, FileDown, Pause, Play, RefreshCw, ShieldCheck, Upload, XCircle } from "lucide-react";
 import {
-  createImportJob, createImportUploadSession, fetchCentralSynonyms, fetchImportJobs, fetchImportProfiles,
+  cancelImportUploadSession, createImportJob, createImportUploadSession, fetchCentralSynonyms, fetchImportJobs, fetchImportProfiles,
   findImportDuplicate, finalizeImportJob, insertImportRows, recordImportUploadChunk, updateImportJob,
 } from "@/lib/api";
 import { useFetch } from "@/lib/useFetch";
@@ -206,6 +206,9 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       }
 
       if (cancelRef.current) {
+        if (uploadSession) {
+          try { await cancelImportUploadSession(uploadSession.id); } catch { /* cancellation of the job remains recorded below */ }
+        }
         await updateImportJob(job.id, {
           status: "cancelled",
           error_summary: { code: "CANCELLED_BY_USER", message: "ألغى المستخدم الدفعة؛ لم يتم إنشاء Snapshot.", no_raw_file_retained: true },
@@ -265,7 +268,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       await refetch();
     } finally {
       runningRef.current = false;
-      updatePaused(false);
+      pausedRef.current = false;
+      setPaused(false);
     }
   }
 
@@ -273,6 +277,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || runningRef.current) return;
+    if (file.size === 0) { setErrorMessage('الملف فارغ. اختر ملفًا يحتوي على بيانات.'); return; }
     if (file.size > MAX_IMPORT_FILE_BYTES) {
       setErrorMessage("حجم الملف يتجاوز الحد المسموح 100MB.");
       return;
@@ -410,7 +415,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           {stage && <div className="progress-area">
             <div className="progress-label"><span>المرحلة الحالية: {STAGES.find((item) => item.id === stage)?.label ?? "اكتملت المعالجة"}</span><b>{progress}%</b></div>
             <div className="progress-track"><i style={{ width: progress + "%" }} /></div>
-            <small>{formatNumber(processed)} صف تمت معالجته {qualityPreview ? "• DQS أولي " + qualityPreview.score + "/100 (" + qualityPreview.label + ")" : ""}</small>
+            <small>{formatNumber(processed)} صف تمت معالجته {qualityPreview ? "• DQS أولي " + qualityPreview.score + "/100 (" + (qualityPreview.score >= 90 ? 'ممتاز' : qualityPreview.score >= 75 ? 'مقبول' : qualityPreview.score >= 50 ? 'تحذير' : 'مرفوض') + ")" : ""}</small>
           </div>}
         </section>
 
