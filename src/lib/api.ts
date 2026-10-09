@@ -362,6 +362,69 @@ export async function createImportJob(input: {
   return data as ImportJob;
 }
 
+export async function createImportUploadSession(jobId: string) {
+  const { data, error } = await supabase.rpc('create_import_upload_session', { p_job_id: jobId });
+  if (error) throw error;
+  return data as {
+    id: string; import_job_id: string; chunk_size_bytes: number; total_chunks: number;
+    verified_chunks: number; status: string; file_hash: string; file_size: number;
+  };
+}
+
+export async function recordImportUploadChunk(input: {
+  sessionId: string; chunkNumber: number; byteOffset: number; byteSize: number; chunkHash: string;
+}) {
+  const { data, error } = await supabase.rpc('record_import_upload_chunk', {
+    p_session_id: input.sessionId,
+    p_chunk_number: input.chunkNumber,
+    p_byte_offset: input.byteOffset,
+    p_byte_size: input.byteSize,
+    p_chunk_hash: input.chunkHash,
+  });
+  if (error) throw error;
+  return data as { session_id: string; verified_chunks: number; total_chunks: number; complete: boolean };
+}
+
+export async function findImportDuplicate(fileHash: string, profileId: string | null, periodKey: string | null) {
+  const { data, error } = await supabase.rpc('find_import_duplicate', {
+    p_file_hash: fileHash, p_profile_id: profileId, p_period_key: periodKey,
+  });
+  if (error) throw error;
+  return data as { duplicate: boolean; jobs: ImportJob[]; snapshots: unknown[] };
+}
+
+export async function fetchInventoryReconciliationRuns() {
+  const { data, error } = await supabase.from('inventory_reconciliation_runs').select('*').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchInventoryReconciliationItems(runId: string) {
+  const { data, error } = await supabase.from('inventory_reconciliation_items').select('*').eq('run_id', runId).order('item_code').limit(100000);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchCentralSynonyms() {
+  const { data, error } = await supabase.from('central_synonym_dictionary').select('*').order('normalized_header').limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCentralSynonym(input: {
+  sourceHeader: string; normalizedHeader: string; canonicalField: string; profileId?: string | null; locale?: string;
+}) {
+  const { data, error } = await supabase.from('central_synonym_dictionary').insert({
+    source_header: input.sourceHeader.trim(),
+    normalized_header: input.normalizedHeader.trim().toLowerCase(),
+    canonical_field: input.canonicalField.trim(),
+    profile_id: input.profileId ?? null,
+    locale: input.locale ?? 'ar',
+  }).select().single();
+  if (error) throw error;
+  return data;
+}
+
 export async function finalizeImportJob(jobId: string): Promise<{
   job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
   snapshot_id: string | null; review_required: boolean;
