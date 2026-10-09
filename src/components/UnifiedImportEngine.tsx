@@ -10,7 +10,7 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  applyImportProfileRules, normalizeHeader, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
+  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
@@ -235,7 +235,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         // Already-verified upload chunks have their structured rows committed before their
         // manifest checkpoint. Reparse those bytes locally to rebuild CSV/quality state, but
         // never write their rows again. The first incomplete chunk is upserted normally.
-        if (finalizingCsv || !verifiedChunks.has(currentChunkNumber)) {
+        if (shouldPersistParsedImportRow(currentChunkNumber, verifiedChunks, finalizingCsv)) {
           // The final unterminated CSV row may not have been staged if a prior run stopped
           // after the final chunk checkpoint but before EOF finalization; upsert it safely.
           batch.push({ rowNumber: parsed.row_number, data: parsed.data, status: parsed.status, errors: parsed.errors });
