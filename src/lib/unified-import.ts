@@ -10,6 +10,15 @@ export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PROCESSING_CHUNK_ROWS = 1_000;
 export const MAX_ARCHIVE_EXPANSION_FACTOR = 10;
 
+/** Persist rows only for unverified chunks, except the final EOF row which may be missing if a prior run stopped after checkpointing the last chunk. */
+export function shouldPersistParsedImportRow(
+  chunkNumber: number,
+  verifiedChunks: ReadonlySet<number>,
+  finalizingCsv = false,
+): boolean {
+  return finalizingCsv || !verifiedChunks.has(chunkNumber);
+}
+
 export type VerifiedImportChunk = {
   chunk_number: number;
   byte_offset: number;
