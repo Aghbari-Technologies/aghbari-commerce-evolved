@@ -445,7 +445,7 @@ function QuickOrderMatrix({ products, quantities, feedback, onQuantityChange, on
                 <td style={{ padding: 12, direction: 'ltr', textAlign: 'right' }}>{product.item_code}</td>
                 <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{formatNumber(available)} {product.unit}</td>
                 <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{formatCurrency(product.base_price)} <small style={{ color: '#74888c' }}>/{product.unit}</small></td>
-                <td style={{ padding: 12, minWidth: 110 }}><input type="number" inputMode="numeric" min={0} max={available} step={1} value={quantities[product.id] ?? ''} disabled={available <= 0} aria-label={`كمية ${product.name}`} onChange={(event) => { const value = event.target.value; if (value === '' || /^\\d+$/.test(value)) onQuantityChange(product.id, value); }} style={{ width: 96, padding: '9px 10px', border: '1px solid #cfdddd', borderRadius: 9, background: available <= 0 ? '#f2f5f5' : '#fff', color: '#18383c' }} /></td>
+                <td style={{ padding: 12, minWidth: 110 }}><input type="number" inputMode="numeric" min={0} max={available} step={1} value={quantities[product.id] ?? ''} disabled={available <= 0} aria-label={`كمية ${product.name}`} onChange={(event) => { const value = event.target.value; if (value === '' || /^\d+$/.test(value)) onQuantityChange(product.id, value); }} style={{ width: 96, padding: '9px 10px', border: '1px solid #cfdddd', borderRadius: 9, background: available <= 0 ? '#f2f5f5' : '#fff', color: '#18383c' }} /></td>
               </tr>;
             })}</tbody>
           </table>
