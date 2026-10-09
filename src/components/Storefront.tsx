@@ -255,7 +255,7 @@ type CheckoutPreviewLine = {
 };
 type CheckoutPricePreview = { items: CheckoutPreviewLine[]; total_amount: number; currency: string; customer_tier: string };
 
-function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total: number; onBack: () => void; onComplete: (order: { id: string; order_number: string; total_amount: number }) => void }) {
+function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void }) {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState('');
@@ -354,7 +354,7 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
         if (saved?.key === requestKey) window.sessionStorage.removeItem(storageKey);
       } catch { /* request is already confirmed; cleanup is best-effort */ }
       idempotencyRef.current = null;
-      onComplete({ id: result.id, order_number: result.order_number, total_amount: serverTotal });
+      onComplete({ id: result.id, order_number: result.order_number });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذر إرسال الطلب');
     } finally { setSubmitting(false); }
@@ -381,11 +381,13 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
         <aside className="sf-checkout-summary">
           <h3>ملخص الطلب</h3>
           {previewLoading && <p role="status">جارٍ حساب أسعار حسابك من الخادم...</p>}
-          {pricePreview ? pricePreview.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>{formatNumber(Number(line.quantity))} × {formatCurrency(Number(line.unit_price))}</small></div>)
-            : !previewLoading && cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>{i.quantity} × {formatCurrency(i.product.base_price)} (تقديري فقط)</small></div>)}
-          <div className="sf-summary-total"><span>{pricePreview ? 'الإجمالي المحسوب من الخادم' : 'الإجمالي غير معتمد'}</span><strong>{formatCurrency(pricePreview?.total_amount ?? total)}</strong></div>
-          {pricePreview && <small style={{ color: '#71868a', lineHeight: 1.7 }}>شريحة حسابك: {pricePreview.customer_tier}. أُعيد حساب الأسعار الآن من قاعدة البيانات؛ سيعيد الخادم التحقق داخل معاملة إنشاء الطلب أيضًا.</small>}
-          {!pricePreview && <small style={{ color: '#9b2626', lineHeight: 1.7 }}>لن يُرسل الطلب حتى يتمكن النظام من جلب أسعار موثوقة من الخادم.</small>}
+          {pricePreview ? pricePreview.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>الكمية: {formatNumber(Number(line.quantity))} {line.unit}</small></div>)
+            : !previewLoading && cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>الكمية: {formatNumber(i.quantity)} {i.product.unit}</small></div>)}
+          <div role="note" style={{ padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70', lineHeight: 1.8 }}>
+            الأسعار والإجماليات مخفية في مستندات الطلب للعميل. بعد مراجعة الإدارة سيظهر إشعار حالة الطلب وتعليمات السداد عند الحاجة.
+          </div>
+          {pricePreview && <small style={{ color: '#71868a', lineHeight: 1.7 }}>تم التحقق من بيانات التسعير الحالية من الخادم. سيعيد الخادم التحقق داخل معاملة إنشاء الطلب أيضًا، لكن لا تُعرض قيم الأسعار هنا.</small>}
+          {!pricePreview && !previewLoading && <small style={{ color: '#9b2626', lineHeight: 1.7 }}>لن يُرسل الطلب حتى ينجح التحقق من الأسعار في الخادم.</small>}
         </aside>
       </div>
     </section>
