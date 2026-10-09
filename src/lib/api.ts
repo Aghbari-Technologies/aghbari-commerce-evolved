@@ -492,8 +492,10 @@ export async function createImportUploadSession(jobId: string) {
   const { data, error } = await supabase.rpc('create_import_upload_session', { p_job_id: jobId });
   if (error) throw error;
   return data as {
-    id: string; import_job_id: string; chunk_size_bytes: number; total_chunks: number;
-    verified_chunks: number; status: string; file_hash: string; file_size: number;
+    id: string; import_job_id: string; organization_id: string;
+    profile_id: string | null; profile_version: number | null; period_key: string | null;
+    chunk_size_bytes: number; total_chunks: number; verified_chunks: number;
+    status: string; file_hash: string; file_size: number;
   };
 }
 
