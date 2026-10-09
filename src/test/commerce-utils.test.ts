@@ -1,4 +1,4 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, shouldPersistParsedImportRow, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
@@ -70,6 +70,14 @@ describe('commerce completion utilities', () => {
     expect(() => validateVerifiedImportChunkPrefix([
       { chunk_number: 0, byte_offset: 0, byte_size: 8, chunk_hash: 'not-a-digest' },
     ], 18, 8)).toThrow('غير متطابقة');
+  });
+
+  it('skips verified import row writes except for the final EOF recovery upsert', () => {
+    const verified = new Set([0, 1]);
+    expect(shouldPersistParsedImportRow(0, verified)).toBe(false);
+    expect(shouldPersistParsedImportRow(1, verified)).toBe(false);
+    expect(shouldPersistParsedImportRow(2, verified)).toBe(true);
+    expect(shouldPersistParsedImportRow(1, verified, true)).toBe(true);
   });
 
   it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {
