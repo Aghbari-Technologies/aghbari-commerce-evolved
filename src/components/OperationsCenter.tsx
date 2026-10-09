@@ -213,8 +213,64 @@ function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => 
 }
 
 function SynonymDictionary() {
-  const entries = Object.entries(synonymMap);
-  return <section className="panel dictionary-panel"><div className="panel-head"><div><h2>قاموس المرادفات المركزي</h2><p>يُستخدم في توحيد أعمدة الاستيراد والبحث دون تحويل رموز الأصناف إلى أرقام</p></div><span className="badge success">v1.0 ثابت</span></div><div className="dictionary-grid">{entries.map(([source, target]) => <div key={source}><span>{source}</span><b><ArrowLeftIcon size={14} /> {target}</b></div>)}</div></section>;
+  const { data: stored, loading, error, refetch } = useFetch(fetchCentralSynonyms);
+  const { data: profiles } = useFetch(fetchImportProfiles);
+  const [sourceHeader, setSourceHeader] = useState('');
+  const [canonicalField, setCanonicalField] = useState('');
+  const [selectedProfile, setSelectedProfile] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const entries = useMemo(() => {
+    const map = new Map<string, { source: string; target: string; profile?: string }>();
+    for (const [source, target] of Object.entries(synonymMap)) {
+      map.set(source, { source, target });
+    }
+    for (const row of stored ?? []) {
+      const source = String(row.source_header ?? '');
+      const target = String(row.canonical_field ?? '');
+      if (source && target) map.set(String(row.normalized_header ?? source), { source, target, profile: row.profile_id ?? undefined });
+    }
+    return [...map.values()].sort((a, b) => a.source.localeCompare(b.source, 'ar'));
+  }, [stored]);
+
+  async function save() {
+    if (!sourceHeader.trim() || !/^[a-z][a-z0-9_]{0,79}$/.test(canonicalField.trim())) {
+      setMessage('أدخل عنوانًا أصليًا وحقلًا قياسيًا صالحًا مثل item_code أو customer_code.');
+      return;
+    }
+    setSaving(true);
+    setMessage('');
+    try {
+      await saveCentralSynonym({
+        sourceHeader: sourceHeader.trim(),
+        normalizedHeader: normalizeHeader(sourceHeader),
+        canonicalField: canonicalField.trim(),
+        profileId: selectedProfile || null,
+        locale: 'ar',
+      });
+      setSourceHeader('');
+      setCanonicalField('');
+      setMessage('تم حفظ المرادف في القاموس المركزي للمؤسسة.');
+      await refetch();
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'تعذر حفظ المرادف.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <section className="panel dictionary-panel">
+    <div className="panel-head"><div><h2>قاموس المرادفات المركزي</h2><p>تسميات عربية ومتعددة المصادر مرتبطة بحقل قياسي واحد. الإضافة محفوظة في قاعدة البيانات ومقيدة بالمؤسسة.</p></div><span className="badge success">{entries.length} مرادف</span></div>
+    <div className="inline-form" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8, alignItems: 'end' }}>
+      <label className="form-field"><span>عنوان العمود المصدر</span><input value={sourceHeader} onChange={(event) => setSourceHeader(event.target.value)} maxLength={200} placeholder="مثال: رمز المادة" /></label>
+      <label className="form-field"><span>الحقل القياسي</span><input value={canonicalField} onChange={(event) => setCanonicalField(event.target.value)} maxLength={80} placeholder="item_code" dir="ltr" /></label>
+      <label className="form-field"><span>الملف التعريفي (اختياري)</span><select value={selectedProfile} onChange={(event) => setSelectedProfile(event.target.value)}><option value="">عام لكل الملفات</option>{(profiles ?? []).map((profile: { id: string; profile_name: string; version: number }) => <option key={profile.id} value={profile.id}>{profile.profile_name} — v{profile.version}</option>)}</select></label>
+      <Button disabled={saving} onClick={() => void save()}><Plus size={15} />{saving ? 'جارٍ الحفظ...' : 'إضافة مرادف'}</Button>
+    </div>
+    {message && <p role="status" style={{ marginTop: 10 }}>{message}</p>}
+    {loading ? <Loading /> : error ? <ErrorBox message={error} /> : <div className="dictionary-grid">{entries.map(({ source, target, profile }) => <div key={source + ':' + target}><span>{source}</span><b><ArrowLeftIcon size={14} /> {target}</b>{profile && <small>ملف خاص</small>}</div>)}</div>}
+  </section>;
 }
 
 function Metric({ icon: Icon, label, value }: { icon: import('lucide-react').LucideIcon; label: string; value: string }) { return <article className="operation-metric"><Icon size={21} /><span>{label}</span><strong>{value}</strong></article>; }
