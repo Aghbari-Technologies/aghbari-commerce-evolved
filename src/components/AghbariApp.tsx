@@ -345,8 +345,9 @@ function pricingRuleMethodForForm(rule?: PricingRule): CreatePricingRuleInput['c
     amount: 'add_subtract_amount',
   };
   const candidate = rule?.calculation_method ?? legacy[rule?.adjustment_type ?? ''];
-  return candidate && ['add_percentage', 'margin_percentage', 'fixed_price', 'add_subtract_amount'].includes(candidate)
-    ? candidate
+  const supported = new Set<string>(['add_percentage', 'margin_percentage', 'fixed_price', 'add_subtract_amount']);
+  return candidate && supported.has(candidate)
+    ? candidate as CreatePricingRuleInput['calculation_method']
     : 'add_percentage';
 }
 
