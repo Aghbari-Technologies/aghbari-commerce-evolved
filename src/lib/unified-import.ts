@@ -10,6 +10,77 @@ export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PROCESSING_CHUNK_ROWS = 1_000;
 export const MAX_ARCHIVE_EXPANSION_FACTOR = 10;
 
+function sortJsonObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record).sort().map((key) => [key, sortJsonObjectKeys(record[key])]),
+    );
+  }
+  return value;
+}
+
+/** Stable, recursively key-sorted JSON for fingerprints over persisted configuration. */
+export function stableJsonStringify(value: unknown): string {
+  const result = JSON.stringify(sortJsonObjectKeys(value));
+  if (result === undefined) throw new Error('قيمة إعدادات الاستيراد غير قابلة للبصم.');
+  return result;
+}
+
+
+/** Persist rows only for unverified chunks, except the final EOF row which may be missing if a prior run stopped after checkpointing the last chunk. */
+export function shouldPersistParsedImportRow(
+  chunkNumber: number,
+  verifiedChunks: ReadonlySet<number>,
+  finalizingCsv = false,
+): boolean {
+  return finalizingCsv || !verifiedChunks.has(chunkNumber);
+}
+
+export type VerifiedImportChunk = {
+  chunk_number: number;
+  byte_offset: number;
+  byte_size: number;
+  chunk_hash: string;
+};
+
+/**
+ * Validate that the server's verified upload manifest is a contiguous prefix of this exact file.
+ * A manifest with gaps, altered offsets, wrong chunk lengths or malformed hashes must not be
+ * treated as resumable: doing so could skip missing bytes or overwrite rows under a false checkpoint.
+ */
+export function validateVerifiedImportChunkPrefix(
+  chunks: VerifiedImportChunk[],
+  fileSize: number,
+  chunkSize: number = UPLOAD_CHUNK_BYTES,
+): number[] {
+  if (!Number.isSafeInteger(fileSize) || fileSize < 1 || fileSize > MAX_IMPORT_FILE_BYTES) {
+    throw new Error('حجم الملف غير صالح لاستئناف الاستيراد.');
+  }
+  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > MAX_IMPORT_FILE_BYTES) {
+    throw new Error('حجم شريحة الرفع غير صالح.');
+  }
+  const totalChunks = Math.ceil(fileSize / chunkSize);
+  if (chunks.length > totalChunks) throw new Error('سجل شرائح الاستيراد يحتوي على شرائح أكثر من حجم الملف.');
+  const sorted = [...chunks].sort((a, b) => a.chunk_number - b.chunk_number);
+  const verified: number[] = [];
+  for (let index = 0; index < sorted.length; index += 1) {
+    const chunk = sorted[index];
+    const expectedOffset = index * chunkSize;
+    const expectedSize = Math.min(chunkSize, fileSize - expectedOffset);
+    if (chunk.chunk_number !== index) {
+      throw new Error('تعذر الاستئناف الآمن: سجل الشرائح المحفوظة يحتوي فجوة عند الشريحة ' + index + '.');
+    }
+    if (chunk.byte_offset !== expectedOffset || chunk.byte_size !== expectedSize ||
+        !/^[0-9a-f]{64}$/.test(chunk.chunk_hash)) {
+      throw new Error('تعذر الاستئناف الآمن: بيانات الشريحة المحفوظة غير متطابقة عند الشريحة ' + index + '.');
+    }
+    verified.push(index);
+  }
+  return verified;
+}
+
 const SHA256_K = new Uint32Array([
   0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
   0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,

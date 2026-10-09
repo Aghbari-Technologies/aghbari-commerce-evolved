@@ -1,4 +1,4 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, validateCsvRow, validateImportProfileRules } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
@@ -52,6 +52,39 @@ describe('commerce completion utilities', () => {
     digest.update(new TextEncoder().encode('b'));
     digest.update(new TextEncoder().encode('c'));
     expect(digest.digestHex()).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('serializes import fingerprint configuration deterministically across object key order', () => {
+    expect(stableJsonStringify({ b: 2, a: { y: true, x: 1 } }))
+      .toBe(stableJsonStringify({ a: { x: 1, y: true }, b: 2 }));
+    expect(stableJsonStringify({ transformations: [{ field: 'item_code', operation: 'trim' }] }))
+      .not.toBe(stableJsonStringify({ transformations: [{ field: 'item_code', operation: 'uppercase' }] }));
+  });
+
+  it('accepts only a contiguous, well-formed prefix of verified import chunks for resume', () => {
+    const chunks = [
+      { chunk_number: 1, byte_offset: 8, byte_size: 8, chunk_hash: 'b'.repeat(64) },
+      { chunk_number: 0, byte_offset: 0, byte_size: 8, chunk_hash: 'a'.repeat(64) },
+    ];
+    expect(validateVerifiedImportChunkPrefix(chunks, 18, 8)).toEqual([0, 1]);
+    expect(() => validateVerifiedImportChunkPrefix([
+      { chunk_number: 0, byte_offset: 0, byte_size: 8, chunk_hash: 'a'.repeat(64) },
+      { chunk_number: 2, byte_offset: 16, byte_size: 2, chunk_hash: 'c'.repeat(64) },
+    ], 18, 8)).toThrow('فجوة');
+    expect(() => validateVerifiedImportChunkPrefix([
+      { chunk_number: 0, byte_offset: 1, byte_size: 8, chunk_hash: 'a'.repeat(64) },
+    ], 18, 8)).toThrow('غير متطابقة');
+    expect(() => validateVerifiedImportChunkPrefix([
+      { chunk_number: 0, byte_offset: 0, byte_size: 8, chunk_hash: 'not-a-digest' },
+    ], 18, 8)).toThrow('غير متطابقة');
+  });
+
+  it('skips verified import row writes except for the final EOF recovery upsert', () => {
+    const verified = new Set([0, 1]);
+    expect(shouldPersistParsedImportRow(0, verified)).toBe(false);
+    expect(shouldPersistParsedImportRow(1, verified)).toBe(false);
+    expect(shouldPersistParsedImportRow(2, verified)).toBe(true);
+    expect(shouldPersistParsedImportRow(1, verified, true)).toBe(true);
   });
 
   it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {

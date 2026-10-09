@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Check, FileDown, Pause, Play, RefreshCw, ShieldCheck, Upload, XCircle } from "lucide-react";
 import {
   cancelImportUploadSession, createImportJob, createImportUploadSession, fetchCentralSynonyms, fetchImportJobs, fetchImportProfiles,
-  findImportDuplicate, finalizeImportJob, insertImportRows, recordImportUploadChunk, updateImportJob,
+  fetchImportUploadChunks, findImportDuplicate, finalizeImportJob, insertImportRows, recordImportUploadChunk, updateImportJob,
 } from "@/lib/api";
 import { useFetch } from "@/lib/useFetch";
 import { formatNumber } from "@/lib/format";
@@ -10,7 +10,8 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  applyImportProfileRules, normalizeHeader, validateCsvRow, validateImportProfileRules, type ParsedImportRow, type QualityResult,
+  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
+  type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
 
@@ -107,7 +108,9 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
     setProcessed(0);
     setQualityPreview(null);
     let job: ImportJob | null = existingJob ?? null;
-    let uploadSession: { id: string; chunk_size_bytes: number; total_chunks: number; verified_chunks: number } | null = null;
+    let uploadSession: { id: string; import_job_id: string; organization_id: string; profile_id: string | null; profile_version: number | null; period_key: string | null; chunk_size_bytes: number; total_chunks: number; verified_chunks: number; status: string; file_hash: string; file_size: number } | null = null;
+    let processingConfigFingerprint: string | null = null;
+    let checkpointFingerprintPersisted = false;
 
     try {
       if (!job) {
@@ -121,6 +124,12 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           sourceSystem: "manual",
         });
       }
+      if (selectedProfile && job.profile_id && selectedProfile !== job.profile_id) {
+        throw new Error("الملف التعريفي المختار لا يطابق الملف التعريفي المقيد بدفعة الاستيراد.");
+      }
+      // The server may create the default profile while creating the job; bind processing to
+      // that persisted profile, not to a possibly stale/empty React query cache.
+      selectedProfile = job.profile_id ?? selectedProfile ?? activeProfileId;
 
       const extension = file.name.split(".").pop()?.toLocaleLowerCase("en") ?? "";
       if (extension !== "csv") {
@@ -145,14 +154,19 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
-      const profile = (profiles ?? []).find((p: ImportProfile) => p.id === selectedProfile) as ImportProfile | undefined;
+      const currentProfiles = await fetchImportProfiles();
+      const currentSynonyms = await fetchCentralSynonyms();
+      const profile = (currentProfiles ?? []).find((p: ImportProfile) => p.id === selectedProfile) as ImportProfile | undefined;
+      if (selectedProfile && !profile) {
+        throw new Error("تعذر تحميل إصدار الملف التعريفي المقيد بالدفعة؛ لن تتم معالجة صفوف بإعدادات غير مؤكدة.");
+      }
       const transformations = profile?.transformation_rules ?? [];
       const validations = profile?.validation_rules ?? [];
       // Fail fast on malformed declarative profiles before any rows are staged.
       validateImportProfileRules(transformations, validations);
       const profileSynonyms: Record<string, string> = { ...DEFAULT_SYNONYMS };
       const normalizeSynonymSource = (value: string) => value.trim().toLocaleLowerCase("ar").replace(/[ـ_-]+/g, " ").replace(/\s+/g, " ");
-      for (const row of storedSynonyms ?? []) {
+      for (const row of currentSynonyms ?? []) {
         if (row.profile_id && row.profile_id !== selectedProfile) continue;
         const source = normalizeSynonymSource(String(row.source_header ?? ""));
         const target = String(row.canonical_field ?? "").trim();
@@ -166,14 +180,79 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       const ignoredColumns = new Set((profile?.ignored_columns ?? []).map((field) => normalizeHeader(String(field), profileSynonyms)));
       const requiredColumns = Array.isArray(profile?.required_columns) ? profile.required_columns.map(String) : ["item_code"];
       const matchingKey = String(profile?.matching_key ?? "item_code");
+      const processingConfig = {
+        profileId: selectedProfile,
+        profileVersion: profile?.version ?? null,
+        reportType: profile?.report_type ?? null,
+        source: profile?.source ?? null,
+        requiredColumns,
+        optionalColumns: profile?.optional_columns ?? [],
+        ignoredColumns: [...ignoredColumns].sort(),
+        matchingKey,
+        mergeStrategy: profile?.merge_strategy ?? "manual_review",
+        isFullDataset: profile?.is_full_dataset ?? false,
+        dateRules: profile?.date_rules ?? {},
+        synonyms: Object.entries(profileSynonyms).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        transformations,
+        validations,
+      };
+      processingConfigFingerprint = new IncrementalSha256()
+        .update(new TextEncoder().encode(stableJsonStringify(processingConfig)))
+        .digestHex();
 
       setStage("reading");
       uploadSession = await createImportUploadSession(job.id);
+      if (uploadSession.file_hash !== fileHash || Number(uploadSession.file_size) !== file.size) {
+        throw new Error("جلسة الاستيراد لا تطابق الملف المختار. لا يمكن متابعة المعالجة بأمان.");
+      }
+      if ((uploadSession.profile_id ?? null) !== (selectedProfile ?? null) ||
+          (uploadSession.profile_version ?? null) !== (profile?.version ?? null) ||
+          (uploadSession.period_key ?? null) !== (selectedPeriod ?? null)) {
+        throw new Error("هوية الملف التعريفي أو إصداره أو الفترة لا تطابق جلسة الرفع. أوقفنا الاستئناف حتى لا تختلط نتائج دفعتين.");
+      }
+      if (uploadSession.chunk_size_bytes !== UPLOAD_CHUNK_BYTES ||
+          uploadSession.total_chunks !== Math.ceil(file.size / UPLOAD_CHUNK_BYTES)) {
+        throw new Error("إعدادات شرائح جلسة الاستيراد لا تطابق هذا الملف؛ أوقف العملية وابدأ دفعة جديدة.");
+      }
+      if (["cancelled", "expired", "completed"].includes(uploadSession.status)) {
+        throw new Error("جلسة الاستيراد السابقة ملغاة أو منتهية؛ ابدأ دفعة جديدة بدل الكتابة فوق جلسة غير متاحة.");
+      }
+      const uploadManifest = await fetchImportUploadChunks(uploadSession.id);
+      const verifiedChunkNumbers = validateVerifiedImportChunkPrefix(
+        uploadManifest, file.size, uploadSession.chunk_size_bytes,
+      );
+      if (verifiedChunkNumbers.length !== uploadSession.verified_chunks) {
+        throw new Error("عدد الشرائح المؤكدة لا يطابق سجل الشرائح؛ تعذر الاستئناف الآمن.");
+      }
+      const previousSummary = (job.error_summary ?? {}) as Record<string, unknown>;
+      const savedFingerprint = previousSummary.processing_config_fingerprint;
+      if (verifiedChunkNumbers.length > 0 && typeof savedFingerprint !== "string") {
+        throw new Error("هذه دفعة قديمة لا تحفظ بصمة إعدادات المعالجة. ابدأ نسخة استيراد جديدة بدل دمج بيانات ربما استخدمت تعيين أعمدة مختلفًا.");
+      }
+      if (typeof savedFingerprint === "string" && savedFingerprint !== processingConfigFingerprint) {
+        throw new Error("تغير الملف التعريفي أو المرادفات أو قواعد المعالجة منذ بدء الدفعة. تم إيقاف الاستئناف لتجنب خلط صفوف بمعايير مختلفة؛ ابدأ نسخة جديدة.");
+      }
+      await updateImportJob(job.id, {
+        error_summary: {
+          ...previousSummary,
+          processing_config_fingerprint: processingConfigFingerprint,
+          profile_id: selectedProfile,
+          profile_version: profile?.version ?? null,
+          source_file_hash: fileHash,
+          no_raw_file_retained: true,
+        },
+      });
+      checkpointFingerprintPersisted = true;
+      const verifiedChunks = new Set(verifiedChunkNumbers);
+      if (verifiedChunks.size > 0) {
+        setStatusMessage("استئناف آمن: سيعاد بناء حالة قراءة CSV محليًا، وتُتجاوز كتابة الشرائح المؤكدة، ويستمر الحفظ من أول شريحة غير مؤكدة.");
+      }
       const parser = new StreamingCsvParser();
       const decoder = new TextDecoder("utf-8", { fatal: false });
       let headers: string[] | null = null;
       let quality: DataQualityAccumulator | null = null;
-      let rowCounter = 0;
+      let currentChunkNumber = -1;
+      let finalizingCsv = false;
       let dataRows = 0;
       let batch: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors: string[] }> = [];
 
@@ -182,8 +261,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         const toSave = batch;
         batch = [];
         await insertImportRows(job!.id, toSave);
-        rowCounter += toSave.length;
-        setProcessed(rowCounter);
+        setProcessed(dataRows);
         if (quality) setQualityPreview(quality.result());
       };
 
@@ -210,9 +288,17 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         const baseRow: ParsedImportRow = validateCsvRow(values, headers, dataRows + 1);
         const parsed: ParsedImportRow = applyImportProfileRules(baseRow, transformations, validations);
         quality?.add(parsed);
-        batch.push({ rowNumber: parsed.row_number, data: parsed.data, status: parsed.status, errors: parsed.errors });
+        // Already-verified upload chunks have their structured rows committed before their
+        // manifest checkpoint. Reparse those bytes locally to rebuild CSV/quality state, but
+        // never write their rows again. The first incomplete chunk is upserted normally.
+        if (shouldPersistParsedImportRow(currentChunkNumber, verifiedChunks, finalizingCsv)) {
+          // The final unterminated CSV row may not have been staged if a prior run stopped
+          // after the final chunk checkpoint but before EOF finalization; upsert it safely.
+          batch.push({ rowNumber: parsed.row_number, data: parsed.data, status: parsed.status, errors: parsed.errors });
+          if (batch.length >= PROCESSING_CHUNK_ROWS) await flushBatch();
+        }
+        if (dataRows % 100 === 0) setProcessed(dataRows);
         setStage("validating");
-        if (batch.length >= PROCESSING_CHUNK_ROWS) await flushBatch();
       };
 
       const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
@@ -220,19 +306,28 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
         while (pausedRef.current && !cancelRef.current) await delay(180);
         if (cancelRef.current) break;
+        currentChunkNumber = chunkNumber;
         const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
         const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
         const chunkHash = new IncrementalSha256().update(bytes).digestHex();
         await parser.push(decoder.decode(bytes, { stream: byteOffset + bytes.length < file.size }), consumeRow, false);
         await flushBatch();
-        await recordImportUploadChunk({
-          sessionId: uploadSession.id,
-          chunkNumber,
-          byteOffset,
-          byteSize: bytes.byteLength,
-          chunkHash,
-        });
+        if (verifiedChunks.has(chunkNumber)) {
+          const checkpoint = uploadManifest[chunkNumber];
+          if (!checkpoint || checkpoint.chunk_hash !== chunkHash) {
+            throw new Error("بصمة الشريحة " + (chunkNumber + 1) + " تختلف عن نقطة الاستئناف المحفوظة؛ لم يتم تجاوزها.");
+          }
+        } else {
+          await recordImportUploadChunk({
+            sessionId: uploadSession.id,
+            chunkNumber,
+            byteOffset,
+            byteSize: bytes.byteLength,
+            chunkHash,
+          });
+        }
         processedBytes += bytes.byteLength;
+        setProcessed(dataRows);
         setStage("normalizing");
         setProgress(Math.min(82, 10 + Math.round((processedBytes / Math.max(file.size, 1)) * 72)));
       }
@@ -251,6 +346,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
+      finalizingCsv = true;
       await parser.push(decoder.decode(), consumeRow, true);
       await flushBatch();
       if (!headers) throw new Error("تعذر اكتشاف صف عناوين صالح في CSV.");
@@ -263,6 +359,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           no_raw_file_retained: true,
           source_file_hash: fileHash,
           profile_id: selectedProfile,
+          profile_version: profile?.version ?? null,
+          processing_config_fingerprint: processingConfigFingerprint,
           period_key: selectedPeriod,
           parser: "streaming-csv",
           processing_chunk_rows: PROCESSING_CHUNK_ROWS,
@@ -291,10 +389,17 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       setErrorMessage(message);
       if (job) {
         try {
-          await updateImportJob(job.id, {
-            status: "failed",
-            error_summary: { code: "IMPORT_PROCESSING_FAILED", message, resumable: true, no_raw_file_retained: true },
-          });
+          const failureSummary: Record<string, unknown> = {
+            ...((job.error_summary ?? {}) as Record<string, unknown>),
+            code: "IMPORT_PROCESSING_FAILED",
+            message,
+            resumable: true,
+            no_raw_file_retained: true,
+          };
+          if (checkpointFingerprintPersisted && processingConfigFingerprint) {
+            failureSummary.processing_config_fingerprint = processingConfigFingerprint;
+          }
+          await updateImportJob(job.id, { status: "failed", error_summary: failureSummary });
         } catch { /* preserve the original error */ }
       }
       await refetch();

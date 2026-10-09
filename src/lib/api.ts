@@ -492,9 +492,23 @@ export async function createImportUploadSession(jobId: string) {
   const { data, error } = await supabase.rpc('create_import_upload_session', { p_job_id: jobId });
   if (error) throw error;
   return data as {
-    id: string; import_job_id: string; chunk_size_bytes: number; total_chunks: number;
-    verified_chunks: number; status: string; file_hash: string; file_size: number;
+    id: string; import_job_id: string; organization_id: string;
+    profile_id: string | null; profile_version: number | null; period_key: string | null;
+    chunk_size_bytes: number; total_chunks: number; verified_chunks: number;
+    status: string; file_hash: string; file_size: number;
   };
+}
+
+export async function fetchImportUploadChunks(sessionId: string): Promise<Array<{
+  chunk_number: number; byte_offset: number; byte_size: number; chunk_hash: string;
+}>> {
+  const { data, error } = await supabase
+    .from('import_upload_chunks')
+    .select('chunk_number,byte_offset,byte_size,chunk_hash')
+    .eq('session_id', sessionId)
+    .order('chunk_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Array<{ chunk_number: number; byte_offset: number; byte_size: number; chunk_hash: string }>;
 }
 
 export async function cancelImportUploadSession(sessionId: string): Promise<void> {
