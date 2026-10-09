@@ -2,7 +2,7 @@
 
 Current implementation branch: `fix/commerce-completion-20261009`  
 Pull request: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/1  
-Status: implementation and CI checks are in the draft PR; not merged to `main`. Database migrations have not been applied.
+Status: implementation is on `fix/commerce-completion-20261009`; the draft PR is not merged to `main`. Latest CI runs for the newest code are being rechecked. Database migrations have not been applied.
 
 ## Implemented in the draft PR
 
@@ -22,19 +22,20 @@ Status: implementation and CI checks are in the draft PR; not merged to `main`. 
 - [x] Order confirmation now requires an approved customer, locks/reserves sufficient stock atomically, tracks stock movements, and consumes/releases reservations on delivery/cancellation.
 - [x] Order status transitions are constrained to legal next steps and status history is recorded by the database trigger in the same transaction.
 - [x] CI workflow runs tests, correctness lint (excluding the repository-wide Prettier formatting rule), and production build.
+- [x] Admin command palette: Arabic searchable navigation to admin sections, opened by the header button or Ctrl/⌘+K; screen-reader dialog text is included.
+- [x] Customer quick-order matrix: enter quantities for multiple filtered catalogue items in one table and add them to the cart together. Shared validation rejects empty, fractional, invalid, and over-stock selections; checkout remains server-authoritative.
 
 ## Still open — do not mark complete until verified
 
-- [ ] Apply migrations `20261009010000`, `20261009020000`, `20261009030000`, `20261009040000`, `20261009050000`, and `20261009060000` to the exact Supabase project configured by this repository's `.env`. The current Supabase connection does not include that project, so no database writes or live SQL validation have been attempted.
+- [ ] Apply migrations `20261009010000`, `20261009020000`, `20261009030000`, `20261009040000`, `20261009050000`, and `20261009060000` to the exact Supabase project configured by this repository's `.env`. The repository points to project ref `ffxxjaolfntzbapmfbuv`, which is not available through the current Supabase connection. The accessible project named `aghbari-commerce` uses a materially different schema; do not apply these migrations to it. No database writes or live SQL validation have been attempted.
 - [ ] Run authenticated browser end-to-end checks for customer and staff flows against that exact database, including invoice issue, statement totals, payment overpayment rejection, RFQ/quote expiry, reorder restore, camera fallback, and offline recovery.
 - [ ] Execute database-level tests on the target Supabase project for duplicate checkout replay, tier break pricing, cross-tenant product rejection, credit-limit rejection, concurrent stock reservation, legal state transitions, invoice creation, cancellation-release, and delivery stock consumption. The migration code is committed to the draft PR but is not runtime-proven.
 - [ ] Customer address book and company-user management.
-- [ ] Matrix order entry and command palette.
 - [ ] Apply and verify active contract, `pricing_rules`, and promotion semantics at checkout. Current guaranteed pricing behavior covers per-tier `product_prices` rows and their quantity minimums; the legacy seeded rule/promotion records are not yet safely interpreted as a complete stacking/priority policy.
 - [ ] Native/server-generated PDF documents (current invoice/statement output uses the browser print dialog).
 - [ ] Model-backed Lovable AI integration and generated business insights. The current assistant is deliberately deterministic and database-backed.
 - [ ] Full offline field-sales queue and conflict-safe synchronization after reconnect. Current support is cached catalogue + cart draft only; it does not place orders offline.
-- [ ] Merge the PR to `main` only after the matching database migrations can be applied and database/browser checks pass. Until then, the existing Lovable project remains on `main`; these branch changes are not yet visible in the normal Lovable preview or live URL.
+- [ ] Merge the PR to `main` only after the matching database migrations can be applied and database/browser checks pass. The Lovable project currently syncs `main`; changes on this fix branch are not visible in the existing Lovable preview/live URL until the active Lovable branch is switched to this branch or the PR is merged. Do not switch/merge to mask the unresolved backend mismatch.
 
 ## Evidence rules
 
