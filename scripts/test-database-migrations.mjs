@@ -116,7 +116,7 @@ async function main() {
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
 
-  const previewInput10 = JSON.stringify([{ product_id: productId, quantity: 10 }]);
+  const previewInput10 = db.json([{ product_id: productId, quantity: 10 }]);
   const payloadCheck = await db.unsafe(
     "select jsonb_typeof($1::jsonb) as json_type, $1::jsonb as payload",
     [previewInput10],
@@ -131,19 +131,19 @@ async function main() {
   process.stdout.write("PASS preview quantity 10\\n");
   const preview20 = await db.unsafe(
     "select public.preview_order_pricing($1::jsonb) as result",
-    [JSON.stringify([{ product_id: productId, quantity: 20 }])],
+    [db.json([{ product_id: productId, quantity: 20 }])],
   );
   assert.equal(Number(preview20[0].result.total_amount), 700000, "quantity 20 should use the more favorable wholesale price break of 35,000");
 
   await expectFailure(
     "cross-tenant price preview",
-    () => db.unsafe("select public.preview_order_pricing($1::jsonb)", [JSON.stringify([{ product_id: otherProductId, quantity: 1 }])]),
+    () => db.unsafe("select public.preview_order_pricing($1::jsonb)", [db.json([{ product_id: otherProductId, quantity: 1 }])]),
     /unavailable|organization/i,
   );
 
   const itemPayload = [{ product_id: productId, quantity: 10 }];
   const orderArgs = [
-    JSON.stringify(itemPayload), "CI smoke order", "CI Company One", "CI Customer One",
+    db.json(itemPayload), "CI smoke order", "CI Company One", "CI Customer One",
     "7771111111", "credit", "ci-idempotency-key-000001",
   ];
   const firstOrder = await db.unsafe(
@@ -164,7 +164,7 @@ async function main() {
     "idempotency payload mismatch",
     () => db.unsafe(
       "select public.place_order($1::jsonb,$2,$3,$4,$5,$6,$7)",
-      [JSON.stringify([{ product_id: productId, quantity: 11 }]), ...orderArgs.slice(1)],
+      [db.json([{ product_id: productId, quantity: 11 }]), ...orderArgs.slice(1)],
     ),
     /different|مختلفة/i,
   );
@@ -176,7 +176,7 @@ async function main() {
 
   const firstQuote = await db.unsafe(
     "select public.request_sales_quote($1::jsonb,$2) as id",
-    [JSON.stringify([{ product_id: productId, quantity: 2 }]), "CI quotation"],
+    [db.json([{ product_id: productId, quantity: 2 }]), "CI quotation"],
   );
   const firstQuoteId = firstQuote[0].id;
   const firstQuoteItems = await db.unsafe(
@@ -190,7 +190,7 @@ async function main() {
   await db.unsafe("set role authenticated");
   const secondIdentityQuote = await db.unsafe(
     "select public.request_sales_quote($1::jsonb,$2) as id",
-    [JSON.stringify([{ product_id: productId, quantity: 1 }]), "CI second customer RFQ"],
+    [db.json([{ product_id: productId, quantity: 1 }]), "CI second customer RFQ"],
   );
   const secondQuoteId = secondIdentityQuote[0].id;
   const secondVisible = await db.unsafe("select id from public.sales_quotes");
@@ -202,7 +202,7 @@ async function main() {
   await db.unsafe("set role authenticated");
   await db.unsafe(
     "select public.respond_to_sales_quote($1::uuid,$2::jsonb,$3,$4::timestamptz)",
-    [firstQuoteId, JSON.stringify([{ item_id: firstQuoteItems[0].id, unit_price: 12345 }]), "CI quote priced", new Date(Date.now() + 86400000).toISOString()],
+    [firstQuoteId, db.json([{ item_id: firstQuoteItems[0].id, unit_price: 12345 }]), "CI quote priced", new Date(Date.now() + 86400000).toISOString()],
   );
 
   await db.unsafe("reset role");
@@ -213,7 +213,7 @@ async function main() {
 
   const reorderId = await db.unsafe(
     "select public.save_reorder_template($1,$2::jsonb,null) as id",
-    ["CI regular order", JSON.stringify([{ product_id: productId, quantity: 3 }])],
+    ["CI regular order", db.json([{ product_id: productId, quantity: 3 }])],
   );
   const reorderItems = await db.unsafe(
     "select count(*)::int as count from public.reorder_template_items where template_id=$1",
