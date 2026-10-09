@@ -1,6 +1,68 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+
+function makeStoredZip(files: Record<string, string>): Blob {
+  const encoder = new TextEncoder();
+  const localRecords: Uint8Array[] = [];
+  const centralRecords: Uint8Array[] = [];
+  let localOffset = 0;
+  let centralSize = 0;
+  const entries = Object.entries(files);
+  for (const [name, text] of entries) {
+    const nameBytes = encoder.encode(name);
+    const dataBytes = encoder.encode(text);
+    const local = new Uint8Array(30 + nameBytes.length + dataBytes.length);
+    const localView = new DataView(local.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint32(14, 0, true);
+    localView.setUint32(18, dataBytes.length, true);
+    localView.setUint32(22, dataBytes.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    local.set(dataBytes, 30 + nameBytes.length);
+    localRecords.push(local);
+
+    const central = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(central.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint32(16, 0, true);
+    centralView.setUint32(20, dataBytes.length, true);
+    centralView.setUint32(24, dataBytes.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint32(42, localOffset, true);
+    central.set(nameBytes, 46);
+    centralRecords.push(central);
+    localOffset += local.length;
+    centralSize += central.length;
+  }
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, localOffset, true);
+  endView.setUint16(20, 0, true);
+
+  const output = new Uint8Array(localOffset + centralSize + end.length);
+  let position = 0;
+  for (const part of localRecords) { output.set(part, position); position += part.length; }
+  for (const part of centralRecords) { output.set(part, position); position += part.length; }
+  output.set(end, position);
+  return new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
 
 describe('commerce completion utilities', () => {
   it('calculates totals only from persisted invoice and payment records', () => {
@@ -85,6 +147,29 @@ describe('commerce completion utilities', () => {
     expect(shouldPersistParsedImportRow(1, verified)).toBe(false);
     expect(shouldPersistParsedImportRow(2, verified)).toBe(true);
     expect(shouldPersistParsedImportRow(1, verified, true)).toBe(true);
+  });
+
+  it('parses XLSX first visible sheet, shared strings, inline text, and zero-masked item identifiers', async () => {
+    const file = makeStoredZip({
+      'xl/workbook.xml': '<workbook xmlns:r="urn:relationships"><sheets><sheet name="بيانات" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      'xl/sharedStrings.xml': '<sst><si><t>item_code</t></si><si><t>product_name</t></si><si><t>Rice</t></si><si><t>Sugar</t></si></sst>',
+      'xl/styles.xml': '<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="000000"/></numFmts><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>',
+      'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" s="1"><v>125</v></c><c r="B2" t="s"><v>2</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>000126</t></is></c><c r="B3" t="s"><v>3</v></c></row></sheetData></worksheet>',
+    });
+    const rows: string[][] = [];
+    const result = await parseXlsxFirstWorksheet(file, (row) => { rows.push(row); });
+    expect(result).toEqual({ rowCount: 3, worksheetName: 'بيانات' });
+    expect(rows).toEqual([
+      ['item_code', 'product_name'],
+      ['000125', 'Rice'],
+      ['000126', 'Sugar'],
+    ]);
+  });
+
+  it('rejects malformed XLSX archives rather than treating them as empty tables', async () => {
+    await expect(parseXlsxFirstWorksheet(new Blob(['not a zip file']), () => undefined))
+      .rejects.toThrow('ترويسة ZIP');
   });
 
   it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {
