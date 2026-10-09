@@ -212,3 +212,5 @@ Definition of Done:
 - 2026-10-09: role-management UI is added under Settings for admins, backed by admin-only tenant-scoped list/set RPCs. Generic staff and accountants cannot read profile/role directories or mutate profile/auth binding and role rows directly; role changes are audited, self-role edits are blocked, and customer role cannot be combined with staff roles. Exact-SHA CI/browser acceptance is pending; no production database was touched.
 
 - 2026-10-09: pricing governance follow-up adds a server-enforced approval state, separate submitter/approver identities, audited rationale, a shared-resolver customer/quantity price preview, and manager-only rule deletion. Exact-head CI pending; no production database changed.
+
+- 2026-10-09: moved the pricing approval/preview migration to unique version `20261009171000` after the CI migration-version guard detected a collision with role-management migration `20261009170000`. No migration was applied to production.
