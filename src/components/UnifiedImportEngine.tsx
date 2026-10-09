@@ -108,7 +108,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
     setProcessed(0);
     setQualityPreview(null);
     let job: ImportJob | null = existingJob ?? null;
-    let uploadSession: { id: string; chunk_size_bytes: number; total_chunks: number; verified_chunks: number; status: string; file_hash: string; file_size: number } | null = null;
+    let uploadSession: { id: string; import_job_id: string; organization_id: string; profile_id: string | null; profile_version: number | null; period_key: string | null; chunk_size_bytes: number; total_chunks: number; verified_chunks: number; status: string; file_hash: string; file_size: number } | null = null;
     let processingConfigFingerprint: string | null = null;
     let checkpointFingerprintPersisted = false;
 
@@ -204,6 +204,11 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       uploadSession = await createImportUploadSession(job.id);
       if (uploadSession.file_hash !== fileHash || Number(uploadSession.file_size) !== file.size) {
         throw new Error("جلسة الاستيراد لا تطابق الملف المختار. لا يمكن متابعة المعالجة بأمان.");
+      }
+      if ((uploadSession.profile_id ?? null) !== (selectedProfile ?? null) ||
+          (uploadSession.profile_version ?? null) !== (profile?.version ?? null) ||
+          (uploadSession.period_key ?? null) !== (selectedPeriod ?? null)) {
+        throw new Error("هوية الملف التعريفي أو إصداره أو الفترة لا تطابق جلسة الرفع. أوقفنا الاستئناف حتى لا تختلط نتائج دفعتين.");
       }
       if (uploadSession.chunk_size_bytes !== UPLOAD_CHUNK_BYTES ||
           uploadSession.total_chunks !== Math.ceil(file.size / UPLOAD_CHUNK_BYTES)) {
