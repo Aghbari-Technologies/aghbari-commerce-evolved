@@ -123,23 +123,34 @@ async function main() {
   );
   process.stdout.write("JSONB PARAMETER CHECK " + JSON.stringify(payloadCheck[0]) + "\\n");
   const preview10 = await db.unsafe(
-    "select public.preview_order_pricing($1::jsonb) as result",
+    "select public.validate_checkout_cart($1::jsonb) as result",
     [previewInput10],
   );
-  assert.equal(Number(preview10[0].result.total_amount), 370000, "quantity 10 should use the wholesale price break of 37,000");
+  assert.equal(Number(preview10[0].result.items[0].quantity), 10);
+  assert.equal(preview10[0].result.pricing_verified, true);
+  assert.ok(!("total_amount" in preview10[0].result), "customer cart validation must not return a total");
+  assert.ok(!("unit_price" in preview10[0].result.items[0]), "customer cart validation must not return unit prices");
 
-  process.stdout.write("PASS preview quantity 10\\n");
   const preview20 = await db.unsafe(
-    "select public.preview_order_pricing($1::jsonb) as result",
+    "select public.validate_checkout_cart($1::jsonb) as result",
     [db.json([{ product_id: productId, quantity: 20 }])],
   );
-  assert.equal(Number(preview20[0].result.total_amount), 700000, "quantity 20 should use the more favorable wholesale price break of 35,000");
+  assert.equal(Number(preview20[0].result.items[0].quantity), 20);
+  assert.ok(!("total_amount" in preview20[0].result));
 
   await expectFailure(
-    "cross-tenant price preview",
-    () => db.unsafe("select public.preview_order_pricing($1::jsonb)", [db.json([{ product_id: otherProductId, quantity: 1 }])]),
+    "cross-tenant cart validation",
+    () => db.unsafe("select public.validate_checkout_cart($1::jsonb)", [db.json([{ product_id: otherProductId, quantity: 1 }])]),
     /unavailable|organization/i,
   );
+
+  // Test monetary tier calculation only inside the trusted test role; the customer RPC is non-financial.
+  await db.unsafe("reset role");
+  const price10 = await db.unsafe("select public.customer_product_unit_price($1::uuid,$2::uuid,'wholesale',10) as price", [productId, organizationId]);
+  const price20 = await db.unsafe("select public.customer_product_unit_price($1::uuid,$2::uuid,'wholesale',20) as price", [productId, organizationId]);
+  assert.equal(Number(price10[0].price), 37000, "quantity 10 should use the wholesale price break of 37,000");
+  assert.equal(Number(price20[0].price), 35000, "quantity 20 should use the more favorable wholesale price break of 35,000");
+  await db.unsafe("set role authenticated");
 
   const itemPayload = [{ product_id: productId, quantity: 10 }];
   const orderArgs = [
@@ -147,15 +158,18 @@ async function main() {
     "7771111111", "credit", "ci-idempotency-key-000001",
   ];
   const firstOrder = await db.unsafe(
-    "select public.place_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
+    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
     orderArgs,
   );
   const order = firstOrder[0].result;
-  assert.equal(Number(order.total_amount), 370000, "server order total must match tier pricing");
+  assert.equal(order.status, "pending");
+  assert.ok(!("total_amount" in order), "customer order response must not disclose monetary values");
   assert.equal(order.idempotent_replay, false);
+  const persistedOrderAmount = await db.unsafe("select total_amount from public.orders where id=$1", [order.id]);
+  assert.equal(Number(persistedOrderAmount[0].total_amount), 370000, "server order total must match tier pricing");
 
   const replay = await db.unsafe(
-    "select public.place_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
+    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
     orderArgs,
   );
   assert.equal(replay[0].result.id, order.id, "same idempotency key and payload must return the original order");
@@ -163,7 +177,7 @@ async function main() {
   await expectFailure(
     "idempotency payload mismatch",
     () => db.unsafe(
-      "select public.place_order($1::jsonb,$2,$3,$4,$5,$6,$7)",
+      "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7)",
       [db.json([{ product_id: productId, quantity: 11 }]), ...orderArgs.slice(1)],
     ),
     /different|مختلفة/i,
@@ -278,7 +292,7 @@ async function main() {
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
   const reviewOrderResult = await db.unsafe(
-    "select public.place_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
+    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
     [db.json([{ product_id: productId, quantity: 2 }]), "CI review workflow", "CI Company One", "CI Customer One",
       "7771111111", "credit", "ci-review-order-000001"],
   );
