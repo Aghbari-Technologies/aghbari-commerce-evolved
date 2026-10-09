@@ -141,26 +141,75 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
 }
 
 function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: jobs } = useFetch(fetchImportJobs);
-  const latest = jobs?.find((job) => job.status === 'completed');
-  const { data: rows, loading } = useFetch(() => latest ? fetchImportRows(latest.id) : Promise.resolve([] as ImportJobRow[]), [latest?.id]);
-  const { data: products } = useFetch(fetchProducts);
-  const result = useMemo(() => {
-    const live = new Map((products ?? []).map((product) => [product.item_code.trim(), product]));
-    let matched = 0; let changed = 0; let newRows = 0;
-    const differences: Array<{ code: string; incoming: number; current: number; product?: ProductWithInventory }> = [];
-    (rows ?? []).forEach((row) => {
-      const code = String(row.data?.item_code ?? '').trim();
-      const incoming = Number(row.data?.quantity ?? 0);
-      const product = live.get(code);
-      if (!product) { newRows += 1; return; }
-      const current = Number(product.inventory?.quantity_on_hand ?? 0);
-      if (current === incoming) matched += 1;
-      else { changed += 1; differences.push({ code, incoming, current, product }); }
-    });
-    return { matched, changed, newRows, differences };
-  }, [products, rows]);
-  return <div className="reconcile-view"><section className="panel reconcile-hero"><div><span>مصدران منفصلان</span><h2>مطابقة رصيد أونكس مع المخزون المباشر</h2><p>المقارنة قراءة فقط حتى تراجع الفروقات قبل اعتماد أي تعديل.</p></div><button className="reconcile-button" onClick={() => onNotice(latest ? 'تمت إعادة المطابقة من آخر Snapshot' : 'لا توجد دفعة مكتملة للمطابقة')}><RefreshCw size={18} /> مطابقة الآن</button></section><div className="reconcile-meta"><span><Database size={15} /> المصدر: {latest?.file_name ?? 'لم يتم اختيار دفعة'}</span><span><History size={15} /> آخر مزامنة: {latest ? new Date(latest.created_at).toLocaleString('ar') : '—'}</span><span><ShieldCheck size={15} /> الحالة: قراءة آمنة</span></div>{loading ? <Loading /> : <><div className="reconcile-stats"><Metric icon={Check} label="متطابق" value={formatNumber(result.matched)} /><Metric icon={RefreshCw} label="معدل" value={formatNumber(result.changed)} /><Metric icon={FileText} label="جديد" value={formatNumber(result.newRows)} /><Metric icon={AlertTriangle} label="أخطاء" value="0" /></div><section className="panel table-panel"><div className="panel-head"><div><h2>الفروقات التي تحتاج مراجعة</h2><p>لا يتم حذف أو تصفير أي رصيد تلقائياً</p></div></div>{result.differences.length ? <TableWrap><table><thead><tr><th>رمز الصنف</th><th>الصنف</th><th>الرصيد المباشر</th><th>رصيد التقرير</th><th>الفرق</th></tr></thead><tbody>{result.differences.map((difference) => <tr key={difference.code}><td><code>{difference.code}</code></td><td>{difference.product?.name ?? '—'}</td><td>{formatNumber(difference.current)}</td><td>{formatNumber(difference.incoming)}</td><td className="amount-danger">{formatNumber(difference.incoming - difference.current)}</td></tr>)}</tbody></table></TableWrap> : <Empty text="لا توجد فروقات في الدفعة الحالية" />}</section></>}</div>;
+  const { data: snapshots, loading: snapshotsLoading } = useFetch(fetchOnyxSnapshots);
+  const { data: runs, loading: runsLoading, error: runsError, refetch: refetchRuns } = useFetch(fetchInventoryReconciliationRuns);
+  const [snapshotId, setSnapshotId] = useState('');
+  const [runId, setRunId] = useState('');
+  const [running, setRunning] = useState(false);
+  const selectedSnapshot = snapshots?.find((snapshot) => snapshot.id === (snapshotId || snapshots?.[0]?.id));
+  const selectedRunId = runId || runs?.[0]?.id || '';
+  const selectedRun = runs?.find((run) => run.id === selectedRunId);
+  const { data: items, loading: itemsLoading, error: itemsError, refetch: refetchItems } = useFetch(
+    () => selectedRunId ? fetchInventoryReconciliationItems(selectedRunId) : Promise.resolve([]),
+    [selectedRunId],
+  );
+
+  async function runNow() {
+    if (!selectedSnapshot || running) return;
+    setRunning(true);
+    try {
+      const result = await runInventoryReconciliation(selectedSnapshot.id);
+      setRunId(result.run_id);
+      await refetchRuns();
+      onNotice('تم حفظ المطابقة: ' + result.matched_count + ' متطابق، ' + result.changed_count + ' مختلف، ' + result.new_count + ' جديد، ' + result.invalid_count + ' غير صالح.');
+    } catch (cause) {
+      onNotice(cause instanceof Error ? cause.message : 'تعذر تنفيذ المطابقة');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const stats = useMemo(() => {
+    const rows = items ?? [];
+    return {
+      matched: rows.filter((item) => item.outcome === 'matched').length,
+      changed: rows.filter((item) => item.outcome === 'changed').length,
+      newRows: rows.filter((item) => item.outcome === 'new').length,
+      invalid: rows.filter((item) => item.outcome === 'invalid').length,
+    };
+  }, [items]);
+
+  return <div className="reconcile-view">
+    <section className="panel reconcile-hero"><div><span>مقارنة معزولة وآمنة</span><h2>مطابقة Onyx مع المخزون المباشر</h2><p>تُحفظ نتيجة المطابقة وسجل التدقيق دون تعديل المخزون التشغيلي تلقائيًا.</p></div><button className="reconcile-button" disabled={!selectedSnapshot || running || snapshotsLoading} onClick={() => void runNow()}><RefreshCw size={18} />{running ? 'جارٍ التنفيذ...' : 'مطابقة الآن'}</button></section>
+    <section className="panel" style={{ marginBottom: 14 }}>
+      <label className="form-field"><span>Snapshot المستورد</span>
+        <select value={selectedSnapshot?.id ?? ''} onChange={(event) => setSnapshotId(event.target.value)} disabled={snapshotsLoading || !snapshots?.length}>
+          {(snapshots ?? []).map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.source_file_name ?? 'ملف مستورد'} — v{snapshot.snapshot_version} — DQS {snapshot.data_quality_score}/100</option>)}
+        </select>
+      </label>
+      {snapshotsLoading ? <Loading /> : !snapshots?.length ? <Empty text="لا توجد لقطات معتمدة. نفّذ استيرادًا بجودة مقبولة أولًا." /> : <div className="reconcile-meta"><span><Database size={15} /> المصدر: {selectedSnapshot?.source_file_name ?? '—'}</span><span><History size={15} /> آخر Snapshot: {selectedSnapshot ? new Date(selectedSnapshot.created_at).toLocaleString('ar') : '—'}</span><span><ShieldCheck size={15} /> قراءة فقط؛ بلا تحديث مباشر للأرصدة</span></div>}
+    </section>
+    <section className="panel table-panel">
+      <div className="panel-head"><div><h2>سجل حركات المطابقة</h2><p>كل تشغيل محفوظ في قاعدة البيانات ويمكن مراجعته لاحقًا.</p></div><div style={{ display: 'flex', gap: 8 }}>
+        <select value={selectedRunId} onChange={(event) => setRunId(event.target.value)} disabled={runsLoading || !runs?.length}>
+          {(runs ?? []).map((run) => <option key={run.id} value={run.id}>{new Date(run.created_at).toLocaleString('ar')} — {run.status} — {run.snapshot_id.slice(0, 8)}</option>)}
+        </select>
+        <Button variant="outline" onClick={() => { refetchRuns(); refetchItems(); }}><RefreshCw size={15} /> تحديث</Button>
+      </div></div>
+      {runsError && <ErrorBox message={runsError} />}
+      {runsLoading || itemsLoading ? <Loading /> : !selectedRun ? <Empty text="لم تُنفذ مطابقة بعد." /> : itemsError ? <ErrorBox message={itemsError} /> :
+        <>
+          <div className="reconcile-meta"><span>وقت التنفيذ: {selectedRun.completed_at ? new Date(selectedRun.completed_at).toLocaleString('ar') : '—'}</span><span>الحالة: {selectedRun.status}</span><span>صفوف المصدر: {formatNumber(selectedRun.source_row_count)}</span></div>
+          <div className="reconcile-stats">
+            <Metric icon={Check} label="متطابق" value={formatNumber(stats.matched)} />
+            <Metric icon={RefreshCw} label="مختلف" value={formatNumber(stats.changed)} />
+            <Metric icon={Package} label="جديد" value={formatNumber(stats.newRows)} />
+            <Metric icon={AlertTriangle} label="غير صالح" value={formatNumber(stats.invalid)} />
+          </div>
+          <div style={{ marginTop: 14 }}>{items?.length ? <TableWrap><table><thead><tr><th>رمز الصنف</th><th>المعرف الحي</th><th>رصيد التقرير</th><th>الرصيد الحي</th><th>الفرق</th><th>النتيجة</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><code>{item.item_code}</code></td><td><code>{item.product_id ?? '—'}</code></td><td>{item.imported_quantity == null ? '—' : formatNumber(Number(item.imported_quantity))}</td><td>{item.live_quantity == null ? '—' : formatNumber(Number(item.live_quantity))}</td><td>{item.difference == null ? '—' : formatNumber(Number(item.difference))}</td><td><span className={'badge ' + (item.outcome === 'matched' ? 'success' : item.outcome === 'invalid' ? 'danger' : 'warning')}>{item.outcome === 'matched' ? 'متطابق' : item.outcome === 'changed' ? 'مختلف' : item.outcome === 'new' ? 'غير موجود حيًا' : 'غير صالح'}</span></td></tr>)}</tbody></table></TableWrap> : <Empty text="لا توجد تفاصيل لهذا التشغيل." />}</div>
+        </>}
+    </section>
+  </div>;
 }
 
 function SynonymDictionary() {
