@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, BarChart3, Check, Database, FileText,
   Gauge, History, Package, RefreshCw, ShieldCheck, Upload, Zap,
@@ -32,26 +32,27 @@ function qualityLabel(score: number): string {
 
 export function OperationsCenter({ onNotice }: { onNotice: (message: string) => void }) {
   const [tab, setTab] = useState<OperationTab>('imports');
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const tabs: Array<{ id: OperationTab; label: string; icon: typeof Upload }> = [
     { id: 'imports', label: 'محرك الاستيراد الذكي', icon: Upload },
     { id: 'onyx', label: 'مزامنة أونكس برو', icon: Activity },
     { id: 'reconcile', label: 'مطابقة المخزون', icon: Gauge },
     { id: 'dictionary', label: 'قاموس المرادفات', icon: FileText },
   ];
-  return <AdminPage eyebrow="البيانات والذكاء" title="مركز العمليات الذكي" description="مسار موحد وآمن للاستيراد والتحليل والمطابقة دون تخزين الملفات الخام" icon={Zap} note="المصدر التشغيلي المباشر هو مصدر الحقيقة الوحيد" toolbar={<Button variant="secondary" onClick={() => onNotice('تم تحديث مركز العمليات')}><RefreshCw size={16} /> تحديث</Button>}>
+  return <AdminPage eyebrow="البيانات والذكاء" title="مركز العمليات الذكي" description="مسار موحد وآمن للاستيراد والتحليل والمطابقة دون تخزين الملفات الخام" icon={Zap} note="المصدر التشغيلي المباشر هو مصدر الحقيقة الوحيد" toolbar={<Button variant="secondary" onClick={() => setRefreshRevision((revision) => revision + 1)}><RefreshCw size={16} /> تحديث البيانات</Button>}>
     <div className="operation-tabs">{tabs.map(({ id, label, icon: Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={16} />{label}</button>)}</div>
-    {tab === 'imports' && <ImportEngine onNotice={onNotice} />}
-    {tab === 'onyx' && <OnyxDashboard onNotice={onNotice} />}
-    {tab === 'reconcile' && <InventoryReconciliation onNotice={onNotice} />}
-    {tab === 'dictionary' && <SynonymDictionary />}
+    {tab === 'imports' && <ImportEngine onNotice={onNotice} refreshRevision={refreshRevision} />}
+    {tab === 'onyx' && <OnyxDashboard onNotice={onNotice} refreshRevision={refreshRevision} />}
+    {tab === 'reconcile' && <InventoryReconciliation onNotice={onNotice} refreshRevision={refreshRevision} />}
+    {tab === 'dictionary' && <SynonymDictionary refreshRevision={refreshRevision} />}
   </AdminPage>;
 }
 
-function ImportEngine({ onNotice }: { onNotice: (message: string) => void }) {
-  return <UnifiedImportEngine onNotice={onNotice} />;
+function ImportEngine({ onNotice, refreshRevision }: { onNotice: (message: string) => void; refreshRevision: number }) {
+  return <UnifiedImportEngine onNotice={onNotice} refreshRevision={refreshRevision} />;
 }
 
-function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
+function OnyxDashboard({ onNotice, refreshRevision }: { onNotice: (message: string) => void; refreshRevision: number }) {
   const { data: snapshots, loading, error, refetch } = useFetch(fetchOnyxSnapshots);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
   const selectedId = selectedSnapshotId || snapshots?.[0]?.id || '';
@@ -64,6 +65,12 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
     () => selectedId ? fetchOnyxSnapshotAnalytics(selectedId) : Promise.resolve(null),
     [selectedId],
   );
+  useEffect(() => {
+    if (refreshRevision === 0) return;
+    void refetch();
+    void refetchRows();
+    void refetchSummary();
+  }, [refreshRevision, refetch, refetchRows, refetchSummary]);
   const [reconciling, setReconciling] = useState(false);
   const metrics = summary?.metrics;
 
@@ -114,8 +121,8 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
   </div>;
 }
 
-function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: snapshots, loading: snapshotsLoading } = useFetch(fetchOnyxSnapshots);
+function InventoryReconciliation({ onNotice, refreshRevision }: { onNotice: (message: string) => void; refreshRevision: number }) {
+  const { data: snapshots, loading: snapshotsLoading, refetch: refetchSnapshots } = useFetch(fetchOnyxSnapshots);
   const { data: runs, loading: runsLoading, error: runsError, refetch: refetchRuns } = useFetch(fetchInventoryReconciliationRuns);
   const [snapshotId, setSnapshotId] = useState('');
   const [runId, setRunId] = useState('');
@@ -127,6 +134,12 @@ function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => 
     () => selectedRunId ? fetchInventoryReconciliationItems(selectedRunId) : Promise.resolve([]),
     [selectedRunId],
   );
+  useEffect(() => {
+    if (refreshRevision === 0) return;
+    void refetchSnapshots();
+    void refetchRuns();
+    void refetchItems();
+  }, [refreshRevision, refetchSnapshots, refetchRuns, refetchItems]);
 
   async function runNow() {
     if (!selectedSnapshot || running) return;
@@ -186,9 +199,14 @@ function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => 
   </div>;
 }
 
-function SynonymDictionary() {
+function SynonymDictionary({ refreshRevision }: { refreshRevision: number }) {
   const { data: stored, loading, error, refetch } = useFetch(fetchCentralSynonyms);
-  const { data: profiles } = useFetch(fetchImportProfiles);
+  const { data: profiles, refetch: refetchProfiles } = useFetch(fetchImportProfiles);
+  useEffect(() => {
+    if (refreshRevision === 0) return;
+    void refetch();
+    void refetchProfiles();
+  }, [refreshRevision, refetch, refetchProfiles]);
   const [sourceHeader, setSourceHeader] = useState('');
   const [canonicalField, setCanonicalField] = useState('');
   const [selectedProfile, setSelectedProfile] = useState('');

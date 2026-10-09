@@ -214,3 +214,5 @@ Definition of Done:
 - 2026-10-09: pricing governance follow-up adds a server-enforced approval state, separate submitter/approver identities, audited rationale, a shared-resolver customer/quantity price preview, and manager-only rule deletion. Exact-head CI pending; no production database changed.
 
 - 2026-10-09: moved the pricing approval/preview migration to unique version `20261009171000` after the CI migration-version guard detected a collision with role-management migration `20261009170000`. No migration was applied to production.
+
+- 2026-10-09: import operations refresh now re-fetches active module data. Hash preflight pause/cancel now works between 4MB reads; progress displays measured byte/row rates with conservative ETA/remaining-row states and hides cancellation during server finalization. Added acceptance tests for hash pause/cancel. Production untouched; exact-head CI pending.

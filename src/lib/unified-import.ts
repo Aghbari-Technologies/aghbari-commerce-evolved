@@ -174,13 +174,29 @@ export class IncrementalSha256 {
   }
 }
 
-export async function hashFileSha256(file: Blob, onProgress?: (processedBytes: number) => void): Promise<string> {
+export type FileHashControl = {
+  isPaused?: () => boolean;
+  isCancelled?: () => boolean;
+};
+
+/** SHA-256 reads the source in bounded chunks and cooperatively honours pause/cancel. */
+export async function hashFileSha256(
+  file: Blob,
+  onProgress?: (processedBytes: number) => void,
+  control: FileHashControl = {},
+): Promise<string> {
   const digest = new IncrementalSha256();
   for (let offset = 0; offset < file.size; offset += UPLOAD_CHUNK_BYTES) {
+    while (control.isPaused?.() && !control.isCancelled?.()) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+    if (control.isCancelled?.()) throw new Error('تم إلغاء حساب بصمة الملف.');
     const bytes = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+    if (control.isCancelled?.()) throw new Error('تم إلغاء حساب بصمة الملف.');
     digest.update(bytes);
     onProgress?.(Math.min(file.size, offset + bytes.byteLength));
   }
+  if (control.isCancelled?.()) throw new Error('تم إلغاء حساب بصمة الملف.');
   return digest.digestHex();
 }
 

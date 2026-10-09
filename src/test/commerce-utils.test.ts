@@ -1,4 +1,4 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, hashFileSha256, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
@@ -123,6 +123,19 @@ describe('commerce completion utilities', () => {
     digest.update(new TextEncoder().encode('b'));
     digest.update(new TextEncoder().encode('c'));
     expect(digest.digestHex()).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('cooperatively cancels a file hash before reading source bytes', async () => {
+    await expect(hashFileSha256(new Blob(['abc']), undefined, { isCancelled: () => true }))
+      .rejects.toThrow('تم إلغاء حساب بصمة الملف');
+  });
+
+  it('pauses then resumes hashing without changing the digest', async () => {
+    let paused = true;
+    const expected = new IncrementalSha256().update(new TextEncoder().encode('abc')).digestHex();
+    const result = hashFileSha256(new Blob(['abc']), undefined, { isPaused: () => paused });
+    setTimeout(() => { paused = false; }, 10);
+    await expect(result).resolves.toBe(expected);
   });
 
   it('serializes import fingerprint configuration deterministically across object key order', () => {
