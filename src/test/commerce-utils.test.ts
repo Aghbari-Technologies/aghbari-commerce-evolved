@@ -1,4 +1,4 @@
-import { DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, validateCsvRow } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, validateCsvRow, validateImportProfileRules } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, validateQuickOrderLines } from '@/lib/commerce-utils';
 
@@ -86,6 +86,64 @@ describe('commerce completion utilities', () => {
 
     expect(chooseImportStatus(74)).toBe('manual_review');
     expect(chooseImportStatus(49)).toBe('rejected');
+  });
+
+  it('applies profile transformations before deterministic validation', () => {
+    const raw = validateCsvRow(
+      ['000125', '  RICE  ', '2.50', '31/01/2026'],
+      ['item_code', 'product_name', 'quantity', 'date'],
+      2,
+    );
+    const row = applyImportProfileRules(raw, [
+      { field: 'product_name', operation: 'trim' },
+      { field: 'product_name', operation: 'lowercase' },
+      { field: 'quantity', operation: 'to_number' },
+      { field: 'date', operation: 'date_iso' },
+    ], [
+      { field: 'item_code', rule: 'safe_pattern', value: '^[0-9]{6}
+    expect(classifyAssistantIntent('أين فاتورتي؟')).toBe('invoice_help');
+    expect(classifyAssistantIntent('ما حالة طلبي؟')).toBe('order_status');
+    expect(classifyAssistantIntent('هل يوجد مخزون من السكر؟')).toBe('catalog_search');
+    expect(classifyAssistantIntent('كيف أستخدمه بدون اتصال؟')).toBe('offline_help');
+  });
+});
+ },
+      { field: 'quantity', rule: 'numeric' },
+      { field: 'quantity', rule: 'min', value: 1 },
+      { field: 'product_name', rule: 'enum', values: ['rice', 'sugar'] },
+    ]);
+    expect(row.status).toBe('valid');
+    expect(row.data.item_code).toBe('000125');
+    expect(row.data.product_name).toBe('rice');
+    expect(row.data.quantity).toBe('2.50');
+    expect(row.data.date).toBe('2026-01-31');
+    expect(row.errors).toEqual([]);
+  });
+
+  it('applies profile validation failures and ignores mapped empty header slots without shifting columns', () => {
+    const raw = validateCsvRow(['000125', 'internal-secret', '  '], ['item_code', '', 'product_name'], 2);
+    expect(raw.data).toEqual({ item_code: '000125', product_name: '' });
+    const invalid = applyImportProfileRules(raw, [], [
+      { field: 'product_name', rule: 'required', message: 'اسم المنتج مطلوب' },
+    ]);
+    expect(invalid.status).toBe('rejected');
+    expect(invalid.errors).toContain('اسم المنتج مطلوب');
+  });
+
+  it('rejects unsupported or unsafe profile rules before reading data', () => {
+    expect(() => validateImportProfileRules([{ field: 'name', operation: 'execute_code' }], []))
+      .toThrow('قاعدة تحويل');
+    expect(() => validateImportProfileRules([], [{ field: 'name', rule: 'safe_pattern', value: '(a+)+
+    expect(classifyAssistantIntent('أين فاتورتي؟')).toBe('invoice_help');
+    expect(classifyAssistantIntent('ما حالة طلبي؟')).toBe('order_status');
+    expect(classifyAssistantIntent('هل يوجد مخزون من السكر؟')).toBe('catalog_search');
+    expect(classifyAssistantIntent('كيف أستخدمه بدون اتصال؟')).toBe('offline_help');
+  });
+});
+ }]))
+      .toThrow('نمط التحقق غير آمن');
+    expect(() => validateImportProfileRules([], [{ field: 'quantity', rule: 'enum', values: Array(101).fill('x') }]))
+      .toThrow('قاعدة enum');
   });
 
   it('classifies common Arabic questions to evidence-backed actions', () => {
