@@ -9,3 +9,5 @@
 - [ ] AI assistant / insights via Lovable AI
 - [ ] Offline field-sales mode
 - [ ] Push code to GitHub (blocked: user connects GitHub from Lovable settings)
+- [x] Global nav bar between customer screens and admin panel
+- [ ] Five fronts (discovery, store/finance, admin commerce, import/AI, permissions/settings) — continue incrementally
