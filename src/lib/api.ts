@@ -142,33 +142,33 @@ export async function createSupplier(s: Partial<Supplier>): Promise<Supplier> {
 
 // ─── Orders ───
 export async function fetchOrders(): Promise<OrderWithCustomer[]> {
-  const { data: orders, error } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('organization_id', ORG_ID)
-    .order('created_at', { ascending: false });
+  // The staff-only SECURITY DEFINER RPC derives the tenant from the signed-in profile.
+  // The client can no longer SELECT financial order columns directly.
+  const { data: orders, error } = await supabase.rpc('fetch_staff_orders');
   if (error) throw error;
 
-  const { data: customers } = await supabase
+  const { data: customers, error: customersError } = await supabase
     .from('customers')
     .select('*')
     .eq('organization_id', ORG_ID);
+  if (customersError) throw customersError;
   const custMap = new Map<string, Customer>();
   customers?.forEach((c: Customer) => custMap.set(c.id, c));
 
-  return (orders as Order[]).map((o) => ({
+  return ((orders ?? []) as Order[]).map((o) => ({
     ...o,
     customer: custMap.get(o.customer_id),
   }));
 }
 
 export async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
-  const { data, error } = await supabase
-    .from('order_items')
-    .select('*')
-    .eq('order_id', orderId);
+  // Financial item columns are intentionally not selectable by authenticated users.
+  // The RPC checks staff status, active profile and tenant ownership before returning the full row.
+  const { data, error } = await supabase.rpc('fetch_staff_order_items', {
+    p_order_id: orderId,
+  });
   if (error) throw error;
-  return data as OrderItem[];
+  return (data ?? []) as OrderItem[];
 }
 
 export type OrderReviewLineInput = {
@@ -227,7 +227,7 @@ export async function createOrder(order: {
       total_items: order.items.length,
       notes: order.notes ?? null,
     })
-    .select()
+    .select('id,organization_id,customer_id,order_number,status,total_items,notes,created_at')
     .single();
   if (orderError) throw orderError;
 
