@@ -22,6 +22,54 @@ CREATE UNIQUE INDEX IF NOT EXISTS orders_creator_idempotency_uidx
   ON public.orders(organization_id, created_by, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
 
+-- One price resolver shared by checkout and the pre-submit price preview.
+CREATE OR REPLACE FUNCTION public.customer_product_unit_price(
+  p_product_id uuid,
+  p_organization_id uuid,
+  p_tier text,
+  p_quantity numeric
+)
+RETURNS numeric(15,2)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $
+DECLARE
+  v_base_price numeric(15,2);
+  v_price numeric(15,2);
+BEGIN
+  IF p_quantity IS NULL OR p_quantity<=0 OR p_quantity>10000
+     OR p_quantity::text IN ('NaN','Infinity','-Infinity') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid pricing quantity';
+  END IF;
+  SELECT p.base_price INTO v_base_price
+    FROM public.products p
+   WHERE p.id=p_product_id AND p.organization_id=p_organization_id AND p.status='active';
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='product unavailable in this organization'; END IF;
+
+  SELECT pp.price INTO v_price
+    FROM public.product_prices pp
+   WHERE pp.product_id=p_product_id AND pp.tier=coalesce(nullif(p_tier,''),'retail')
+     AND pp.is_active AND pp.min_quantity<=p_quantity
+   ORDER BY pp.min_quantity DESC
+   LIMIT 1;
+  IF NOT FOUND AND coalesce(nullif(p_tier,''),'retail')<>'retail' THEN
+    SELECT pp.price INTO v_price
+      FROM public.product_prices pp
+     WHERE pp.product_id=p_product_id AND pp.tier='retail'
+       AND pp.is_active AND pp.min_quantity<=p_quantity
+     ORDER BY pp.min_quantity DESC
+     LIMIT 1;
+  END IF;
+  IF NOT FOUND THEN v_price:=v_base_price; END IF;
+  IF v_price IS NULL OR v_price<0 OR v_price::text IN ('NaN','Infinity','-Infinity') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid configured product price';
+  END IF;
+  RETURN pg_catalog.round(v_price,2);
+END;
+$;
+REVOKE ALL ON FUNCTION public.customer_product_unit_price(uuid,uuid,text,numeric) FROM PUBLIC,anon,authenticated;
+
 DROP FUNCTION IF EXISTS public.place_order(jsonb,text,text,text,text);
 
 CREATE OR REPLACE FUNCTION public.place_order(
@@ -164,6 +212,7 @@ BEGIN
   END IF;
 
   v_tier := coalesce(nullif(v_tier,''),'retail');
+  IF v_customer_status<>'approved' THEN v_tier:='retail'; END IF;
   v_order_no := 'ORD-'||pg_catalog.to_char(pg_catalog.now(),'YYMMDD')||'-'||
     pg_catalog.upper(pg_catalog.substr(pg_catalog.replace(pg_catalog.gen_random_uuid()::text,'-',''),1,8));
 
@@ -199,25 +248,7 @@ BEGIN
      FOR SHARE;
     IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='أحد المنتجات غير متاح في مؤسستك'; END IF;
 
-    v_unit_price := NULL;
-    SELECT pp.price INTO v_unit_price
-      FROM public.product_prices pp
-     WHERE pp.product_id=v_product.id AND pp.tier=v_tier AND pp.is_active
-       AND pp.min_quantity<=v_quantity
-     ORDER BY pp.min_quantity DESC
-     LIMIT 1;
-    IF NOT FOUND THEN
-      SELECT pp.price INTO v_unit_price
-        FROM public.product_prices pp
-       WHERE pp.product_id=v_product.id AND pp.tier='retail' AND pp.is_active
-         AND pp.min_quantity<=v_quantity
-       ORDER BY pp.min_quantity DESC
-       LIMIT 1;
-    END IF;
-    IF v_unit_price IS NULL THEN v_unit_price:=v_product.base_price; END IF;
-    IF v_unit_price<0 OR v_unit_price::text IN ('NaN','Infinity','-Infinity') THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='سعر المنتج غير صالح';
-    END IF;
+    v_unit_price:=public.customer_product_unit_price(v_product.id,v_org,v_tier,v_quantity);
 
     v_line_total := pg_catalog.round(v_unit_price*v_quantity,2);
     INSERT INTO public.order_items(
