@@ -76,7 +76,8 @@ This file records every source requirement area so implementation is reviewable.
 ### Implementation status
 - **PARTIAL / PREVIOUSLY TESTED IN ISOLATED DB:** transactional checkout, server price resolver, quantity breaks, idempotency, credit checks, stock reserve/release/consume, legal state transitions, invoice and payment RPCs.
 - **ADDED / CI VERIFICATION PENDING:** requested/approved quantity and price-override metadata, adjustment notice/payment-request lifecycle fields.
-- **NOT PROVEN:** full edit-and-approve grid, blocking navigation on unapproved quantity, server-authorized price override and invoice snapshot consistency, customer stepper/adjustment notices, hiding prices across every customer order view, final payment request, server-generated PDF.
+- **ADDED / CI VERIFICATION PENDING:** the order-review editor now reports dirty/staged state to the admin shell immediately; sidebar links, quick-command navigation, storefront switching, sign-out and back controls refuse to leave; TanStack Router `useBlocker` also blocks route transitions and browser before-unload while review is unapproved, with a return-to-review dialog. This is code-level protection; authenticated browser/E2E proof remains open.
+- **NOT PROVEN:** full browser edit-and-approve acceptance recording, server-authorized price override and invoice snapshot consistency under production RLS, customer stepper/adjustment notices across all routes, hiding prices on every customer order view, final payment request in production, server-generated PDF.
 
 ## Phase 4 — Outbox, background queues, cache and Arabic search
 
@@ -164,3 +165,5 @@ Definition of Done:
 - 2026-10-09: customer assistant privacy hardening avoids fetching order/invoice monetary columns in the customer assistant paths; targeted regression coverage added. Build and unit CI proof pending for this patch; authenticated browser/runtime proof remains separate.
 
 - 2026-10-09: follow-up pricing administration adds tenant-scoped rule creation/status/deletion, form validation, visible legacy-scope warnings, audit logging, and database acceptance scenarios for all four formulas, retail/wholesale targeting, and base-price reset. Production database changes remain blocked pending confirmation of the exact Supabase project.
+
+- 2026-10-09: order review navigation guard added across internal admin routes, quick navigation, storefront links, sign-out, browser route changes and before-unload; live browser/E2E proof remains a separate gate.
