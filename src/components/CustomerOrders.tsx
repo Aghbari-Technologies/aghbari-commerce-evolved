@@ -5,6 +5,24 @@ import { useFetch } from '@/lib/useFetch';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatNumber } from '@/lib/format';
 import type { Order, OrderItem } from '@/lib/types';
+
+type CustomerOrderSummary = Pick<Order, 'id' | 'order_number' | 'status' | 'total_items' | 'created_at'> & {
+  quantity_review_required?: boolean;
+  customer_adjustment_note?: string | null;
+  customer_payment_requested_at?: string | null;
+  payment_request_status?: string;
+};
+type CustomerOrderDocument = Pick<Order, 'id' | 'order_number' | 'customer_id' | 'status' | 'total_items' | 'notes' | 'created_at'> & {
+  quantity_review_required?: boolean;
+  customer_adjustment_note?: string | null;
+  customer_payment_requested_at?: string | null;
+  customer_confirmed_at?: string | null;
+  payment_request_status?: string;
+};
+type CustomerOrderLine = Pick<OrderItem, 'id' | 'item_code' | 'product_name_snapshot' | 'unit_snapshot' | 'quantity'> & {
+  requested_quantity?: number;
+  approved_quantity?: number;
+};
 import { Login } from '@/components/Login';
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -41,9 +59,9 @@ export function MyOrders() {
 
 function MyOrdersInner() {
   const { data, loading, error, refetch } = useFetch(async () => {
-    const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('orders').select('id,order_number,status,total_items,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status').order('created_at', { ascending: false });
     if (error) throw new Error('تعذر تحميل الطلبات');
-    return data as Order[];
+    return data as CustomerOrderSummary[];
   });
   return (
     <Shell>
@@ -79,18 +97,26 @@ function OrderInvoiceInner({ id }: { id: string }) {
   const { user } = useAuth();
   const { data, loading, error } = useFetch(async () => {
     const [o, i, h] = await Promise.all([
-      supabase.from('orders').select('*').eq('id', id).maybeSingle(),
-      supabase.from('order_items').select('*').eq('order_id', id),
-      supabase.from('order_status_history').select('*').eq('order_id', id).order('created_at'),
+      supabase.from('orders').select('id,order_number,customer_id,status,total_items,notes,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,customer_confirmed_at,payment_request_status').eq('id', id).maybeSingle(),
+      supabase.from('order_items').select('id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity').eq('order_id', id),
+      supabase.from('order_status_history').select('id,to_status,created_at,notes').eq('order_id', id).order('created_at'),
     ]);
-    if (o.error || i.error) throw new Error('تعذر تحميل الطلب');
-    return { order: o.data as Order | null, items: (i.data ?? []) as OrderItem[], history: (h.data ?? []) as { id: string; to_status: string; created_at: string; notes: string | null }[] };
+    if (o.error || i.error || h.error) throw new Error('تعذر تحميل الطلب');
+    if (!o.data) return { order: null, items: [] as CustomerOrderLine[], history: [] as { id: string; to_status: string; created_at: string; notes: string | null }[], customer: null as { customer_code: string; business_name: string; contact_name: string | null } | null };
+    const customer = await supabase.from('customers').select('customer_code,business_name,contact_name').eq('id', o.data.customer_id).maybeSingle();
+    if (customer.error) throw new Error('تعذر تحميل بيانات العميل');
+    return {
+      order: o.data as CustomerOrderDocument,
+      items: (i.data ?? []) as CustomerOrderLine[],
+      history: (h.data ?? []) as { id: string; to_status: string; created_at: string; notes: string | null }[],
+      customer: customer.data as { customer_code: string; business_name: string; contact_name: string | null } | null,
+    };
   }, [id]);
 
   if (loading) return <Shell><p role="status">جارٍ تحميل الطلب...</p></Shell>;
   if (error) return <Shell><div style={card} role="alert">{error}</div></Shell>;
   if (!data?.order) return <Shell><div style={card}>الطلب غير موجود أو لا تملك صلاحية عرضه. <Link to="/orders" className="sf-link">طلباتي</Link></div></Shell>;
-  const { order, items, history } = data;
+  const { order, items, history, customer } = data;
 
   return (
     <Shell>
@@ -103,7 +129,7 @@ function OrderInvoiceInner({ id }: { id: string }) {
           <div><h1 style={{ margin: 0, color: '#0b7b89', fontSize: 24 }}>الأغبري</h1><small>شركة الأغبري للمواد الغذائية — صنعاء، اليمن</small></div>
           <div style={{ textAlign: 'left' }}><strong>تأكيد طلب</strong><div>{order.order_number}</div><small>{formatDate(order.created_at)}</small></div>
         </header>
-        <p style={{ margin: '14px 0' }}>العميل: <strong>{user?.name}</strong> — الحالة: <strong>{STATUS_LABELS[order.status] ?? order.status}</strong></p>
+        <p style={{ margin: '14px 0' }}>رقم العميل: <strong>{customer?.customer_code ?? '—'}</strong> — العميل: <strong>{customer?.business_name ?? customer?.contact_name ?? user?.name ?? '—'}</strong> — الحالة: <strong>{STATUS_LABELS[order.status] ?? order.status}</strong></p>
         <div style={{ margin: '16px 0', padding: 12, borderRadius: 10, background: '#f4f8f9', color: '#536b70' }}>
           تفاصيل الكميات المطلوبة للمتابعة. لا تُعرض الأسعار أو الإجماليات في مستند العميل.
         </div>
