@@ -10,7 +10,7 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
+  applyImportProfileRules, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
@@ -132,16 +132,16 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       selectedProfile = job.profile_id ?? selectedProfile ?? activeProfileId;
 
       const extension = file.name.split(".").pop()?.toLocaleLowerCase("en") ?? "";
-      if (extension !== "csv") {
+      if (extension !== "csv" && extension !== "xlsx") {
         const isPdf = extension === "pdf";
         await updateImportJob(job.id, {
           status: "manual_mapping_required",
           data_quality_score: 0,
           error_summary: {
-            code: isPdf ? "PDF_TABLE_EXTRACTION_REQUIRED" : "SPREADSHEET_PARSER_UNAVAILABLE",
+            code: isPdf ? "PDF_TABLE_EXTRACTION_REQUIRED" : "LEGACY_XLS_PARSER_UNAVAILABLE",
             message: isPdf
               ? "لم يتوفر مستخرج جدولي موثوق في هذه النسخة. لم يتم تخمين بيانات PDF أو توليد صفوف وهمية؛ يلزم استخراج/تعيين يدوي قبل الاعتماد."
-              : "لم يتوفر محلل XLS/XLSX في هذه النسخة. حُفظت الميتاداتا والبصمة فقط، ويلزم استخراج جدولي موثوق قبل الاعتماد.",
+              : "صيغة XLS الثنائية القديمة غير مدعومة مباشرة. حُفظت الميتاداتا والبصمة فقط؛ احفظ الملف بصيغة XLSX أو CSV ثم أعد الاستيراد.",
             manual_mapping_required: true,
             no_raw_file_retained: true,
           },
@@ -149,7 +149,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         setStage(null);
         setStatusMessage(isPdf
           ? "سُجل ملف PDF كمسودة تعيين يدوي دون افتراض أنه جدولي."
-          : "سُجل الملف كمسودة؛ لم يتم اختراع أو اعتماد بيانات Excel غير المستخرجة.");
+          : "سُجل ملف XLS القديم كمسودة؛ احفظ نسخة XLSX أو CSV لإتمام الاستيراد.");
         await refetch();
         return;
       }
@@ -496,7 +496,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         <section className="panel import-upload-panel">
           <div className="import-upload-icon"><Upload size={26} /></div>
           <h2>رفع ملف للمعالجة</h2>
-          <p>CSV مدعوم مباشرة. ملفات Excel/PDF لا تُعتمد أو تُستخرج بالتخمين؛ تُسجل كمسودة عند غياب محلل جدولي موثوق.</p>
+          <p>يدعم CSV وملفات XLSX الجدولية (الورقة المرئية الأولى). صيغة XLS الثنائية وPDF تبقيان في مسار التعيين اليدوي؛ لا تُخترع بيانات غير مستخرجة.</p>
           <div className="form-grid">
             <label className="form-field"><span>الملف التعريفي</span>
               <select value={profileId} onChange={(event) => setProfileId(event.target.value)}>
@@ -512,7 +512,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           </div>
           <label className="import-dropzone">
             <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={handleFile} disabled={Boolean(stage && stage !== "complete")} />
-            <FileDown size={22} /><strong>اختر CSV أو Excel أو PDF</strong>
+            <FileDown size={22} /><strong>اختر CSV أو XLSX أو XLS أو PDF</strong>
             <span>100MB كحد أقصى • شرائح 4MB • دفعات معالجة 1,000 صف</span>
           </label>
           {errorMessage && <div className="form-error"><XCircle size={15} /> {errorMessage}</div>}
