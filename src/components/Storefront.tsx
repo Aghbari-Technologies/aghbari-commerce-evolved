@@ -7,7 +7,7 @@ import {
 import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { normalizeCartDraft, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { matchesArabicCatalogSearch, normalizeCartDraft, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { Link } from '@tanstack/react-router';
@@ -132,7 +132,7 @@ export function Storefront({ onExit }: { onExit: () => void }) {
   const filtered = useMemo(() => {
     let list = products ?? [];
     if (activeCat) list = list.filter((p) => p.category_id === activeCat);
-    if (query.trim()) list = list.filter((p) => `${p.name} ${p.item_code} ${p.barcode ?? ''}`.toLowerCase().includes(query.toLowerCase()));
+    if (query.trim()) list = list.filter((p) => matchesArabicCatalogSearch(p, query));
     return list;
   }, [products, activeCat, query]);
 

@@ -92,6 +92,7 @@ This file records every source requirement area so implementation is reviewable.
 ### Implementation status
 - **EXISTING / PARTIAL:** outbox_events and idempotency structures already existed.
 - **ADDED / CI VERIFICATION PENDING:** outbox lock/retry/dead-letter metadata, queue/job/attempt tables, SKIP LOCKED worker claims, Arabic normalization function and SKU/barcode/name indexes.
+- **ADDED (frontend search path + shared utility + unit tests):** storefront catalog and customer quote/reorder searches share Arabic normalization (harakat/tatweel removal; common alef/hamza and alif-maqsura folding), normalized substrings/prefixes, bounded one-edit fuzzy matching on names, and exact/prefix-only SKU/barcode matching. Tests cover Arabic variants, prefix/fuzzy names, and protection against fuzzy SKU matches. **NOT PROVEN:** measured P95 <150ms, large-catalog profiling, server-side query indexes/re-index orchestration, or full cross-screen browser E2E.
 - **NOT PROVEN:** deployed workers, recovery drill, DLQ retry, replay/crash consumer idempotency, cache protections, WebSocket-to-polling correctness, measured P95.
 
 ## Phase 5 — AI governance, deterministic analytics, action cards, usage ledger
@@ -180,3 +181,5 @@ Definition of Done:
 - 2026-10-09: pricing cards now open the shared create/edit form for existing unlocked, supported, non-approval-governed rules. The update API reuses the same validation/database field mapping as creation, checks organization ownership and manual lock/approval flags, increments rule version, and relies on the existing pricing recalculation and audit triggers. CI verification pending on this feature branch.
 
 - 2026-10-09: XLSX first-visible-sheet parsing connected to the official Unified Import Engine; acceptance fixture covers shared strings, inline text, Arabic sheet names, and zero-masked numeric SKU preservation. XLS/PDF continue to use explicit manual-mapping fallback until trustworthy parsers are available.
+
+- 2026-10-09: added a shared Arabic catalog search matcher to storefront, customer quote and reorder screens, with bounded fuzzy name matching and strict exact/prefix identifier matching; dedicated regression tests added. Runtime/browser and performance targets remain separate proof gates.
