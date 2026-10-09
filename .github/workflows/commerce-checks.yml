@@ -30,7 +30,7 @@ jobs:
       # The repository-wide Prettier rule currently reports thousands of pre-existing formatting errors.
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
       - name: Lint (excluding repository-wide Prettier formatting rule)
-        run: npm run lint -- --rule 'prettier/prettier: off'
+        run: npm run lint -- --rule=prettier/prettier:off
       - name: Build
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
