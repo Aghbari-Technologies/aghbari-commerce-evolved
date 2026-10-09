@@ -282,6 +282,115 @@ $$;
 REVOKE ALL ON FUNCTION public.place_order(jsonb,text,text,text,text,text,text) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.place_order(jsonb,text,text,text,text,text,text) TO authenticated;
 
+-- Quote the server's current tier/quantity price before the customer submits checkout.
+CREATE OR REPLACE FUNCTION public.preview_order_pricing(_items jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $
+DECLARE
+  v_profile uuid := public.current_profile_id();
+  v_org uuid;
+  v_tier text := 'retail';
+  v_customer_status text := 'pending';
+  v_currency text := 'YER';
+  v_line jsonb;
+  v_aggregated record;
+  v_product public.products%ROWTYPE;
+  v_product_id uuid;
+  v_quantity numeric(15,3);
+  v_unit_price numeric(15,2);
+  v_line_total numeric(15,2);
+  v_total numeric(15,2):=0;
+  v_items jsonb:='[]'::jsonb;
+  v_count integer:=0;
+BEGIN
+  IF v_profile IS NULL THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='sign in required'; END IF;
+  IF _items IS NULL OR pg_catalog.jsonb_typeof(_items)<>'array' THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='items must be an array';
+  END IF;
+  IF pg_catalog.jsonb_array_length(_items)<1 OR pg_catalog.jsonb_array_length(_items)>100 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cart must contain between 1 and 100 items';
+  END IF;
+
+  SELECT p.organization_id INTO v_org
+    FROM public.profiles p
+   WHERE p.id=v_profile AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL OR NOT EXISTS(SELECT 1 FROM public.organizations o WHERE o.id=v_org AND o.is_active) THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='active organization context required';
+  END IF;
+
+  SELECT c.tier,c.status INTO v_tier,v_customer_status
+    FROM public.customers c
+   WHERE c.profile_id=v_profile AND c.organization_id=v_org
+   ORDER BY c.created_at LIMIT 1;
+  IF NOT FOUND THEN
+    v_tier:='retail';
+    v_customer_status:='pending';
+  END IF;
+  v_tier:=coalesce(nullif(v_tier,''),'retail');
+  IF v_customer_status<>'approved' THEN v_tier:='retail'; END IF;
+  SELECT o.currency INTO v_currency FROM public.organizations o WHERE o.id=v_org;
+
+  FOR v_line IN SELECT value FROM pg_catalog.jsonb_array_elements(_items) LOOP
+    BEGIN
+      v_product_id:=(v_line->>'product_id')::uuid;
+      v_quantity:=(v_line->>'quantity')::numeric;
+    EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid product id or quantity';
+    END;
+    IF v_product_id IS NULL OR v_quantity IS NULL OR v_quantity<>pg_catalog.trunc(v_quantity)
+       OR v_quantity<1 OR v_quantity>10000 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='quantity must be a positive integer not exceeding 10000';
+    END IF;
+  END LOOP;
+
+  FOR v_aggregated IN
+    SELECT (entry.value->>'product_id')::uuid AS product_id,
+           sum((entry.value->>'quantity')::numeric)::numeric(15,3) AS quantity
+      FROM pg_catalog.jsonb_array_elements(_items) AS entry(value)
+     GROUP BY (entry.value->>'product_id')::uuid
+     ORDER BY (entry.value->>'product_id')::uuid
+  LOOP
+    v_product_id:=v_aggregated.product_id;
+    v_quantity:=v_aggregated.quantity;
+    IF v_quantity>10000 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='aggregate quantity exceeds 10000 for one product';
+    END IF;
+    SELECT p.* INTO v_product
+      FROM public.products p
+     WHERE p.id=v_product_id AND p.organization_id=v_org AND p.status='active'
+     FOR SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='product is unavailable in this organization'; END IF;
+
+    v_unit_price:=public.customer_product_unit_price(v_product.id,v_org,v_tier,v_quantity);
+    v_line_total:=pg_catalog.round(v_unit_price*v_quantity,2);
+    v_total:=v_total+v_line_total;
+    v_count:=v_count+1;
+    v_items:=v_items||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+      'product_id',v_product.id,
+      'name',v_product.name,
+      'item_code',v_product.item_code,
+      'unit',v_product.unit,
+      'quantity',v_quantity,
+      'unit_price',v_unit_price,
+      'line_total',v_line_total
+    ));
+  END LOOP;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'items',v_items,
+    'total_amount',v_total,
+    'currency',coalesce(v_currency,'YER'),
+    'customer_tier',v_tier,
+    'price_basis','server'
+  );
+END;
+$;
+REVOKE ALL ON FUNCTION public.preview_order_pricing(jsonb) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.preview_order_pricing(jsonb) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.guard_order_confirmation()
 RETURNS trigger
 LANGUAGE plpgsql
