@@ -429,7 +429,7 @@ function QuickOrderMatrix({ products, quantities, feedback, onQuantityChange, on
     <section className="sf-collection">
       <button className="sf-back-link" onClick={onBack}><ArrowRight size={16} /> العودة للكتالوج</button>
       <div className="sf-products-head">
-        <div><h2><ClipboardList size={21} /> الطلب السريع</h2><span>أدخل كميات عدة أصناف في شاشة واحدة ثم أضفها إلى السلة.</span></div>
+        <div><h2><ClipboardList size={21} /> الطلب السريع</h2><span>حدد كميات عدة أصناف في شاشة واحدة ثم أضفها إلى السلة. لا تعرض شاشة الطلب السريع أي أسعار أو إجماليات.</span></div>
         <div className="sf-discovery-links"><button onClick={onCart}><ShoppingCart size={15} /> عرض السلة</button></div>
       </div>
       <p style={{ margin: '0 0 14px', color: '#667b80', fontSize: 12 }} role="note">
@@ -438,12 +438,11 @@ function QuickOrderMatrix({ products, quantities, feedback, onQuantityChange, on
       {feedback && <div role={feedback.kind === 'error' ? 'alert' : 'status'} style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, border: `1px solid ${feedback.kind === 'error' ? '#efc5c5' : '#b8e5d4'}`, background: feedback.kind === 'error' ? '#fff6f6' : '#f0fbf6', color: feedback.kind === 'error' ? '#9b2626' : '#17684d', fontSize: 13 }}>{feedback.message}</div>}
       {!products.length ? <div className="sf-empty"><Package size={30} /><span>لا توجد منتجات مطابقة للبحث الحالي</span><small>غيّر البحث أو التصنيف ثم حاول مجددًا.</small></div> :
         <div style={{ overflowX: 'auto', border: '1px solid #dfeaec', borderRadius: 14, background: '#fff' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 650, fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560, fontSize: 13 }}>
             <thead><tr style={{ background: '#f2f7f8', textAlign: 'right' }}>
               <th scope="col" style={{ padding: 12 }}>الصنف</th>
               <th scope="col" style={{ padding: 12 }}>الرمز</th>
               <th scope="col" style={{ padding: 12 }}>المتوفر</th>
-              <th scope="col" style={{ padding: 12 }}>السعر الأساسي</th>
               <th scope="col" style={{ padding: 12 }}>الكمية</th>
             </tr></thead>
             <tbody>{products.map((product) => {
@@ -452,7 +451,6 @@ function QuickOrderMatrix({ products, quantities, feedback, onQuantityChange, on
                 <td style={{ padding: 12, fontWeight: 800 }}><div>{product.name}</div><small style={{ display: 'block', color: '#74888c', fontWeight: 500 }}>{product.category?.name ?? 'غير مصنف'}</small></td>
                 <td style={{ padding: 12, direction: 'ltr', textAlign: 'right' }}>{product.item_code}</td>
                 <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{formatNumber(available)} {product.unit}</td>
-                <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{formatCurrency(product.base_price)} <small style={{ color: '#74888c' }}>/{product.unit}</small></td>
                 <td style={{ padding: 12, minWidth: 110 }}><input type="number" inputMode="numeric" min={0} max={available} step={1} value={quantities[product.id] ?? ''} disabled={available <= 0} aria-label={`كمية ${product.name}`} onChange={(event) => { const value = event.target.value; if (value === '' || /^\d+$/.test(value)) onQuantityChange(product.id, value); }} style={{ width: 96, padding: '9px 10px', border: '1px solid #cfdddd', borderRadius: 9, background: available <= 0 ? '#f2f5f5' : '#fff', color: '#18383c' }} /></td>
               </tr>;
             })}</tbody>
