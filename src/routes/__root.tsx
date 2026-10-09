@@ -121,6 +121,13 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <AuthProvider>
+        <nav className="no-print" aria-label="التنقل الرئيسي" style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", padding: "6px 10px", background: "var(--foreground, #0f172a)", fontSize: 13 }}>
+          {([["/", "المتجر"], ["/orders", "طلباتي"], ["/admin", "لوحة الإدارة"], ["/login", "الحساب"]] as const).map(([to, label]) => (
+            <Link key={to} to={to} activeOptions={{ exact: to === "/" }} style={{ color: "var(--background, #fff)", padding: "4px 12px", borderRadius: 999, textDecoration: "none" }} activeProps={{ style: { background: "var(--primary, #0e7c66)", color: "var(--primary-foreground, #fff)", padding: "4px 12px", borderRadius: 999, textDecoration: "none" } }}>
+              {label}
+            </Link>
+          ))}
+        </nav>
         <Outlet />
       </AuthProvider>
     </QueryClientProvider>
