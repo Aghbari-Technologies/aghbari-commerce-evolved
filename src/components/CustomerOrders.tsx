@@ -3,7 +3,7 @@ import { ArrowRight, FileText, Package, Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useFetch } from '@/lib/useFetch';
 import { useAuth } from '@/lib/auth';
-import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber } from '@/lib/format';
 import type { Order, OrderItem } from '@/lib/types';
 import { Login } from '@/components/Login';
 
