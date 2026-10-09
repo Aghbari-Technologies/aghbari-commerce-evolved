@@ -160,3 +160,8 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.record_customer_payment(uuid,numeric,text,text,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.record_customer_payment(uuid,numeric,text,text,text) TO authenticated;
+
+-- Payment writes are allowed only through record_customer_payment(), which locks the invoice and enforces its balance.
+DROP POLICY IF EXISTS customer_payments_staff_all ON public.customer_payments;
+DROP POLICY IF EXISTS customer_payments_staff_read ON public.customer_payments;
+CREATE POLICY customer_payments_staff_read ON public.customer_payments FOR SELECT TO authenticated USING (public.is_staff());
