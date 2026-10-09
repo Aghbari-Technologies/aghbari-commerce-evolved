@@ -512,7 +512,7 @@ REVOKE ALL ON FUNCTION public.refresh_product_tier_prices(uuid,uuid) FROM PUBLIC
 
 CREATE OR REPLACE FUNCTION public.refresh_product_price_columns_from_product()
 RETURNS trigger LANGUAGE plpgsql SET search_path = ''
-AS $
+AS $$
 BEGIN
   IF TG_OP='INSERT' THEN
     -- Existing clients create products with the base price only; both derived tiers start there.
