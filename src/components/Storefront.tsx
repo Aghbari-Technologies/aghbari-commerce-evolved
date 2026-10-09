@@ -394,13 +394,14 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
   );
 }
 
-function OrderConfirm({ orderNo, orderId, total, onContinue }: { orderNo: string; orderId: string; total: number; onContinue: () => void }) {
+function OrderConfirm({ orderNo, orderId, onContinue }: { orderNo: string; orderId: string; onContinue: () => void }) {
   return (
     <section className="sf-confirm">
       <div className="sf-confirm-icon"><Check size={40} /></div>
       <h2>تم استلام طلبك بنجاح!</h2>
       <p>رقم الطلب: <strong>{orderNo}</strong></p>
-      <p>الإجمالي المعتمد من الخادم: <strong>{formatCurrency(total)}</strong></p>
+      <p>الطلب الآن بانتظار مراجعة الإدارة. لن تظهر الأسعار أو الإجماليات في مستندات الطلب الخاصة بالعميل.</p>
+      <p>بعد اعتماد الإدارة، ستجد حالة الطلب وتعليمات السداد عند الحاجة في صفحة التفاصيل.</p>
       <p>سنتواصل معك لتأكيد تفاصيل التوصيل. لا يمثل هذا إشعار دفع أو شحن.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}><Link to="/orders/$id" params={{ id: orderId }} className="sf-btn-secondary" style={{ textDecoration: 'none', padding: '10px 14px' }}>تفاصيل الطلب</Link><button className="sf-btn-primary" onClick={onContinue}>متابعة التسوق</button></div>
     </section>
