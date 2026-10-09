@@ -51,6 +51,12 @@ async function main() {
     .filter((name) => name.endsWith(".sql"))
     .sort();
   assert.ok(migrations.length >= 7, "expected the original schema and six completion migrations");
+  const migrationVersions = migrations.map((name) => name.slice(0, 14));
+  assert.ok(migrationVersions.every((version) =>
+    version.length === 14 && [...version].every((digit) => digit >= '0' && digit <= '9')),
+    "each Supabase migration filename must start with a 14-digit version");
+  assert.equal(new Set(migrationVersions).size, migrationVersions.length,
+    "Supabase migration version prefixes must be unique; duplicate versions break migration tracking");
 
   for (const name of migrations) {
     const contents = await readFile(resolve(migrationDir, name), "utf8");
@@ -382,6 +388,31 @@ async function main() {
   assert.equal(Number(staffCreatedItems[0].unit_price_snapshot), 38500);
   assert.equal(Number(staffCreatedItems[0].line_total), 77000);
   process.stdout.write("PASS atomic tenant-bound staff order creation, server-side pricing, idempotency and direct-write denial\\n");
+
+  const rollbackKey = "ci-staff-order-rollback-000001";
+  await expectFailure(
+    "staff order creation must roll back when a later item is outside the tenant",
+    () => db.unsafe(
+      "select public.create_staff_order($1::uuid,$2::jsonb,$3,$4,$5)",
+      [staffCustomers[0].id,
+        db.json([{ product_id: productId, quantity: 1 }, { product_id: otherProductId, quantity: 1 }]),
+        "CI rollback test", rollbackKey, "cash_on_delivery"],
+    ),
+    /product is not active in the staff organization/i,
+  );
+  await db.unsafe("reset role");
+  const rollbackCount = await db.unsafe(
+    "select count(*)::int as count from public.orders where organization_id=$1 and created_by=$2 and idempotency_key=$3",
+    [organizationId, staffProfileId, rollbackKey],
+  );
+  assert.equal(rollbackCount[0].count, 0, "late item validation failure must roll back the new order header and prior line inserts");
+  const rollbackLineCount = await db.unsafe(
+    "select count(*)::int as count from public.order_items oi join public.orders o on o.id=oi.order_id where o.organization_id=$1 and o.created_by=$2 and o.idempotency_key=$3",
+    [organizationId, staffProfileId, rollbackKey],
+  );
+  assert.equal(rollbackLineCount[0].count, 0, "failed order creation must leave no persisted order lines");
+  await db.unsafe("set role authenticated");
+  process.stdout.write("PASS failed staff order creation rolled back all writes\\n");
 
   const staffOrderRows = await db.unsafe(
     "select id,total_amount from public.fetch_staff_orders() where id=$1",
