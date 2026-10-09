@@ -308,12 +308,10 @@ async function main() {
   );
   await db.unsafe("update public.orders set status='confirmed' where id=$1", [order.id]);
 
-  const invoiceRows = await db.unsafe(
-    "select id,total_amount,status from public.customer_invoices where order_id=$1",
-    [order.id],
-  );
-  assert.equal(invoiceRows.length, 1, "confirming the order should issue exactly one invoice");
-  const invoice = invoiceRows[0];
+  const financeSnapshot = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const invoice = financeSnapshot[0].result.invoices.find((row) => row.order_id === order.id);
+  assert.ok(invoice, "confirming the order should issue exactly one invoice visible to authorized staff");
+  assert.equal(invoice.status, "issued");
   assert.equal(Number(invoice.total_amount), 370000);
   const stockAfterConfirm = await db.unsafe(
     "select quantity_on_hand,quantity_reserved,quantity_available from public.inventory_balances where product_id=$1 and warehouse_id='d0000000-0000-0000-0000-000000000001'",
@@ -335,6 +333,68 @@ async function main() {
   assert.equal(invoiceAfterPayment[0].status, "partially_paid");
   const customerBalance = await db.unsafe("select current_balance from public.customers where id=(select customer_id from public.orders where id=$1)", [order.id]);
   assert.equal(Number(customerBalance[0].current_balance), 270000, "customer balance must reflect invoice minus payment");
+
+  // Customers receive allowed statement amounts only through the account-statement RPC.
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const statementSnapshot = await db.unsafe("select public.get_customer_account_statement() as result");
+  const statement = statementSnapshot[0].result;
+  const statementInvoice = statement.invoices.find((row) => row.id === invoice.id);
+  assert.ok(statementInvoice, "customer statement should include the customer's own invoice");
+  assert.equal(Number(statementInvoice.total_amount), 370000, "statement RPC may expose invoice totals on the authorized account-statement surface");
+  assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
+  assert.equal(Number(statement.payments[0].amount), 100000);
+
+  const safeInvoiceRows = await db.unsafe(
+    "select id,invoice_number,order_id,status,issued_at,currency from public.customer_invoices where id=$1",
+    [invoice.id],
+  );
+  assert.equal(safeInvoiceRows.length, 1, "customer may read non-financial invoice headers");
+  const safeInvoiceLines = await db.unsafe(
+    "select id,invoice_id,item_code,description,unit,quantity from public.customer_invoice_items where invoice_id=$1",
+    [invoice.id],
+  );
+  assert.equal(safeInvoiceLines.length, 1, "customer may read non-financial invoice line descriptions");
+  await expectFailure(
+    "customer direct invoice total access",
+    () => db.unsafe("select total_amount from public.customer_invoices where id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer SELECT * on invoices",
+    () => db.unsafe("select * from public.customer_invoices where id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer direct invoice line unit-price access",
+    () => db.unsafe("select unit_price from public.customer_invoice_items where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer direct invoice line total access",
+    () => db.unsafe("select line_total from public.customer_invoice_items where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer direct payment amount access",
+    () => db.unsafe("select amount from public.customer_payments where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer cannot call staff finance RPC",
+    () => db.unsafe("select public.fetch_staff_finance_data()"),
+    /staff role required/i,
+  );
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const authorizedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const staffInvoice = authorizedFinance[0].result.invoices.find((row) => row.id === invoice.id);
+  const staffPayment = authorizedFinance[0].result.payments.find((row) => row.invoice_id === invoice.id);
+  assert.equal(Number(staffInvoice.total_amount), 370000, "staff finance RPC retains invoice totals");
+  assert.equal(Number(staffPayment.amount), 100000, "staff finance RPC retains payment amounts");
 
   await db.unsafe("update public.orders set status='processing' where id=$1", [order.id]);
   await db.unsafe("update public.orders set status='shipped' where id=$1", [order.id]);
