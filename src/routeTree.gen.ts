@@ -595,34 +595,62 @@ const OrdersRouteChildren: OrdersRouteChildren = {
 
 const OrdersRouteWithChildren = OrdersRoute._addFileChildren(OrdersRouteChildren)
 
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: typeof IndexRoute,
-  AdminRoute: typeof AdminRoute,
-  AdminAiRoute: typeof AdminAiRoute,
-  AdminCustomersRoute: typeof AdminCustomersRoute,
-  AdminDataRoute: typeof AdminDataRoute,
-  AdminDevicesRoute: typeof AdminDevicesRoute,
-  AdminFinanceRoute: typeof AdminFinanceRoute,
-  AdminNotificationsRoute: typeof AdminNotificationsRoute,
-  AdminOffersRoute: typeof AdminOffersRoute,
-  AdminOperationsRoute: typeof AdminOperationsRoute,
-  AdminOrdersRoute: typeof AdminOrdersRoute,
-  AdminPricingRoute: typeof AdminPricingRoute,
-  AdminProductsRoute: typeof AdminProductsRoute,
-  AdminQuotesRoute: typeof AdminQuotesRoute,
-  AdminReportsRoute: typeof AdminReportsRoute,
-  AdminSettingsRoute: typeof AdminSettingsRoute,
-  AdminSuppliersRoute: typeof AdminSuppliersRoute,
-  AssistantRoute: typeof AssistantRoute,
-  BarcodeRoute: typeof BarcodeRoute,
-  InvoicesRoute: typeof InvoicesRoute,
-  LoginRoute: typeof LoginRoute,
-  OfflineRoute: typeof OfflineRoute,
-  OrdersRoute: typeof OrdersRouteWithChildren,
-  QuotesRoute: typeof QuotesRoute,
-  ReorderRoute: typeof ReorderRoute,
-  ResetPasswordRoute: typeof ResetPasswordRoute,
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  AdminAiRoute: typeof AdminAiRoute
+  AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminDataRoute: typeof AdminDataRoute
+  AdminDevicesRoute: typeof AdminDevicesRoute
+  AdminFinanceRoute: typeof AdminFinanceRoute
+  AdminNotificationsRoute: typeof AdminNotificationsRoute
+  AdminOffersRoute: typeof AdminOffersRoute
+  AdminOperationsRoute: typeof AdminOperationsRoute
+  AdminPricingRoute: typeof AdminPricingRoute
+  AdminProductsRoute: typeof AdminProductsRoute
+  AdminQuotesRoute: typeof AdminQuotesRoute
+  AdminReportsRoute: typeof AdminReportsRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminSuppliersRoute: typeof AdminSuppliersRoute
+  AssistantRoute: typeof AssistantRoute
+  BarcodeRoute: typeof BarcodeRoute
+  InvoicesRoute: typeof InvoicesRoute
+  LoginRoute: typeof LoginRoute
+  OfflineRoute: typeof OfflineRoute
+  OrdersRoute: typeof OrdersRouteWithChildren
+  QuotesRoute: typeof QuotesRoute
+  ReorderRoute: typeof ReorderRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   StatementRoute: typeof StatementRoute
+}
+
+const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  AdminAiRoute: AdminAiRoute,
+  AdminCustomersRoute: AdminCustomersRoute,
+  AdminDataRoute: AdminDataRoute,
+  AdminDevicesRoute: AdminDevicesRoute,
+  AdminFinanceRoute: AdminFinanceRoute,
+  AdminNotificationsRoute: AdminNotificationsRoute,
+  AdminOffersRoute: AdminOffersRoute,
+  AdminOperationsRoute: AdminOperationsRoute,
+  AdminPricingRoute: AdminPricingRoute,
+  AdminProductsRoute: AdminProductsRoute,
+  AdminQuotesRoute: AdminQuotesRoute,
+  AdminReportsRoute: AdminReportsRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminSuppliersRoute: AdminSuppliersRoute,
+  AssistantRoute: AssistantRoute,
+  BarcodeRoute: BarcodeRoute,
+  InvoicesRoute: InvoicesRoute,
+  LoginRoute: LoginRoute,
+  OfflineRoute: OfflineRoute,
+  OrdersRoute: OrdersRouteWithChildren,
+  QuotesRoute: QuotesRoute,
+  ReorderRoute: ReorderRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  StatementRoute: StatementRoute
 }
 
 export const routeTree = rootRouteImport
