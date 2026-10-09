@@ -9,11 +9,11 @@ import {
   createCategory, createCustomer, createProduct, createPricingRule, deletePricingRule, deleteProduct, fetchAiAlerts,
   fetchCategories, fetchCustomers, fetchDashboardStats, fetchOrders, fetchPricingRules,
   fetchProducts, fetchPromotions, togglePricingRule, togglePromotion,
-  updateCustomerStatus, updateProduct,
+  updateCustomerStatus, updatePricingRule, updateProduct,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber } from '@/lib/format';
-import type { Category, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
+import type { Category, CreatePricingRuleInput, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from '@tanstack/react-router';
 import { Login } from '@/components/Login';
@@ -256,6 +256,7 @@ function pricingTargetLabel(rule: PricingRule): string {
 function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
   const { data, loading, error, refetch } = useFetch(fetchPricingRules);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingRule, setEditingRule] = useState<PricingRule | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function toggle(rule: PricingRule) {
@@ -321,34 +322,72 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
           {(rule.min_price != null || rule.max_price != null) && <p>حد السعر: {rule.min_price == null ? '—' : formatCurrency(Number(rule.min_price))} – {rule.max_price == null ? '—' : formatCurrency(Number(rule.max_price))}</p>}
           {(rule.effective_from || rule.effective_until) && <p>الفترة: {rule.effective_from ? formatDateShort(rule.effective_from) : 'من البداية'} – {rule.effective_until ? formatDateShort(rule.effective_until) : 'بلا نهاية'}</p>}
           {awaitingApproval && <p role="status" style={{ color: '#9a5b13', fontWeight: 800 }}>بانتظار الموافقة — لن تدخل القاعدة في الاحتساب قبل اعتمادها.</p>}
+          {rule.requires_approval && <p role="status" style={{ color: '#9a5b13' }}>هذه القاعدة خاضعة للموافقة؛ التعديل المباشر معطل حتى لا يتجاوز حوكمة الاعتماد.</p>}
           {unsupported && <p role="alert" style={{ color: '#9a5b13' }}>هذه قاعدة قديمة بنطاق غير مدعوم في المحرك الحالي. لن يُسمح بتفعيلها مجددًا.</p>}
           {locked && <p role="status">قاعدة مقفلة يدويًا؛ التعديل والحذف معطلان.</p>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+            <Button variant="outline" disabled={locked || unsupported || Boolean(rule.requires_approval) || busyId === rule.id} onClick={() => setEditingRule(rule)}><Pencil size={15} /> تعديل القاعدة</Button>
             <Button variant="danger" disabled={locked || busyId === rule.id} onClick={() => void remove(rule)}><Trash2 size={15} /> حذف القاعدة</Button>
           </div>
         </article>;
       })}
     </div>}
-    {showCreate && <PricingRuleModal onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
+    {showCreate && <PricingRuleModal key="create" onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
+    {editingRule && <PricingRuleModal key={editingRule.id} rule={editingRule} onClose={() => setEditingRule(null)} onSaved={async () => { await refetch(); setEditingRule(null); onNotice('تم تحديث القاعدة وإعادة احتساب الأسعار وفق التغييرات'); }} />}
   </>;
 }
 
-function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> | void }) {
+function pricingRuleMethodForForm(rule?: PricingRule): CreatePricingRuleInput['calculation_method'] {
+  const legacy: Record<string, CreatePricingRuleInput['calculation_method']> = {
+    percentage: 'add_percentage',
+    margin: 'margin_percentage',
+    fixed: 'fixed_price',
+    amount: 'add_subtract_amount',
+  };
+  const candidate = rule?.calculation_method ?? legacy[rule?.adjustment_type ?? ''];
+  const supported = new Set<string>(['add_percentage', 'margin_percentage', 'fixed_price', 'add_subtract_amount']);
+  return candidate && supported.has(candidate)
+    ? candidate as CreatePricingRuleInput['calculation_method']
+    : 'add_percentage';
+}
+
+function pricingRuleScopeForForm(rule?: PricingRule): CreatePricingRuleInput['scope_type'] {
+  const supported = new Set<string>(['default', 'all', 'product', 'category']);
+  return rule && supported.has(rule.scope_type)
+    ? rule.scope_type as CreatePricingRuleInput['scope_type']
+    : 'default';
+}
+
+function pricingRuleTierForForm(rule?: PricingRule): CreatePricingRuleInput['target_tier'] {
+  const supported = new Set<string>(['both', 'wholesale', 'retail']);
+  return rule?.target_tier && supported.has(rule.target_tier)
+    ? rule.target_tier as CreatePricingRuleInput['target_tier']
+    : 'both';
+}
+
+function localDateTimeValue(value?: string | null): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function PricingRuleModal({ rule, onClose, onSaved }: { rule?: PricingRule; onClose: () => void; onSaved: () => Promise<void> | void }) {
   const { data: products, loading: productsLoading } = useFetch(fetchProducts);
   const { data: categories, loading: categoriesLoading } = useFetch(fetchCategories);
-  const [name, setName] = useState('');
-  const [scopeType, setScopeType] = useState<'default' | 'all' | 'product' | 'category'>('default');
-  const [scopeValue, setScopeValue] = useState('');
-  const [targetTier, setTargetTier] = useState<'both' | 'wholesale' | 'retail'>('both');
-  const [method, setMethod] = useState<'add_percentage' | 'margin_percentage' | 'fixed_price' | 'add_subtract_amount'>('add_percentage');
-  const [baseSource, setBaseSource] = useState<'base_price' | 'cost_price'>('base_price');
-  const [adjustmentValue, setAdjustmentValue] = useState('10');
-  const [minQuantity, setMinQuantity] = useState('1');
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
-  const [priority, setPriority] = useState('100');
-  const [effectiveFrom, setEffectiveFrom] = useState('');
-  const [effectiveUntil, setEffectiveUntil] = useState('');
+  const [name, setName] = useState(rule?.name ?? '');
+  const [scopeType, setScopeType] = useState<CreatePricingRuleInput['scope_type']>(pricingRuleScopeForForm(rule));
+  const [scopeValue, setScopeValue] = useState(rule?.scope_value ?? '');
+  const [targetTier, setTargetTier] = useState<CreatePricingRuleInput['target_tier']>(pricingRuleTierForForm(rule));
+  const [method, setMethod] = useState<CreatePricingRuleInput['calculation_method']>(pricingRuleMethodForForm(rule));
+  const [baseSource, setBaseSource] = useState<CreatePricingRuleInput['base_source']>(rule?.base_source === 'cost_price' || rule?.base_type === 'cost_price' ? 'cost_price' : 'base_price');
+  const [adjustmentValue, setAdjustmentValue] = useState(String(rule?.adjustment_value ?? 10));
+  const [minQuantity, setMinQuantity] = useState(String(rule?.min_quantity ?? 1));
+  const [minPrice, setMinPrice] = useState(rule?.min_price == null ? '' : String(rule.min_price));
+  const [maxPrice, setMaxPrice] = useState(rule?.max_price == null ? '' : String(rule.max_price));
+  const [priority, setPriority] = useState(String(rule?.priority ?? 100));
+  const [effectiveFrom, setEffectiveFrom] = useState(localDateTimeValue(rule?.effective_from));
+  const [effectiveUntil, setEffectiveUntil] = useState(localDateTimeValue(rule?.effective_until));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -381,7 +420,7 @@ function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     setError('');
     try {
       const toIso = (date: string) => date ? new Date(date).toISOString() : null;
-      await createPricingRule({
+      const input: CreatePricingRuleInput = {
         name: name.trim(),
         scope_type: scopeType,
         scope_value: scopeType === 'product' || scopeType === 'category' ? scopeValue : null,
@@ -395,16 +434,18 @@ function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         priority: rank,
         effective_from: toIso(effectiveFrom),
         effective_until: toIso(effectiveUntil),
-      });
+      };
+      if (rule) await updatePricingRule(rule.id, input);
+      else await createPricingRule(input);
       await onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'تعذر إنشاء قاعدة التسعير.');
+      setError(cause instanceof Error ? cause.message : rule ? 'تعذر تحديث قاعدة التسعير.' : 'تعذر إنشاء قاعدة التسعير.');
     } finally {
       setSaving(false);
     }
   }
 
-  return <Modal title="إنشاء قاعدة تسعير" onClose={onClose}>
+  return <Modal title={rule ? "تعديل قاعدة التسعير" : "إنشاء قاعدة تسعير"} onClose={onClose}>
     <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
       <Field label="اسم القاعدة"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required placeholder="مثال: جملة بكمية كبيرة" /></Field>
       <div className="form-grid">
@@ -437,9 +478,9 @@ function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         <Field label="وقت بدء القاعدة (اختياري)"><input type="datetime-local" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
         <Field label="وقت انتهاء القاعدة (اختياري)"><input type="datetime-local" value={effectiveUntil} onChange={(event) => setEffectiveUntil(event.target.value)} /></Field>
       </div>
-      <p style={{ color: '#71868a', fontSize: 12, lineHeight: 1.7 }}>الحفظ لا يغيّر قائمة الأسعار يدويًا؛ قاعدة البيانات تحسب الجملة والتجزئة وتكتب سجل التدقيق. لا تُطبّق القاعدة إلا ضمن النطاق والشريحة والكمية والفترة المختارة.</p>
+      <p style={{ color: '#71868a', fontSize: 12, lineHeight: 1.7 }}>{rule ? 'سيُحدّث المحرك هذه القاعدة ويزيد رقم إصدارها ويسجل التغيير، ثم يعيد احتساب الأسعار ضمن النطاق والشريحة والكمية والفترة المختارة.' : 'الحفظ لا يغيّر قائمة الأسعار يدويًا؛ قاعدة البيانات تحسب الجملة والتجزئة وتكتب سجل التدقيق. لا تُطبّق القاعدة إلا ضمن النطاق والشريحة والكمية والفترة المختارة.'}</p>
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="btn outline" onClick={onClose} disabled={saving}>إلغاء</button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : 'حفظ قاعدة التسعير'}</Button></div>
+      <div className="modal-actions"><button type="button" className="btn outline" onClick={onClose} disabled={saving}>إلغاء</button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : rule ? 'حفظ التعديلات' : 'حفظ قاعدة التسعير'}</Button></div>
     </form>
   </Modal>;
 }
