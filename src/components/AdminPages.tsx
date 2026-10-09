@@ -3,7 +3,7 @@ import { useBlocker } from '@tanstack/react-router';
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
-  X, ExternalLink, Users, Save,
+  X, ExternalLink, Save,
 } from 'lucide-react';
 import {
   fetchAiAlerts, fetchAiTasks, fetchNotifications, fetchOrders, fetchOrderItems,
@@ -415,16 +415,20 @@ function OrganizationRoleManagement({ currentProfileId, onNotice }: { currentPro
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    const result = await supabase.rpc('list_organization_user_roles');
-    if (result.error) {
-      setError('تعذر تحميل حسابات المؤسسة وصلاحياتها. تحقق من نشر ترحيل إدارة الأدوار.');
+    try {
+      const result = await supabase.rpc('list_organization_user_roles');
+      if (result.error) {
+        setError('تعذر تحميل حسابات المؤسسة وصلاحياتها. تحقق من نشر ترحيل إدارة الأدوار.');
+        return;
+      }
+      const loaded = (Array.isArray(result.data) ? result.data : []) as ManagedOrganizationProfile[];
+      setRows(loaded);
+      setDrafts(Object.fromEntries(loaded.map((profile) => [profile.profile_id, [...(profile.roles ?? [])]])));
+    } catch {
+      setError('تعذر الاتصال بالخادم لتحميل حسابات المؤسسة.');
+    } finally {
       setLoading(false);
-      return;
     }
-    const loaded = (Array.isArray(result.data) ? result.data : []) as ManagedOrganizationProfile[];
-    setRows(loaded);
-    setDrafts(Object.fromEntries(loaded.map((profile) => [profile.profile_id, [...(profile.roles ?? [])]])));
-    setLoading(false);
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -477,6 +481,8 @@ function OrganizationRoleManagement({ currentProfileId, onNotice }: { currentPro
       }
       onNotice('تم حفظ أدوار ' + profile.full_name + ' وتسجيل التغيير في سجل التدقيق.');
       await load();
+    } catch {
+      setError('تعذر الاتصال بالخادم لحفظ الأدوار. أعد التحميل للتحقق من الحالة الحالية.');
     } finally {
       setSavingProfileId(null);
     }
