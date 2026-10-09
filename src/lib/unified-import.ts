@@ -29,6 +29,11 @@ export function stableJsonStringify(value: unknown): string {
 }
 
 
+/** UI and resume handler must agree on exactly which incomplete states can be resumed. */
+export function canResumeImportStatus(status: string, hasUploadSession: boolean): boolean {
+  return hasUploadSession && ['staging', 'uploading', 'failed'].includes(status);
+}
+
 /** Persist rows only for unverified chunks, except the final EOF row which may be missing if a prior run stopped after checkpointing the last chunk. */
 export function shouldPersistParsedImportRow(
   chunkNumber: number,
