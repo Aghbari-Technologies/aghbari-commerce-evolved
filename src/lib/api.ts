@@ -343,22 +343,62 @@ export async function createImportJob(input: {
   fileHash: string;
   fileSize: number;
   jobType: string;
-  totalRows: number;
+  totalRows?: number;
+  profileId?: string | null;
+  periodKey?: string | null;
+  sourceSystem?: string;
 }): Promise<ImportJob> {
-  const { data, error } = await supabase.from('import_jobs').insert({
-    organization_id: ORG_ID,
-    file_name: input.fileName,
-    file_hash: input.fileHash,
-    file_size: input.fileSize,
-    job_type: input.jobType,
-    total_rows: input.totalRows,
-    status: 'staging',
-    processed_rows: 0,
-    success_rows: 0,
-    failed_rows: 0,
-  }).select().single();
+  // Tenant identity is derived by the database from auth.uid(); no organization_id comes from the browser.
+  const { data, error } = await supabase.rpc('create_import_job', {
+    p_file_name: input.fileName,
+    p_file_hash: input.fileHash,
+    p_file_size: input.fileSize,
+    p_job_type: input.jobType,
+    p_profile_id: input.profileId ?? null,
+    p_period_key: input.periodKey ?? null,
+    p_source_system: input.sourceSystem ?? 'manual',
+  });
   if (error) throw error;
   return data as ImportJob;
+}
+
+export async function finalizeImportJob(jobId: string): Promise<{
+  job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
+  snapshot_id: string | null; review_required: boolean;
+}> {
+  const { data, error } = await supabase.rpc('finalize_import_job', { p_job_id: jobId });
+  if (error) throw error;
+  return data as {
+    job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
+    snapshot_id: string | null; review_required: boolean;
+  };
+}
+
+export async function fetchImportProfiles() {
+  const { data, error } = await supabase.from('import_profiles').select('*').order('profile_name').order('version', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchOnyxSnapshots() {
+  const { data, error } = await supabase.from('onyx_snapshots').select('*').eq('status', 'ready').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchOnyxSnapshotRows(snapshotId: string) {
+  const { data, error } = await supabase.from('onyx_snapshot_rows').select('*').eq('snapshot_id', snapshotId).order('row_number').limit(100000);
+  if (error) throw error;
+  return data;
+}
+
+export async function runInventoryReconciliation(snapshotId: string) {
+  const { data, error } = await supabase.rpc('run_inventory_reconciliation', { p_snapshot_id: snapshotId });
+  if (error) throw error;
+  return data as {
+    run_id: string; snapshot_id: string; source_row_count: number; matched_count: number;
+    changed_count: number; new_count: number; invalid_count: number;
+  };
 }
 
 export async function insertImportRows(jobId: string, rows: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors?: string[] }>): Promise<void> {
@@ -378,7 +418,8 @@ export async function updateImportJob(id: string, updates: Partial<ImportJob>): 
 }
 
 export async function fetchImportJobs(): Promise<ImportJob[]> {
-  const { data, error } = await supabase.from('import_jobs').select('*').eq('organization_id', ORG_ID).order('created_at', { ascending: false }).limit(30);
+  // Tenant-scoped RLS filters rows from the authenticated profile, not a browser-provided org ID.
+  const { data, error } = await supabase.from('import_jobs').select('*').order('created_at', { ascending: false }).limit(30);
   if (error) throw error;
   return data as ImportJob[];
 }
