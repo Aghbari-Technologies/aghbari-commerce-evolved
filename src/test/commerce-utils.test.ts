@@ -9,6 +9,13 @@ describe('commerce completion utilities', () => {
     )).toEqual({ invoiced: 175.5, paid: 35.5, outstanding: 140 });
   });
 
+  it('excludes void invoices from the account balance', () => {
+    expect(summarizeAccount(
+      [{ id: 'live', total_amount: 100 }, { id: 'void', total_amount: 500, status: 'void' }],
+      [{ invoice_id: 'live', amount: 20 }, { invoice_id: 'void', amount: 500 }],
+    )).toEqual({ invoiced: 100, paid: 20, outstanding: 80 });
+  });
+
   it('rejects malformed, duplicate, fractional, and unbounded offline cart lines', () => {
     expect(normalizeCartDraft([
       { product_id: 'p1', quantity: 2 },
