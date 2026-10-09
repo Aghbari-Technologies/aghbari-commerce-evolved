@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, Minus, Plus, Search, ShoppingCart, Trash2,
   Package, Tag, Phone, MapPin, Mail, Check, ChevronLeft, Menu,
   Heart, GitCompare, ArrowRight,
 } from 'lucide-react';
-import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap, createOrder } from '@/lib/api';
+import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { normalizeCartDraft } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { Link } from '@tanstack/react-router';
@@ -18,19 +19,52 @@ type StoreView = 'shop' | 'product' | 'wishlist' | 'compare' | 'cart' | 'checkou
 
 export function Storefront({ onExit }: { onExit: () => void }) {
   const { user } = useAuth();
-  const { data: products } = useFetch(fetchProducts);
+  const { data: liveProducts } = useFetch(fetchProducts);
+  const [cachedProducts, setCachedProducts] = useState<ProductWithInventory[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { const value = JSON.parse(window.localStorage.getItem('aghbari:catalog:v1') || '[]') as unknown; return Array.isArray(value) ? value as ProductWithInventory[] : []; } catch { return []; }
+  });
+  const products = liveProducts ?? cachedProducts;
   const { data: categories } = useFetch(fetchCategories);
   const { data: promotions } = useFetch(fetchPromotions);
   const { data: settings } = useFetch(fetchSettingsMap);
   const [view, setView] = useState<StoreView>('shop');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartRestored, setCartRestored] = useState(false);
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState<string>('');
   const [mobileMenu, setMobileMenu] = useState(false);
   const [lastOrderNo, setLastOrderNo] = useState('');
+  const [lastOrderId, setLastOrderId] = useState('');
+  const [lastOrderTotal, setLastOrderTotal] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(null);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [compare, setCompare] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!liveProducts) return;
+    setCachedProducts(liveProducts);
+    try { window.localStorage.setItem('aghbari:catalog:v1', JSON.stringify(liveProducts)); } catch { /* storage is optional */ }
+  }, [liveProducts]);
+
+  useEffect(() => {
+    if (cartRestored || !products?.length || typeof window === 'undefined') return;
+    try {
+      const normal = (value: string | null) => normalizeCartDraft(value ? JSON.parse(value) as unknown : []);
+      const base = normal(window.localStorage.getItem('aghbari:cart:v1'));
+      const restore = normal(window.localStorage.getItem('aghbari:cart-restore:v1'));
+      const merged = new Map<string, number>();
+      for (const line of [...base, ...restore]) merged.set(line.product_id, Math.min(10000, (merged.get(line.product_id) ?? 0) + line.quantity));
+      setCart([...merged.entries()].map(([product_id, quantity]) => ({ product: products.find(p => p.id === product_id), quantity })).filter((line): line is CartItem => Boolean(line.product)));
+      window.localStorage.removeItem('aghbari:cart-restore:v1');
+    } catch { /* ignore malformed local drafts; never block online checkout */ }
+    setCartRestored(true);
+  }, [products, cartRestored]);
+
+  useEffect(() => {
+    if (!cartRestored) return;
+    try { window.localStorage.setItem('aghbari:cart:v1', JSON.stringify(cart.map(item => ({ product_id: item.product.id, quantity: item.quantity })))); } catch { /* the online shop still works without storage */ }
+  }, [cart, cartRestored]);
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + i.product.base_price * i.quantity, 0);
@@ -82,6 +116,10 @@ export function Storefront({ onExit }: { onExit: () => void }) {
         {categories?.map((c: Category) => <button key={c.id} className={activeCat === c.id ? 'active' : ''} onClick={() => { setActiveCat(c.id); setMobileMenu(false); }}>{c.name}</button>)}
       </nav>
 
+      <div aria-label="أدوات الحساب التجاري" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', padding: '10px 16px', borderBottom: '1px solid #e4eeee', background: '#fff' }}>
+        {[['/invoices', 'الفواتير'], ['/statement', 'كشف الحساب'], ['/quotes', 'عروض الأسعار'], ['/reorder', 'إعادة الطلب'], ['/barcode', 'ماسح الباركود'], ['/assistant', 'المساعد الذكي'], ['/offline', 'دون اتصال']].map(([to, label]) => <Link key={to} to={to as never} style={{ textDecoration: 'none', color: '#0b7b89', border: '1px solid #d8e9e9', borderRadius: 18, padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>{label}</Link>)}
+      </div>
+
       <main className="sf-main">
         {view === 'shop' && (
           <>
@@ -127,8 +165,8 @@ export function Storefront({ onExit }: { onExit: () => void }) {
           </section>
         )}
 
-        {view === 'checkout' && <Checkout cart={cart} total={cartTotal} onBack={() => setView('cart')} onComplete={(orderNo) => { setLastOrderNo(orderNo); setView('confirm'); setCart([]); }} />}
-        {view === 'confirm' && <OrderConfirm orderNo={lastOrderNo} onContinue={() => setView('shop')} />}
+        {view === 'checkout' && <Checkout cart={cart} total={cartTotal} onBack={() => setView('cart')} onComplete={(order) => { setLastOrderNo(order.order_number); setLastOrderId(order.id); setLastOrderTotal(order.total_amount); setView('confirm'); setCart([]); }} />}
+        {view === 'confirm' && <OrderConfirm orderNo={lastOrderNo} orderId={lastOrderId} total={lastOrderTotal} onContinue={() => setView('shop')} />}
       </main>
 
       <footer className="sf-footer">
@@ -157,7 +195,7 @@ function CollectionView({ title, icon: Icon, products, wishlist, compare, onOpen
   return <section className="sf-collection"><button className="sf-back-link" onClick={onBack}><ArrowRight size={16} /> العودة للمتجر</button><div className="sf-products-head"><div><h2><Icon size={21} /> {title}</h2><span>{products.length} منتجات</span></div></div>{products.length ? <ProductGrid products={products} wishlist={wishlist} compare={compare} onOpen={onOpen} onAdd={onAdd} onWishlist={onWishlist} onCompare={onCompare} /> : <div className="sf-empty"><Icon size={32} /><span>{empty}</span><button className="sf-link" onClick={onBack}>تصفح الكتالوج</button></div>}</section>;
 }
 
-function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total: number; onBack: () => void; onComplete: (orderNo: string) => void }) {
+function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total: number; onBack: () => void; onComplete: (order: { id: string; order_number: string; total_amount: number }) => void }) {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState('');
@@ -176,7 +214,12 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
         _notes: notes.trim(), _business_name: business.trim(), _contact_name: name.trim(), _phone: phone.trim(),
       });
       if (rpcError) throw new Error(rpcError.message || 'تعذر إرسال الطلب');
-      onComplete((data as { order_number: string }).order_number);
+      const result = data as { id?: unknown; order_number?: unknown; total_amount?: unknown } | null;
+      const serverTotal = typeof result?.total_amount === 'number' ? result.total_amount : Number(result?.total_amount);
+      if (!result || typeof result.id !== 'string' || !result.id || typeof result.order_number !== 'string' || !result.order_number || !Number.isFinite(serverTotal) || serverTotal < 0) {
+        throw new Error('استجابة الخادم غير مكتملة؛ لم نعرض الطلب كتأكيد ناجح. راجع طلباتي قبل إعادة الإرسال.');
+      }
+      onComplete({ id: result.id, order_number: result.order_number, total_amount: serverTotal });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذر إرسال الطلب');
     } finally { setSubmitting(false); }
@@ -204,14 +247,15 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
   );
 }
 
-function OrderConfirm({ orderNo, onContinue }: { orderNo: string; onContinue: () => void }) {
+function OrderConfirm({ orderNo, orderId, total, onContinue }: { orderNo: string; orderId: string; total: number; onContinue: () => void }) {
   return (
     <section className="sf-confirm">
       <div className="sf-confirm-icon"><Check size={40} /></div>
       <h2>تم استلام طلبك بنجاح!</h2>
       <p>رقم الطلب: <strong>{orderNo}</strong></p>
-      <p>سنتواصل معك قريباً لتأكيد الطلب وتفاصيل التوصيل.</p>
-      <button className="sf-btn-primary" onClick={onContinue}>متابعة التسوق</button>
+      <p>الإجمالي المعتمد من الخادم: <strong>{formatCurrency(total)}</strong></p>
+      <p>سنتواصل معك لتأكيد تفاصيل التوصيل. لا يمثل هذا إشعار دفع أو شحن.</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}><Link to="/orders/$id" params={{ id: orderId }} className="sf-btn-secondary" style={{ textDecoration: 'none', padding: '10px 14px' }}>تفاصيل الطلب</Link><button className="sf-btn-primary" onClick={onContinue}>متابعة التسوق</button></div>
     </section>
   );
 }
