@@ -1,0 +1,900 @@
+-- Additive platform foundations for the unified import, isolated Onyx analytics,
+-- inventory reconciliation, AI governance, queues, pricing, and order review requirements.
+-- This migration does not write to any remote Supabase project; run only after project identity is verified.
+
+CREATE TABLE IF NOT EXISTS public.import_profiles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  profile_name text NOT NULL,
+  report_type text NOT NULL,
+  source text NOT NULL DEFAULT 'manual',
+  version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+  required_columns jsonb NOT NULL DEFAULT '["item_code"]'::jsonb CHECK (jsonb_typeof(required_columns)='array'),
+  optional_columns jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(optional_columns)='array'),
+  ignored_columns jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(ignored_columns)='array'),
+  synonyms jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(synonyms)='object'),
+  transformation_rules jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(transformation_rules)='array'),
+  validation_rules jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(validation_rules)='array'),
+  matching_key text NOT NULL DEFAULT 'item_code',
+  merge_strategy text NOT NULL DEFAULT 'manual_review'
+    CHECK (merge_strategy IN ('auto_accept','existing_wins','incoming_wins','manual_review','reject_row')),
+  date_rules jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(date_rules)='object'),
+  is_full_dataset boolean NOT NULL DEFAULT false,
+  status text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','archived')),
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  published_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, profile_name, version)
+);
+
+CREATE TABLE IF NOT EXISTS public.central_synonym_dictionary (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  profile_id uuid REFERENCES public.import_profiles(id) ON DELETE CASCADE,
+  source_header text NOT NULL,
+  normalized_header text NOT NULL,
+  canonical_field text NOT NULL,
+  locale text NOT NULL DEFAULT 'ar',
+  normalization_version integer NOT NULL DEFAULT 1 CHECK (normalization_version > 0),
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS central_synonym_dictionary_unique_idx
+  ON public.central_synonym_dictionary(organization_id, coalesce(profile_id,'00000000-0000-0000-0000-000000000000'::uuid), normalized_header, locale);
+CREATE INDEX IF NOT EXISTS central_synonym_dictionary_lookup_idx
+  ON public.central_synonym_dictionary(organization_id, normalized_header);
+
+CREATE TABLE IF NOT EXISTS public.import_upload_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  profile_id uuid REFERENCES public.import_profiles(id) ON DELETE SET NULL,
+  profile_version integer,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  file_name text NOT NULL,
+  file_type text NOT NULL,
+  file_size bigint NOT NULL CHECK (file_size BETWEEN 1 AND 104857600),
+  file_hash text NOT NULL CHECK (file_hash ~ '^[0-9a-f]{64}$'),
+  period_key text,
+  chunk_size_bytes integer NOT NULL DEFAULT 4194304 CHECK (chunk_size_bytes BETWEEN 2097152 AND 5242880),
+  total_chunks integer NOT NULL DEFAULT 0 CHECK (total_chunks >= 0),
+  verified_chunks integer NOT NULL DEFAULT 0 CHECK (verified_chunks >= 0),
+  status text NOT NULL DEFAULT 'created' CHECK (status IN ('created','uploading','uploaded','processing','completed','failed','cancelled','expired')),
+  extraction_status text NOT NULL DEFAULT 'pending',
+  retention_expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
+  purge_status text NOT NULL DEFAULT 'not_required' CHECK (purge_status IN ('not_required','pending','completed','failed')),
+  purged_at timestamptz,
+  raw_file_retained boolean NOT NULL DEFAULT false CHECK (raw_file_retained=false),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (verified_chunks <= total_chunks)
+);
+CREATE INDEX IF NOT EXISTS import_upload_sessions_duplicate_lookup_idx
+  ON public.import_upload_sessions(organization_id, profile_id, file_hash, period_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS import_upload_sessions_retention_idx
+  ON public.import_upload_sessions(retention_expires_at, purge_status);
+
+CREATE TABLE IF NOT EXISTS public.import_upload_chunks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id uuid NOT NULL REFERENCES public.import_upload_sessions(id) ON DELETE CASCADE,
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  chunk_number integer NOT NULL CHECK (chunk_number >= 0),
+  byte_offset bigint NOT NULL CHECK (byte_offset >= 0),
+  byte_size integer NOT NULL CHECK (byte_size > 0 AND byte_size <= 5242880),
+  chunk_hash text NOT NULL CHECK (chunk_hash ~ '^[0-9a-f]{64}$'),
+  verified_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (session_id, chunk_number)
+);
+CREATE INDEX IF NOT EXISTS import_upload_chunks_session_idx
+  ON public.import_upload_chunks(session_id, chunk_number);
+
+ALTER TABLE public.import_jobs
+  ADD COLUMN IF NOT EXISTS profile_id uuid REFERENCES public.import_profiles(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS profile_version integer,
+  ADD COLUMN IF NOT EXISTS period_key text,
+  ADD COLUMN IF NOT EXISTS source_system text NOT NULL DEFAULT 'manual',
+  ADD COLUMN IF NOT EXISTS upload_session_id uuid REFERENCES public.import_upload_sessions(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS quality_breakdown jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS review_required boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS merge_strategy text NOT NULL DEFAULT 'manual_review',
+  ADD COLUMN IF NOT EXISTS retention_expires_at timestamptz,
+  ADD COLUMN IF NOT EXISTS purge_status text NOT NULL DEFAULT 'not_required',
+  ADD COLUMN IF NOT EXISTS raw_file_retained boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS import_jobs_org_created_idx
+  ON public.import_jobs(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS import_jobs_profile_hash_period_idx
+  ON public.import_jobs(organization_id, profile_id, file_hash, period_key)
+  WHERE file_hash IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS public.onyx_snapshots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  source_import_job_id uuid NOT NULL REFERENCES public.import_jobs(id) ON DELETE RESTRICT,
+  profile_id uuid REFERENCES public.import_profiles(id) ON DELETE SET NULL,
+  profile_version integer,
+  snapshot_version integer NOT NULL DEFAULT 1 CHECK (snapshot_version > 0),
+  source_file_hash text NOT NULL,
+  source_file_name text,
+  report_type text NOT NULL,
+  row_count integer NOT NULL DEFAULT 0 CHECK (row_count >= 0),
+  data_quality_score integer NOT NULL CHECK (data_quality_score BETWEEN 0 AND 100),
+  quality_breakdown jsonb NOT NULL DEFAULT '{}'::jsonb,
+  normalization_version integer NOT NULL DEFAULT 1,
+  metrics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'building' CHECK (status IN ('building','ready','failed','archived')),
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, source_import_job_id, snapshot_version)
+);
+CREATE INDEX IF NOT EXISTS onyx_snapshots_org_created_idx
+  ON public.onyx_snapshots(organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.onyx_snapshot_rows (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  snapshot_id uuid NOT NULL REFERENCES public.onyx_snapshots(id) ON DELETE RESTRICT,
+  row_number integer NOT NULL CHECK (row_number > 0),
+  canonical_key text,
+  row_hash text NOT NULL,
+  status text NOT NULL,
+  data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  errors jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (snapshot_id, row_number)
+);
+CREATE INDEX IF NOT EXISTS onyx_snapshot_rows_identity_idx
+  ON public.onyx_snapshot_rows(snapshot_id, canonical_key);
+CREATE INDEX IF NOT EXISTS onyx_snapshot_rows_org_snapshot_idx
+  ON public.onyx_snapshot_rows(organization_id, snapshot_id);
+
+CREATE TABLE IF NOT EXISTS public.inventory_reconciliation_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  snapshot_id uuid NOT NULL REFERENCES public.onyx_snapshots(id) ON DELETE RESTRICT,
+  status text NOT NULL DEFAULT 'completed' CHECK (status IN ('queued','running','completed','failed','cancelled')),
+  source_row_count integer NOT NULL DEFAULT 0,
+  matched_count integer NOT NULL DEFAULT 0,
+  changed_count integer NOT NULL DEFAULT 0,
+  new_count integer NOT NULL DEFAULT 0,
+  invalid_count integer NOT NULL DEFAULT 0,
+  error_summary jsonb NOT NULL DEFAULT '[]'::jsonb,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS inventory_reconciliation_runs_org_created_idx
+  ON public.inventory_reconciliation_runs(organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.inventory_reconciliation_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  run_id uuid NOT NULL REFERENCES public.inventory_reconciliation_runs(id) ON DELETE CASCADE,
+  snapshot_row_id uuid REFERENCES public.onyx_snapshot_rows(id) ON DELETE SET NULL,
+  item_code text NOT NULL,
+  product_id uuid REFERENCES public.products(id) ON DELETE SET NULL,
+  imported_quantity numeric(15,3),
+  live_quantity numeric(15,3),
+  difference numeric(15,3),
+  outcome text NOT NULL CHECK (outcome IN ('matched','changed','new','invalid')),
+  notes jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS inventory_reconciliation_items_run_idx
+  ON public.inventory_reconciliation_items(run_id, outcome);
+
+CREATE TABLE IF NOT EXISTS public.background_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  queue_name text NOT NULL CHECK (queue_name IN ('import','analytics','forecast','ai','export_notification','reconciliation')),
+  job_type text NOT NULL,
+  status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','paused','succeeded','failed','cancelled','dead_letter')),
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  progress_percent numeric(5,2) NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+  total_units bigint NOT NULL DEFAULT 0 CHECK (total_units >= 0),
+  processed_units bigint NOT NULL DEFAULT 0 CHECK (processed_units >= 0),
+  failed_units bigint NOT NULL DEFAULT 0 CHECK (failed_units >= 0),
+  current_stage text,
+  estimated_seconds_remaining integer CHECK (estimated_seconds_remaining IS NULL OR estimated_seconds_remaining >= 0),
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  max_attempts integer NOT NULL DEFAULT 5 CHECK (max_attempts BETWEEN 1 AND 25),
+  memory_budget_mb integer NOT NULL DEFAULT 256 CHECK (memory_budget_mb BETWEEN 16 AND 4096),
+  timeout_seconds integer NOT NULL DEFAULT 300 CHECK (timeout_seconds BETWEEN 1 AND 86400),
+  cancel_requested boolean NOT NULL DEFAULT false,
+  pause_requested boolean NOT NULL DEFAULT false,
+  locked_by text,
+  locked_at timestamptz,
+  last_error jsonb,
+  scheduled_at timestamptz NOT NULL DEFAULT now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS background_jobs_queue_claim_idx
+  ON public.background_jobs(queue_name, status, scheduled_at, created_at);
+CREATE INDEX IF NOT EXISTS background_jobs_org_created_idx
+  ON public.background_jobs(organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.background_job_attempts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  job_id uuid NOT NULL REFERENCES public.background_jobs(id) ON DELETE CASCADE,
+  attempt_number integer NOT NULL CHECK (attempt_number > 0),
+  status text NOT NULL CHECK (status IN ('running','succeeded','failed','cancelled','dead_letter')),
+  stage text,
+  input_units bigint NOT NULL DEFAULT 0,
+  output_units bigint NOT NULL DEFAULT 0,
+  duration_ms bigint,
+  memory_peak_mb integer,
+  error_class text,
+  error_detail jsonb,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  UNIQUE (job_id, attempt_number)
+);
+
+CREATE TABLE IF NOT EXISTS public.ai_usage_budgets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  daily_cost_limit numeric(15,6) NOT NULL DEFAULT 0 CHECK (daily_cost_limit >= 0),
+  monthly_cost_limit numeric(15,6) NOT NULL DEFAULT 0 CHECK (monthly_cost_limit >= 0),
+  daily_token_limit bigint NOT NULL DEFAULT 0 CHECK (daily_token_limit >= 0),
+  monthly_token_limit bigint NOT NULL DEFAULT 0 CHECK (monthly_token_limit >= 0),
+  per_request_cost_limit numeric(15,6) NOT NULL DEFAULT 0 CHECK (per_request_cost_limit >= 0),
+  ai_enabled boolean NOT NULL DEFAULT false,
+  fallback_enabled boolean NOT NULL DEFAULT true,
+  updated_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.ai_usage_ledger (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  request_id text NOT NULL,
+  model_name text NOT NULL,
+  input_tokens bigint NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+  output_tokens bigint NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+  estimated_cost numeric(15,6) NOT NULL DEFAULT 0 CHECK (estimated_cost >= 0),
+  execution_time_ms bigint NOT NULL DEFAULT 0 CHECK (execution_time_ms >= 0),
+  fallback_used boolean NOT NULL DEFAULT false,
+  result_status text NOT NULL DEFAULT 'completed' CHECK (result_status IN ('completed','failed','rejected_quota','fallback')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, request_id)
+);
+CREATE INDEX IF NOT EXISTS ai_usage_ledger_org_created_idx
+  ON public.ai_usage_ledger(organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.ai_recommendation_cards (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  snapshot_id uuid REFERENCES public.onyx_snapshots(id) ON DELETE SET NULL,
+  recommendation_type text NOT NULL,
+  title text NOT NULL,
+  explanation text NOT NULL,
+  why text NOT NULL,
+  source_metrics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  calculation jsonb NOT NULL DEFAULT '{}'::jsonb,
+  confidence_score numeric(5,4) CHECK (confidence_score BETWEEN 0 AND 1),
+  expected_impact jsonb NOT NULL DEFAULT '{}'::jsonb,
+  suggested_action text,
+  suggested_action_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open','accepted','dismissed','completed','expired')),
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ai_recommendation_cards_org_status_idx
+  ON public.ai_recommendation_cards(organization_id, status, created_at DESC);
+
+ALTER TABLE public.outbox_events
+  ADD COLUMN IF NOT EXISTS event_key text,
+  ADD COLUMN IF NOT EXISTS payload_schema_version integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS locked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS locked_by text,
+  ADD COLUMN IF NOT EXISTS processed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS dead_letter_at timestamptz,
+  ADD COLUMN IF NOT EXISTS last_error jsonb;
+CREATE INDEX IF NOT EXISTS outbox_events_pending_claim_idx
+  ON public.outbox_events(status, next_attempt_at, created_at)
+  WHERE status IN ('pending','retry');
+CREATE UNIQUE INDEX IF NOT EXISTS outbox_events_idempotency_uidx
+  ON public.outbox_events(organization_id, event_type, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+ALTER TABLE public.products
+  ADD COLUMN IF NOT EXISTS retail_price numeric(15,2),
+  ADD COLUMN IF NOT EXISTS wholesale_price numeric(15,2),
+  ADD COLUMN IF NOT EXISTS search_name_norm text,
+  ADD COLUMN IF NOT EXISTS normalization_version integer NOT NULL DEFAULT 1;
+UPDATE public.products
+   SET retail_price = base_price WHERE retail_price IS NULL;
+UPDATE public.products
+   SET wholesale_price = base_price WHERE wholesale_price IS NULL;
+UPDATE public.products
+   SET search_name_norm = lower(name) WHERE search_name_norm IS NULL;
+ALTER TABLE public.products
+  ALTER COLUMN retail_price SET DEFAULT 0,
+  ALTER COLUMN retail_price SET NOT NULL,
+  ALTER COLUMN wholesale_price SET DEFAULT 0,
+  ALTER COLUMN wholesale_price SET NOT NULL,
+  ALTER COLUMN search_name_norm SET NOT NULL;
+CREATE INDEX IF NOT EXISTS products_item_code_prefix_idx ON public.products(item_code text_pattern_ops);
+CREATE INDEX IF NOT EXISTS products_barcode_idx ON public.products(organization_id, barcode) WHERE barcode IS NOT NULL;
+CREATE INDEX IF NOT EXISTS products_search_name_norm_idx ON public.products(organization_id, search_name_norm text_pattern_ops);
+
+ALTER TABLE public.pricing_rules
+  ADD COLUMN IF NOT EXISTS target_tier text NOT NULL DEFAULT 'both',
+  ADD COLUMN IF NOT EXISTS calculation_method text NOT NULL DEFAULT 'add_percentage',
+  ADD COLUMN IF NOT EXISTS base_source text NOT NULL DEFAULT 'base_price',
+  ADD COLUMN IF NOT EXISTS min_quantity numeric(15,3) NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS requires_approval boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS manually_locked boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS effective_from timestamptz,
+  ADD COLUMN IF NOT EXISTS effective_until timestamptz,
+  ADD COLUMN IF NOT EXISTS approved_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS approved_at timestamptz,
+  ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+UPDATE public.pricing_rules
+   SET calculation_method = CASE
+     WHEN adjustment_type IN ('fixed','fixed_price') THEN 'fixed_price'
+     WHEN adjustment_type IN ('amount','add_subtract','add_subtract_amount') THEN 'add_subtract_amount'
+     WHEN adjustment_type IN ('margin','margin_percentage') THEN 'margin_percentage'
+     ELSE 'add_percentage'
+   END;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.pricing_rules'::regclass AND conname='pricing_rules_target_tier_check') THEN
+    ALTER TABLE public.pricing_rules ADD CONSTRAINT pricing_rules_target_tier_check CHECK (target_tier IN ('both','wholesale','retail'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.pricing_rules'::regclass AND conname='pricing_rules_calculation_method_check') THEN
+    ALTER TABLE public.pricing_rules ADD CONSTRAINT pricing_rules_calculation_method_check CHECK (calculation_method IN ('add_percentage','margin_percentage','fixed_price','add_subtract_amount'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.pricing_rules'::regclass AND conname='pricing_rules_base_source_check') THEN
+    ALTER TABLE public.pricing_rules ADD CONSTRAINT pricing_rules_base_source_check CHECK (base_source IN ('base_price','cost_price'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.pricing_rules'::regclass AND conname='pricing_rules_min_quantity_check') THEN
+    ALTER TABLE public.pricing_rules ADD CONSTRAINT pricing_rules_min_quantity_check CHECK (min_quantity > 0);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS pricing_rules_resolution_idx
+  ON public.pricing_rules(organization_id, is_active, priority, target_tier, effective_from, effective_until);
+
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS quantity_review_required boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS customer_adjustment_note text,
+  ADD COLUMN IF NOT EXISTS customer_payment_requested_at timestamptz,
+  ADD COLUMN IF NOT EXISTS customer_confirmed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS admin_adjusted_at timestamptz,
+  ADD COLUMN IF NOT EXISTS payment_request_status text NOT NULL DEFAULT 'not_requested';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.orders'::regclass AND conname='orders_payment_request_status_check') THEN
+    ALTER TABLE public.orders ADD CONSTRAINT orders_payment_request_status_check CHECK (payment_request_status IN ('not_requested','requested','reported','verified','cancelled'));
+  END IF;
+END $$;
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS requested_quantity numeric(15,3),
+  ADD COLUMN IF NOT EXISTS approved_quantity numeric(15,3),
+  ADD COLUMN IF NOT EXISTS approved_unit_price numeric(15,2),
+  ADD COLUMN IF NOT EXISTS price_override_reason text,
+  ADD COLUMN IF NOT EXISTS adjusted_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS adjusted_at timestamptz;
+UPDATE public.order_items SET requested_quantity=quantity WHERE requested_quantity IS NULL;
+UPDATE public.order_items SET approved_quantity=quantity WHERE approved_quantity IS NULL;
+UPDATE public.order_items SET approved_unit_price=unit_price_snapshot WHERE approved_unit_price IS NULL;
+ALTER TABLE public.order_items
+  ALTER COLUMN requested_quantity SET NOT NULL,
+  ALTER COLUMN approved_quantity SET NOT NULL,
+  ALTER COLUMN approved_unit_price SET NOT NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.order_items'::regclass AND conname='order_items_approved_quantity_check') THEN
+    ALTER TABLE public.order_items ADD CONSTRAINT order_items_approved_quantity_check CHECK (approved_quantity > 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.order_items'::regclass AND conname='order_items_approved_price_check') THEN
+    ALTER TABLE public.order_items ADD CONSTRAINT order_items_approved_price_check CHECK (approved_unit_price >= 0);
+  END IF;
+END $$;
+
+-- A version in active use is immutable. Publish a new version instead of rewriting history.
+CREATE OR REPLACE FUNCTION public.guard_active_import_profile_version()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $$
+BEGIN
+  IF OLD.status='active' AND (
+    NEW.profile_name IS DISTINCT FROM OLD.profile_name OR
+    NEW.report_type IS DISTINCT FROM OLD.report_type OR
+    NEW.source IS DISTINCT FROM OLD.source OR
+    NEW.version IS DISTINCT FROM OLD.version OR
+    NEW.required_columns IS DISTINCT FROM OLD.required_columns OR
+    NEW.optional_columns IS DISTINCT FROM OLD.optional_columns OR
+    NEW.ignored_columns IS DISTINCT FROM OLD.ignored_columns OR
+    NEW.synonyms IS DISTINCT FROM OLD.synonyms OR
+    NEW.transformation_rules IS DISTINCT FROM OLD.transformation_rules OR
+    NEW.validation_rules IS DISTINCT FROM OLD.validation_rules OR
+    NEW.matching_key IS DISTINCT FROM OLD.matching_key OR
+    NEW.merge_strategy IS DISTINCT FROM OLD.merge_strategy OR
+    NEW.date_rules IS DISTINCT FROM OLD.date_rules OR
+    NEW.is_full_dataset IS DISTINCT FROM OLD.is_full_dataset
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='الملف التعريفي النشط غير قابل للتعديل؛ أنشئ إصداراً جديداً';
+  END IF;
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS import_profiles_immutable_active_version ON public.import_profiles;
+CREATE TRIGGER import_profiles_immutable_active_version
+  BEFORE UPDATE ON public.import_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.guard_active_import_profile_version();
+
+-- Deterministic calculation of active pricing rules. Returns NULL when no rule applies,
+-- so legacy quantity-tier prices remain intact while derived retail/wholesale columns fall back to base_price.
+CREATE OR REPLACE FUNCTION public.calculate_active_pricing_rule_price(
+  p_product_id uuid, p_organization_id uuid, p_tier text, p_quantity numeric DEFAULT 1
+)
+RETURNS numeric(15,2)
+LANGUAGE plpgsql STABLE SET search_path = ''
+AS $$
+DECLARE
+  v_product public.products%ROWTYPE;
+  v_rule public.pricing_rules%ROWTYPE;
+  v_base numeric(15,2);
+  v_result numeric(15,2);
+BEGIN
+  SELECT p.* INTO v_product FROM public.products p
+   WHERE p.id=p_product_id AND p.organization_id=p_organization_id;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  SELECT r.* INTO v_rule
+    FROM public.pricing_rules r
+   WHERE r.organization_id=p_organization_id
+     AND r.is_active
+     AND (r.effective_from IS NULL OR r.effective_from<=now())
+     AND (r.effective_until IS NULL OR r.effective_until>=now())
+     AND p_quantity>=r.min_quantity
+     AND (r.target_tier='both' OR r.target_tier=p_tier)
+     AND (NOT r.requires_approval OR r.approved_at IS NOT NULL)
+     AND CASE
+       WHEN r.scope_type IN ('default','all') THEN true
+       WHEN r.scope_type='product' THEN r.scope_value=v_product.id::text
+       WHEN r.scope_type='category' THEN r.scope_value=v_product.category_id::text
+       ELSE false
+     END
+   ORDER BY CASE WHEN r.scope_type='product' THEN 0 WHEN r.scope_type='category' THEN 1 ELSE 2 END,
+            r.priority ASC, r.created_at DESC, r.id
+   LIMIT 1;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  v_base := CASE WHEN v_rule.base_source='cost_price' THEN coalesce(v_product.cost_price, v_product.base_price) ELSE v_product.base_price END;
+  CASE v_rule.calculation_method
+    WHEN 'add_percentage' THEN v_result := v_base * (1 + v_rule.adjustment_value / 100);
+    WHEN 'margin_percentage' THEN
+      IF v_rule.adjustment_value >= 100 OR v_rule.adjustment_value < 0 THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='نسبة هامش الربح يجب أن تكون أكبر من أو تساوي صفر وأقل من 100';
+      END IF;
+      v_result := v_base / (1 - v_rule.adjustment_value / 100);
+    WHEN 'fixed_price' THEN v_result := v_rule.adjustment_value;
+    WHEN 'add_subtract_amount' THEN v_result := v_base + v_rule.adjustment_value;
+    ELSE RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='طريقة احتساب التسعير غير معروفة';
+  END CASE;
+  IF v_rule.min_price IS NOT NULL THEN v_result := greatest(v_result, v_rule.min_price); END IF;
+  IF v_rule.max_price IS NOT NULL THEN v_result := least(v_result, v_rule.max_price); END IF;
+  IF v_result IS NULL OR v_result<0 OR v_result::text IN ('NaN','Infinity','-Infinity') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='نتج عن قاعدة التسعير سعر غير صالح';
+  END IF;
+  RETURN round(v_result,2);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.calculate_active_pricing_rule_price(uuid,uuid,text,numeric) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.refresh_product_tier_prices(p_organization_id uuid, p_product_id uuid DEFAULT NULL)
+RETURNS void LANGUAGE plpgsql SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.products p
+     SET retail_price=coalesce(public.calculate_active_pricing_rule_price(p.id,p.organization_id,'retail',1),p.base_price),
+         wholesale_price=coalesce(public.calculate_active_pricing_rule_price(p.id,p.organization_id,'wholesale',1),p.base_price),
+         search_name_norm=lower(translate(regexp_replace(coalesce(p.name,''),'[ًٌٍَُِّْـٰ]','','g'),'أإآٱىة','اااايه')),
+         normalization_version=1,
+         updated_at=now()
+   WHERE p.organization_id=p_organization_id
+     AND (p_product_id IS NULL OR p.id=p_product_id);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.refresh_product_tier_prices(uuid,uuid) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.refresh_product_price_columns_from_product()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $$
+BEGIN
+  NEW.retail_price := coalesce(NEW.retail_price,NEW.base_price);
+  NEW.wholesale_price := coalesce(NEW.wholesale_price,NEW.base_price);
+  NEW.search_name_norm := lower(translate(regexp_replace(coalesce(NEW.name,''),'[ًٌٍَُِّْـٰ]','','g'),'أإآٱىة','اااايه'));
+  NEW.normalization_version := 1;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS products_price_columns_before_write ON public.products;
+CREATE TRIGGER products_price_columns_before_write
+  BEFORE INSERT OR UPDATE OF name, base_price, retail_price, wholesale_price ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.refresh_product_price_columns_from_product();
+
+CREATE OR REPLACE FUNCTION public.refresh_pricing_after_rule_change()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $$
+DECLARE v_org uuid;
+BEGIN
+  v_org := coalesce(NEW.organization_id,OLD.organization_id);
+  PERFORM public.refresh_product_tier_prices(v_org,NULL);
+  RETURN coalesce(NEW,OLD);
+END;
+$$;
+DROP TRIGGER IF EXISTS pricing_rules_refresh_product_prices ON public.pricing_rules;
+CREATE TRIGGER pricing_rules_refresh_product_prices
+  AFTER INSERT OR UPDATE OR DELETE ON public.pricing_rules
+  FOR EACH ROW EXECUTE FUNCTION public.refresh_pricing_after_rule_change();
+
+CREATE OR REPLACE FUNCTION public.refresh_prices_after_product_change()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $$
+BEGIN
+  PERFORM public.refresh_product_tier_prices(NEW.organization_id,NEW.id);
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS products_refresh_tier_prices_after_write ON public.products;
+CREATE TRIGGER products_refresh_tier_prices_after_write
+  AFTER INSERT OR UPDATE OF base_price, cost_price, category_id, name ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.refresh_prices_after_product_change();
+
+-- The checkout resolver uses the same rule calculation as the displayed retail/wholesale columns.
+CREATE OR REPLACE FUNCTION public.customer_product_unit_price(
+  p_product_id uuid, p_organization_id uuid, p_tier text, p_quantity numeric
+)
+RETURNS numeric(15,2)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_base_price numeric(15,2);
+  v_price numeric(15,2);
+  v_rule_price numeric(15,2);
+  v_tier text := coalesce(nullif(p_tier,''),'retail');
+BEGIN
+  IF p_quantity IS NULL OR p_quantity<=0 OR p_quantity>10000
+     OR p_quantity::text IN ('NaN','Infinity','-Infinity') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid pricing quantity';
+  END IF;
+  SELECT p.base_price INTO v_base_price
+    FROM public.products p
+   WHERE p.id=p_product_id AND p.organization_id=p_organization_id AND p.status='active';
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='product unavailable in this organization'; END IF;
+
+  v_rule_price := public.calculate_active_pricing_rule_price(p_product_id,p_organization_id,v_tier,p_quantity);
+  IF v_rule_price IS NOT NULL THEN RETURN v_rule_price; END IF;
+
+  SELECT pp.price INTO v_price
+    FROM public.product_prices pp
+   WHERE pp.product_id=p_product_id AND pp.tier=v_tier
+     AND pp.is_active AND pp.min_quantity<=p_quantity
+   ORDER BY pp.min_quantity DESC LIMIT 1;
+  IF NOT FOUND AND v_tier<>'retail' THEN
+    SELECT pp.price INTO v_price
+      FROM public.product_prices pp
+     WHERE pp.product_id=p_product_id AND pp.tier='retail'
+       AND pp.is_active AND pp.min_quantity<=p_quantity
+     ORDER BY pp.min_quantity DESC LIMIT 1;
+  END IF;
+  IF NOT FOUND THEN v_price:=v_base_price; END IF;
+  IF v_price IS NULL OR v_price<0 OR v_price::text IN ('NaN','Infinity','-Infinity') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid configured product price';
+  END IF;
+  RETURN round(v_price,2);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.customer_product_unit_price(uuid,uuid,text,numeric) FROM PUBLIC, anon, authenticated;
+
+-- Server-side deterministic quality scoring. Raw file bytes are never accepted by these functions.
+CREATE OR REPLACE FUNCTION public.calculate_import_job_quality(p_job_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_job public.import_jobs%ROWTYPE;
+  v_profile public.import_profiles%ROWTYPE;
+  v_total integer := 0;
+  v_valid numeric := 0;
+  v_unique numeric := 0;
+  v_consistent numeric := 0;
+  v_temporal numeric := 0;
+  v_complete numeric := 0;
+  v_key text;
+  v_score integer := 0;
+BEGIN
+  SELECT j.* INTO v_job FROM public.import_jobs j WHERE j.id=p_job_id;
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='P0002', MESSAGE='import job not found'; END IF;
+  IF auth.uid() IS NOT NULL AND (
+    NOT public.is_staff() OR v_job.organization_id IS DISTINCT FROM
+      (SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id())
+  ) THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='not authorized for this import job'; END IF;
+  IF v_job.profile_id IS NOT NULL THEN SELECT p.* INTO v_profile FROM public.import_profiles p WHERE p.id=v_job.profile_id; END IF;
+  v_key := coalesce(v_profile.matching_key,'item_code');
+  SELECT count(*)::integer,
+         coalesce(avg(CASE WHEN r.status<>'rejected' THEN 100.0 ELSE 0.0 END),0),
+         CASE WHEN count(*)=0 THEN 0 ELSE count(DISTINCT nullif(btrim(coalesce(r.data->>v_key,'')),''))::numeric/count(*)*100 END,
+         coalesce(avg(CASE
+           WHEN (
+             nullif(r.data->>'quantity','') IS NULL OR (r.data->>'quantity') ~ '^-?[0-9]+([.][0-9]+)?$'
+           ) AND (
+             nullif(r.data->>'revenue','') IS NULL OR (r.data->>'revenue') ~ '^-?[0-9]+([.][0-9]+)?$'
+           ) AND (
+             nullif(r.data->>'price','') IS NULL OR (r.data->>'price') ~ '^-?[0-9]+([.][0-9]+)?$'
+           ) THEN 100.0 ELSE 0.0 END),0),
+         coalesce(avg(CASE
+           WHEN nullif(r.data->>'date','') IS NULL THEN 100.0
+           WHEN (r.data->>'date') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+             OR (r.data->>'date') ~ '^[0-9]{2}[/.-][0-9]{2}[/.-][0-9]{4}$'
+             THEN 100.0 ELSE 0.0 END),0)
+    INTO v_total,v_valid,v_unique,v_consistent,v_temporal
+    FROM public.import_job_rows r WHERE r.import_job_id=p_job_id;
+  IF v_total=0 THEN
+    RETURN jsonb_build_object('score',0,'label','rejected','components',jsonb_build_object('completeness',0,'validity',0,'uniqueness',0,'consistency',0,'temporal_referential_integrity',0),'total_rows',0);
+  END IF;
+  SELECT coalesce(avg(
+    CASE WHEN jsonb_array_length(coalesce(v_profile.required_columns,'["item_code"]'::jsonb))=0 THEN 100.0
+    ELSE (
+      SELECT count(*)::numeric / jsonb_array_length(coalesce(v_profile.required_columns,'["item_code"]'::jsonb)) * 100
+        FROM jsonb_array_elements_text(coalesce(v_profile.required_columns,'["item_code"]'::jsonb)) AS req(field_name)
+       WHERE nullif(btrim(coalesce(r.data->>req.field_name,'')),'') IS NOT NULL
+    ) END),0)
+    INTO v_complete
+    FROM public.import_job_rows r WHERE r.import_job_id=p_job_id;
+  v_score := round((v_complete+v_valid+v_unique+v_consistent+v_temporal)/5.0)::integer;
+  RETURN jsonb_build_object(
+    'score',v_score,
+    'label',CASE WHEN v_score>=90 THEN 'excellent' WHEN v_score>=75 THEN 'acceptable' WHEN v_score>=50 THEN 'warning' ELSE 'rejected' END,
+    'components',jsonb_build_object(
+      'completeness',round(v_complete,2),'validity',round(v_valid,2),'uniqueness',round(v_unique,2),
+      'consistency',round(v_consistent,2),'temporal_referential_integrity',round(v_temporal,2)
+    ),
+    'total_rows',v_total
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.calculate_import_job_quality(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.calculate_import_job_quality(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.finalize_import_job(p_job_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_job public.import_jobs%ROWTYPE;
+  v_quality jsonb;
+  v_score integer;
+  v_status text;
+  v_snapshot uuid;
+  v_rows integer;
+  v_profile_version integer;
+  v_report_type text;
+BEGIN
+  SELECT j.* INTO v_job FROM public.import_jobs j WHERE j.id=p_job_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='P0002', MESSAGE='import job not found'; END IF;
+  IF auth.uid() IS NULL OR NOT public.is_staff() OR v_job.organization_id IS DISTINCT FROM
+    (SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id())
+  THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='not authorized to finalize this import job'; END IF;
+  IF v_job.status IN ('completed','completed_with_warnings','rejected','manual_review') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='import job is already finalized';
+  END IF;
+  v_quality := public.calculate_import_job_quality(p_job_id);
+  v_score := coalesce((v_quality->>'score')::integer,0);
+  v_rows := coalesce((v_quality->>'total_rows')::integer,0);
+  IF v_score<50 OR v_rows=0 THEN v_status:='rejected';
+  ELSIF v_score<75 THEN v_status:='manual_review';
+  ELSE v_status:='completed'; END IF;
+  UPDATE public.import_jobs
+     SET status=v_status,processed_rows=v_rows,
+         success_rows=(SELECT count(*) FROM public.import_job_rows r WHERE r.import_job_id=p_job_id AND r.status<>'rejected'),
+         failed_rows=(SELECT count(*) FROM public.import_job_rows r WHERE r.import_job_id=p_job_id AND r.status='rejected'),
+         data_quality_score=v_score,quality_breakdown=coalesce(v_quality->'components','{}'::jsonb),
+         review_required=(v_score>=50 AND v_score<75),
+         error_summary=coalesce(error_summary,'{}'::jsonb)||jsonb_build_object('quality_label',v_quality->>'label','quality_components',v_quality->'components','no_raw_file_retained',true),
+         completed_at=now()
+   WHERE id=p_job_id;
+  IF v_status='completed' THEN
+    SELECT coalesce(p.version,v_job.profile_version,1),coalesce(p.report_type,v_job.job_type,'import')
+      INTO v_profile_version,v_report_type FROM public.import_profiles p WHERE p.id=v_job.profile_id;
+    IF NOT FOUND THEN v_profile_version:=coalesce(v_job.profile_version,1); v_report_type:=coalesce(v_job.job_type,'import'); END IF;
+    INSERT INTO public.onyx_snapshots(organization_id,source_import_job_id,profile_id,profile_version,source_file_hash,source_file_name,report_type,row_count,data_quality_score,quality_breakdown,status,created_by)
+    VALUES(v_job.organization_id,v_job.id,v_job.profile_id,v_profile_version,coalesce(v_job.file_hash,repeat('0',64)),v_job.file_name,v_report_type,v_rows,v_score,coalesce(v_quality->'components','{}'::jsonb),'building',public.current_profile_id())
+    RETURNING id INTO v_snapshot;
+    INSERT INTO public.onyx_snapshot_rows(organization_id,snapshot_id,row_number,canonical_key,row_hash,status,data,errors)
+    SELECT v_job.organization_id,v_snapshot,r.row_number,
+           nullif(btrim(coalesce(r.data->>coalesce((SELECT p.matching_key FROM public.import_profiles p WHERE p.id=v_job.profile_id),'item_code'),'')),''),
+           md5(r.data::text),r.status,coalesce(r.data,'{}'::jsonb),coalesce(r.errors,'[]'::jsonb)
+      FROM public.import_job_rows r WHERE r.import_job_id=v_job.id
+      ORDER BY r.row_number;
+    UPDATE public.onyx_snapshots SET status='ready' WHERE id=v_snapshot;
+  END IF;
+  RETURN jsonb_build_object('job_id',v_job.id,'status',v_status,'data_quality_score',v_score,'quality',v_quality,'snapshot_id',v_snapshot,'review_required',v_status='manual_review');
+END;
+$$;
+REVOKE ALL ON FUNCTION public.finalize_import_job(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.finalize_import_job(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.run_inventory_reconciliation(p_snapshot_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_org uuid;
+  v_run uuid;
+  v_total integer := 0;
+  v_matched integer := 0;
+  v_changed integer := 0;
+  v_new integer := 0;
+  v_invalid integer := 0;
+BEGIN
+  SELECT p.organization_id INTO v_org FROM public.profiles p WHERE p.id=public.current_profile_id() AND p.auth_user_id=auth.uid();
+  IF v_org IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='not authorized to reconcile inventory';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.onyx_snapshots s WHERE s.id=p_snapshot_id AND s.organization_id=v_org AND s.status='ready') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='snapshot unavailable in this organization';
+  END IF;
+  INSERT INTO public.inventory_reconciliation_runs(organization_id,snapshot_id,status,created_by)
+  VALUES(v_org,p_snapshot_id,'running',public.current_profile_id()) RETURNING id INTO v_run;
+  INSERT INTO public.inventory_reconciliation_items(organization_id,run_id,snapshot_row_id,item_code,product_id,imported_quantity,live_quantity,difference,outcome,notes)
+  SELECT v_org,v_run,sr.id,coalesce(nullif(btrim(sr.data->>'item_code'),''),sr.canonical_key,''),
+         p.id,
+         CASE WHEN coalesce(sr.data->>'quantity','') ~ '^-?[0-9]+([.][0-9]+)?$' THEN (sr.data->>'quantity')::numeric ELSE NULL END,
+         live.quantity,
+         CASE WHEN coalesce(sr.data->>'quantity','') ~ '^-?[0-9]+([.][0-9]+)?$' THEN (sr.data->>'quantity')::numeric-live.quantity ELSE NULL END,
+         CASE
+           WHEN nullif(btrim(coalesce(sr.data->>'item_code',sr.canonical_key,'')),'') IS NULL
+             OR coalesce(sr.data->>'quantity','') !~ '^-?[0-9]+([.][0-9]+)?$' THEN 'invalid'
+           WHEN p.id IS NULL THEN 'new'
+           WHEN live.quantity IS NOT NULL AND live.quantity=(sr.data->>'quantity')::numeric THEN 'matched'
+           ELSE 'changed'
+         END,
+         CASE WHEN p.id IS NULL AND nullif(btrim(coalesce(sr.data->>'item_code',sr.canonical_key,'')),'') IS NOT NULL
+              THEN jsonb_build_array('لا يوجد رمز مطابق في المخزون التشغيلي') ELSE '[]'::jsonb END
+    FROM public.onyx_snapshot_rows sr
+    LEFT JOIN public.products p
+      ON p.organization_id=v_org AND p.item_code=coalesce(nullif(btrim(sr.data->>'item_code'),''),sr.canonical_key)
+    LEFT JOIN LATERAL (
+      SELECT coalesce(sum(ib.quantity_on_hand),0)::numeric(15,3) AS quantity
+        FROM public.inventory_balances ib JOIN public.warehouses w ON w.id=ib.warehouse_id
+       WHERE ib.product_id=p.id AND w.organization_id=v_org AND w.is_active
+    ) live ON true
+   WHERE sr.snapshot_id=p_snapshot_id AND sr.organization_id=v_org;
+  SELECT count(*)::integer,
+         count(*) FILTER (WHERE outcome='matched')::integer,
+         count(*) FILTER (WHERE outcome='changed')::integer,
+         count(*) FILTER (WHERE outcome='new')::integer,
+         count(*) FILTER (WHERE outcome='invalid')::integer
+    INTO v_total,v_matched,v_changed,v_new,v_invalid
+    FROM public.inventory_reconciliation_items WHERE run_id=v_run;
+  UPDATE public.inventory_reconciliation_runs
+     SET status='completed',source_row_count=v_total,matched_count=v_matched,changed_count=v_changed,
+         new_count=v_new,invalid_count=v_invalid,completed_at=now()
+   WHERE id=v_run;
+  INSERT INTO public.audit_logs(organization_id,actor_id,action,entity_type,entity_id,new_value)
+  VALUES(v_org,public.current_profile_id(),'inventory.reconciliation.completed','inventory_reconciliation_run',v_run,
+    jsonb_build_object('snapshot_id',p_snapshot_id,'rows',v_total,'matched',v_matched,'changed',v_changed,'new',v_new,'invalid',v_invalid));
+  RETURN jsonb_build_object('run_id',v_run,'snapshot_id',p_snapshot_id,'source_row_count',v_total,
+    'matched_count',v_matched,'changed_count',v_changed,'new_count',v_new,'invalid_count',v_invalid);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.run_inventory_reconciliation(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.run_inventory_reconciliation(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.normalize_arabic_search(p_value text)
+RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = ''
+AS $$
+  SELECT regexp_replace(
+    translate(lower(coalesce(p_value,'')),'أإآٱىة','اااايه'),
+    '[ًٌٍَُِّْـٰ[:space:]]+',' ','g'
+  );
+$$;
+REVOKE ALL ON FUNCTION public.normalize_arabic_search(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.normalize_arabic_search(text) TO authenticated;
+
+-- Only authenticated staff can inspect tenant-owned platform data. Inserts into immutable snapshots,
+-- jobs and AI ledgers are performed through constrained functions or trusted service workers.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'import_profiles','central_synonym_dictionary','import_upload_sessions','import_upload_chunks',
+    'onyx_snapshots','onyx_snapshot_rows','inventory_reconciliation_runs','inventory_reconciliation_items',
+    'background_jobs','background_job_attempts','ai_usage_budgets','ai_usage_ledger','ai_recommendation_cards'
+  ] LOOP
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);
+    EXECUTE format('GRANT SELECT ON public.%I TO authenticated',t);
+    EXECUTE format('GRANT ALL ON public.%I TO service_role',t);
+    EXECUTE format('CREATE POLICY tenant_read_%s ON public.%I FOR SELECT TO authenticated USING (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()))',t,t);
+  END LOOP;
+END $$;
+
+GRANT SELECT, INSERT, UPDATE ON public.import_profiles TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.central_synonym_dictionary TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.import_upload_sessions TO authenticated;
+GRANT SELECT, INSERT ON public.import_upload_chunks TO authenticated;
+GRANT SELECT ON public.inventory_reconciliation_runs, public.inventory_reconciliation_items TO authenticated;
+
+CREATE POLICY import_profiles_staff_insert ON public.import_profiles FOR INSERT TO authenticated
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+CREATE POLICY import_profiles_staff_update ON public.import_profiles FOR UPDATE TO authenticated
+  USING (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()))
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+CREATE POLICY central_synonyms_staff_insert ON public.central_synonym_dictionary FOR INSERT TO authenticated
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+CREATE POLICY central_synonyms_staff_update ON public.central_synonym_dictionary FOR UPDATE TO authenticated
+  USING (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()))
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+CREATE POLICY import_upload_sessions_staff_insert ON public.import_upload_sessions FOR INSERT TO authenticated
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()) AND raw_file_retained=false);
+CREATE POLICY import_upload_sessions_staff_update ON public.import_upload_sessions FOR UPDATE TO authenticated
+  USING (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()))
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+CREATE POLICY import_upload_chunks_staff_insert ON public.import_upload_chunks FOR INSERT TO authenticated
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+  
+-- The old generated policies allowed any staff member to read every tenant's import rows/jobs.
+DROP POLICY IF EXISTS staff_all_import_jobs ON public.import_jobs;
+DROP POLICY IF EXISTS staff_all_import_job_rows ON public.import_job_rows;
+CREATE POLICY tenant_staff_import_jobs ON public.import_jobs FOR ALL TO authenticated
+  USING (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()))
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+CREATE POLICY tenant_staff_import_job_rows ON public.import_job_rows FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.import_jobs j WHERE j.id=import_job_id AND public.is_staff() AND j.organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id())))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.import_jobs j WHERE j.id=import_job_id AND public.is_staff() AND j.organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id())));
+
+DROP POLICY IF EXISTS staff_all_outbox_events ON public.outbox_events;
+CREATE POLICY tenant_staff_outbox_events ON public.outbox_events FOR ALL TO authenticated
+  USING (organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()) AND public.is_staff())
+  WITH CHECK (organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()) AND public.is_staff());
+
+DROP POLICY IF EXISTS staff_all_pricing_rules ON public.pricing_rules;
+CREATE POLICY tenant_staff_pricing_rules ON public.pricing_rules FOR ALL TO authenticated
+  USING (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()))
+  WITH CHECK (public.is_staff() AND organization_id=(SELECT p.organization_id FROM public.profiles p WHERE p.id=public.current_profile_id()));
+
+-- Explicit outbox recovery metadata; queue workers use SKIP LOCKED and tenant-bound claims.
+CREATE OR REPLACE FUNCTION public.claim_background_jobs(p_queue text, p_worker text, p_limit integer DEFAULT 10)
+RETURNS SETOF public.background_jobs
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  IF coalesce(p_worker,'')='' OR p_limit<1 OR p_limit>100 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid worker or batch size';
+  END IF;
+  IF NOT (auth.role()='service_role' OR current_user='service_role' OR current_user='postgres') THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='background job claiming requires a trusted worker';
+  END IF;
+  RETURN QUERY
+  WITH picked AS (
+    SELECT j.id FROM public.background_jobs j
+     WHERE j.queue_name=p_queue AND j.status='queued' AND j.scheduled_at<=now()
+       AND j.cancel_requested=false
+     ORDER BY j.scheduled_at,j.created_at
+     FOR UPDATE SKIP LOCKED LIMIT p_limit
+  )
+  UPDATE public.background_jobs j
+     SET status='running',locked_by=p_worker,locked_at=now(),started_at=coalesce(started_at,now()),
+         attempt_count=attempt_count+1,updated_at=now()
+    FROM picked WHERE j.id=picked.id RETURNING j.*;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.claim_background_jobs(text,text,integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_background_jobs(text,text,integer) TO service_role;
+
+-- Deterministic Arabic search indexes/versioning for existing operational catalog.
+CREATE INDEX IF NOT EXISTS products_name_lower_prefix_idx
+  ON public.products(organization_id, lower(name) text_pattern_ops);
+CREATE INDEX IF NOT EXISTS products_item_code_org_idx
+  ON public.products(organization_id, item_code);
+CREATE INDEX IF NOT EXISTS products_barcode_org_idx
+  ON public.products(organization_id, barcode) WHERE barcode IS NOT NULL;
+  
