@@ -157,7 +157,8 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$;
+REVOKE ALL ON FUNCTION public.guard_order_confirmation() FROM PUBLIC,anon,authenticated;
 
 CREATE OR REPLACE FUNCTION public.finalize_order_inventory()
 RETURNS trigger
