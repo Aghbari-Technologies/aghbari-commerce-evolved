@@ -178,15 +178,14 @@ async function main() {
   );
   assert.equal(firstQuoteItems.length, 1, "RFQ should create a persisted quote line");
 
+  await db.unsafe("reset role");
+  await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
   const secondIdentityQuote = await db.unsafe(
     "select public.request_sales_quote($1::jsonb,$2) as id",
     [JSON.stringify([{ product_id: productId, quantity: 1 }]), "CI second customer RFQ"],
   );
   const secondQuoteId = secondIdentityQuote[0].id;
-
-  await db.unsafe("reset role");
-  await db.unsafe("set role authenticated");
-  await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
   const secondVisible = await db.unsafe("select id from public.sales_quotes");
   assert.ok(secondVisible.some((row) => row.id === secondQuoteId), "customer two must see their own quote");
   assert.ok(!secondVisible.some((row) => row.id === firstQuoteId), "customer two must not see customer one's quote");
