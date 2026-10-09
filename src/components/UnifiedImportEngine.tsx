@@ -196,6 +196,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       let headers: string[] | null = null;
       let quality: DataQualityAccumulator | null = null;
       let currentChunkNumber = -1;
+      let finalizingCsv = false;
       let dataRows = 0;
       let batch: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors: string[] }> = [];
 
@@ -234,7 +235,9 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         // Already-verified upload chunks have their structured rows committed before their
         // manifest checkpoint. Reparse those bytes locally to rebuild CSV/quality state, but
         // never write their rows again. The first incomplete chunk is upserted normally.
-        if (!verifiedChunks.has(currentChunkNumber)) {
+        if (finalizingCsv || !verifiedChunks.has(currentChunkNumber)) {
+          // The final unterminated CSV row may not have been staged if a prior run stopped
+          // after the final chunk checkpoint but before EOF finalization; upsert it safely.
           batch.push({ rowNumber: parsed.row_number, data: parsed.data, status: parsed.status, errors: parsed.errors });
           if (batch.length >= PROCESSING_CHUNK_ROWS) await flushBatch();
         }
@@ -287,6 +290,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
+      finalizingCsv = true;
       await parser.push(decoder.decode(), consumeRow, true);
       await flushBatch();
       if (!headers) throw new Error("تعذر اكتشاف صف عناوين صالح في CSV.");
