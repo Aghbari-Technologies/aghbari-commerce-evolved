@@ -242,7 +242,6 @@ export interface FileRoutesByTo {
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
-  '/orders/$id': typeof OrdersIdRoute
   '/orders': typeof OrdersIndexRoute
   '/orders/$id': typeof OrdersIdRoute
 }
