@@ -371,6 +371,11 @@ export async function createImportUploadSession(jobId: string) {
   };
 }
 
+export async function cancelImportUploadSession(sessionId: string): Promise<void> {
+  const { error } = await supabase.from('import_upload_sessions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', sessionId);
+  if (error) throw error;
+}
+
 export async function recordImportUploadChunk(input: {
   sessionId: string; chunkNumber: number; byteOffset: number; byteSize: number; chunkHash: string;
 }) {
