@@ -366,19 +366,28 @@ async function main() {
   );
   const reviewOrder = reviewOrderResult[0].result;
   const reviewItemRows = await db.unsafe(
-    "select id,quantity,unit_price_snapshot from public.order_items where order_id=$1",
+    "select id,quantity from public.order_items where order_id=$1",
     [reviewOrder.id],
   );
-  assert.equal(reviewItemRows.length, 1, "review smoke order should have one line");
+  assert.equal(reviewItemRows.length, 1, "customer may read the non-financial review line identity");
+  assert.equal(Number(reviewItemRows[0].quantity), 2);
+
+  // Switch to staff identity before reading any financial line fields.
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const staffReviewItems = await db.unsafe(
+    "select id,quantity,unit_price_snapshot from public.fetch_staff_order_items($1::uuid)",
+    [reviewOrder.id],
+  );
+  assert.equal(staffReviewItems.length, 1, "staff must get review lines from the tenant-scoped RPC");
+  assert.equal(Number(staffReviewItems[0].unit_price_snapshot), 37000);
   const reviewLines = [{
     item_id: reviewItemRows[0].id,
     quantity: 1,
     unit_price: 36000,
     price_reason: "CI one-order override; not a catalog price change",
   }];
-  await db.unsafe("reset role");
-  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
-  await db.unsafe("set role authenticated");
   const stagedReview = await db.unsafe(
     "select public.review_order_lines($1::uuid,$2::jsonb,$3,$4) as result",
     [reviewOrder.id, db.json(reviewLines), "stage", "CI order review"],
