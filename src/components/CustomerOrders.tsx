@@ -55,14 +55,13 @@ function MyOrdersInner() {
       {data && data.length > 0 && (
         <div style={{ ...card, padding: 0, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead><tr style={{ background: '#f4f8f9', textAlign: 'right' }}><th style={{ padding: 12 }}>رقم الطلب</th><th>التاريخ</th><th>الأصناف</th><th>الإجمالي</th><th>الحالة</th><th /></tr></thead>
+            <thead><tr style={{ background: '#f4f8f9', textAlign: 'right' }}><th style={{ padding: 12 }}>رقم الطلب</th><th>التاريخ</th><th>الأصناف</th><th>الحالة</th><th /></tr></thead>
             <tbody>{data.map((o) => (
               <tr key={o.id} style={{ borderTop: '1px solid #edf2f3' }}>
                 <td style={{ padding: 12, fontWeight: 700 }}>{o.order_number}</td>
                 <td>{formatDate(o.created_at)}</td>
                 <td>{formatNumber(o.total_items)}</td>
-                <td>{formatCurrency(o.total_amount)}</td>
-                <td><span className="sf-detail-category">{STATUS_LABELS[o.status] ?? o.status}</span></td>
+                <td><span className="sf-detail-category">{STATUS_LABELS[o.status] ?? o.status}</span>{o.quantity_review_required && <strong style={{ display: 'block', color: '#9a5b13', marginTop: 5 }}>تنبيه: الطلب بانتظار اعتماد التعديلات.</strong>}{o.customer_payment_requested_at && o.payment_request_status === 'requested' && <small style={{ display: 'block', color: '#17684d', marginTop: 5 }}>يرجى متابعة تعليمات السداد في تفاصيل الطلب.</small>}</td>
                 <td><Link to="/orders/$id" params={{ id: o.id }} className="sf-link">التفاصيل</Link></td>
               </tr>))}</tbody>
           </table>
