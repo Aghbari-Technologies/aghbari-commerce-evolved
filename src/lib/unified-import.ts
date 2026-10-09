@@ -178,7 +178,13 @@ export class StreamingCsvParser {
       const next = this.pending[cursor + 1];
       if (char === '"' && cursor + 1 === this.pending.length && !final) break;
       if (char === '"' && this.quoted && next === '"') {
-        this.currentCell += '"';
+        if (!this.currentCellExceeded) {
+          this.currentCell += '"';
+          if (this.currentCell.length > MAX_IMPORT_CELL_CHARS) {
+            this.currentCell = '';
+            this.currentCellExceeded = true;
+          }
+        }
         cursor += 1;
         continue;
       }
@@ -218,7 +224,7 @@ export class StreamingCsvParser {
     this.pending = this.pending.slice(cursor);
     if (final) {
       if (this.quoted) throw new Error('ملف CSV يحتوي على علامة اقتباس غير مغلقة');
-      if (this.currentCell.length || this.currentRow.length || this.pending.length) {
+      if (this.currentCell.length || this.currentCellExceeded || this.currentRow.length || this.pending.length) {
         this.currentCell += this.pending;
         this.pending = '';
         this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
