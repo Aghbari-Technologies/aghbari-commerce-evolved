@@ -142,33 +142,33 @@ export async function createSupplier(s: Partial<Supplier>): Promise<Supplier> {
 
 // ─── Orders ───
 export async function fetchOrders(): Promise<OrderWithCustomer[]> {
-  const { data: orders, error } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('organization_id', ORG_ID)
-    .order('created_at', { ascending: false });
+  // The staff-only SECURITY DEFINER RPC derives the tenant from the signed-in profile.
+  // The client can no longer SELECT financial order columns directly.
+  const { data: orders, error } = await supabase.rpc('fetch_staff_orders');
   if (error) throw error;
 
-  const { data: customers } = await supabase
+  const { data: customers, error: customersError } = await supabase
     .from('customers')
     .select('*')
     .eq('organization_id', ORG_ID);
+  if (customersError) throw customersError;
   const custMap = new Map<string, Customer>();
   customers?.forEach((c: Customer) => custMap.set(c.id, c));
 
-  return (orders as Order[]).map((o) => ({
+  return ((orders ?? []) as Order[]).map((o) => ({
     ...o,
     customer: custMap.get(o.customer_id),
   }));
 }
 
 export async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
-  const { data, error } = await supabase
-    .from('order_items')
-    .select('*')
-    .eq('order_id', orderId);
+  // Financial item columns are intentionally not selectable by authenticated users.
+  // The RPC checks staff status, active profile and tenant ownership before returning the full row.
+  const { data, error } = await supabase.rpc('fetch_staff_order_items', {
+    p_order_id: orderId,
+  });
   if (error) throw error;
-  return data as OrderItem[];
+  return (data ?? []) as OrderItem[];
 }
 
 export type OrderReviewLineInput = {
@@ -227,7 +227,7 @@ export async function createOrder(order: {
       total_items: order.items.length,
       notes: order.notes ?? null,
     })
-    .select()
+    .select('id,organization_id,customer_id,order_number,status,total_items,notes,created_at')
     .single();
   if (orderError) throw orderError;
 
@@ -723,7 +723,7 @@ export async function fetchDashboardStats() {
   const [products, customers, orders, alerts, lowStock] = await Promise.all([
     supabase.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('status', 'active'),
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID),
-    supabase.from('orders').select('id, status, total_amount', { count: 'exact' }).eq('organization_id', ORG_ID),
+    supabase.rpc('fetch_staff_orders'),
     supabase.from('ai_alerts').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('is_resolved', false),
     supabase.from('inventory_balances').select('quantity_on_hand, reorder_point, product_id').eq('warehouse_id', WAREHOUSE_ID),
   ]);
@@ -732,14 +732,15 @@ export async function fetchDashboardStats() {
     (inv: { quantity_on_hand: number; reorder_point: number }) => inv.quantity_on_hand <= inv.reorder_point
   ).length;
 
-  const ordersData = orders.data || [];
-  const totalSales = ordersData.reduce((sum: number, o: { total_amount: number }) => sum + (o.total_amount || 0), 0);
-  const processingCount = ordersData.filter((o: { status: string }) => o.status === 'processing' || o.status === 'pending').length;
+  if (orders.error) throw orders.error;
+  const ordersData = (orders.data || []) as Array<{ id: string; status: string; total_amount: number }>;
+  const totalSales = ordersData.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const processingCount = ordersData.filter((o) => o.status === 'processing' || o.status === 'pending').length;
 
   return {
     productCount: products.count || 0,
     customerCount: customers.count || 0,
-    orderCount: orders.count || 0,
+    orderCount: ordersData.length,
     totalSales,
     processingCount,
     alertCount: alerts.count || 0,

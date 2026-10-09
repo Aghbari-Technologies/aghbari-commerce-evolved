@@ -165,8 +165,56 @@ async function main() {
   assert.equal(order.status, "pending");
   assert.ok(!("total_amount" in order), "customer order response must not disclose monetary values");
   assert.equal(order.idempotent_replay, false);
+  // Verify server-computed financial storage as the trusted test owner, not through customer grants.
+  await db.unsafe("reset role");
   const persistedOrderAmount = await db.unsafe("select total_amount from public.orders where id=$1", [order.id]);
   assert.equal(Number(persistedOrderAmount[0].total_amount), 370000, "server order total must match tier pricing");
+  await db.unsafe("set role authenticated");
+
+  const customerSafeOrder = await db.unsafe(
+    "select id,order_number,status,total_items,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status from public.orders where id=$1",
+    [order.id],
+  );
+  assert.equal(customerSafeOrder.length, 1, "customer may read safe order status fields");
+  await expectFailure(
+    "customer direct order total access",
+    () => db.unsafe("select total_amount from public.orders where id=$1", [order.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer SELECT * on orders",
+    () => db.unsafe("select * from public.orders where id=$1", [order.id]),
+    /permission denied/i,
+  );
+
+  const customerSafeItems = await db.unsafe(
+    "select id,order_id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity from public.order_items where order_id=$1",
+    [order.id],
+  );
+  assert.equal(customerSafeItems.length, 1, "customer may read safe order-line fields");
+  assert.equal(Number(customerSafeItems[0].quantity), 10);
+  for (const column of ["unit_price_snapshot","line_total","approved_unit_price","proposed_unit_price"]) {
+    await expectFailure(
+      "customer direct order-line access to " + column,
+      () => db.unsafe("select " + column + " from public.order_items where order_id=$1", [order.id]),
+      /permission denied/i,
+    );
+  }
+  await expectFailure(
+    "customer SELECT * on order_items",
+    () => db.unsafe("select * from public.order_items where order_id=$1", [order.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer cannot call staff order RPC",
+    () => db.unsafe("select * from public.fetch_staff_orders()"),
+    /staff role required/i,
+  );
+  await expectFailure(
+    "customer cannot call staff order-line RPC",
+    () => db.unsafe("select * from public.fetch_staff_order_items($1::uuid)", [order.id]),
+    /staff role required/i,
+  );
 
   const replay = await db.unsafe(
     "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
@@ -182,11 +230,13 @@ async function main() {
     ),
     /different|مختلفة/i,
   );
+  await db.unsafe("reset role");
   const orderCount = await db.unsafe(
     "select count(*)::int as count from public.orders where created_by=$1 and idempotency_key=$2",
     [profileId, "ci-idempotency-key-000001"],
   );
   assert.equal(orderCount[0].count, 1, "a replay must not create a duplicate order");
+  await db.unsafe("set role authenticated");
 
   const firstQuote = await db.unsafe(
     "select public.request_sales_quote($1::jsonb,$2) as id",
@@ -238,14 +288,30 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await db.unsafe("set role authenticated");
-  await db.unsafe("update public.orders set status='confirmed' where id=$1", [order.id]);
-
-  const invoiceRows = await db.unsafe(
-    "select id,total_amount,status from public.customer_invoices where order_id=$1",
+  const staffOrderRows = await db.unsafe(
+    "select id,total_amount from public.fetch_staff_orders() where id=$1",
     [order.id],
   );
-  assert.equal(invoiceRows.length, 1, "confirming the order should issue exactly one invoice");
-  const invoice = invoiceRows[0];
+  assert.equal(staffOrderRows.length, 1, "active staff can read orders through the scoped RPC");
+  assert.equal(Number(staffOrderRows[0].total_amount), 370000, "staff RPC exposes the authoritative order total");
+  const staffItemRows = await db.unsafe(
+    "select id,unit_price_snapshot,line_total,approved_unit_price from public.fetch_staff_order_items($1::uuid)",
+    [order.id],
+  );
+  assert.equal(staffItemRows.length, 1, "active staff can read order lines through the scoped RPC");
+  assert.equal(Number(staffItemRows[0].unit_price_snapshot), 37000);
+  assert.equal(Number(staffItemRows[0].line_total), 370000);
+  await expectFailure(
+    "staff RPC cross-tenant order denial",
+    () => db.unsafe("select * from public.fetch_staff_order_items($1::uuid)", ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]),
+    /outside the active staff organization/i,
+  );
+  await db.unsafe("update public.orders set status='confirmed' where id=$1", [order.id]);
+
+  const financeSnapshot = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const invoice = financeSnapshot[0].result.invoices.find((row) => row.order_id === order.id);
+  assert.ok(invoice, "confirming the order should issue exactly one invoice visible to authorized staff");
+  assert.equal(invoice.status, "issued");
   assert.equal(Number(invoice.total_amount), 370000);
   const stockAfterConfirm = await db.unsafe(
     "select quantity_on_hand,quantity_reserved,quantity_available from public.inventory_balances where product_id=$1 and warehouse_id='d0000000-0000-0000-0000-000000000001'",
@@ -267,6 +333,68 @@ async function main() {
   assert.equal(invoiceAfterPayment[0].status, "partially_paid");
   const customerBalance = await db.unsafe("select current_balance from public.customers where id=(select customer_id from public.orders where id=$1)", [order.id]);
   assert.equal(Number(customerBalance[0].current_balance), 270000, "customer balance must reflect invoice minus payment");
+
+  // Customers receive allowed statement amounts only through the account-statement RPC.
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const statementSnapshot = await db.unsafe("select public.get_customer_account_statement() as result");
+  const statement = statementSnapshot[0].result;
+  const statementInvoice = statement.invoices.find((row) => row.id === invoice.id);
+  assert.ok(statementInvoice, "customer statement should include the customer's own invoice");
+  assert.equal(Number(statementInvoice.total_amount), 370000, "statement RPC may expose invoice totals on the authorized account-statement surface");
+  assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
+  assert.equal(Number(statement.payments[0].amount), 100000);
+
+  const safeInvoiceRows = await db.unsafe(
+    "select id,invoice_number,order_id,status,issued_at,currency from public.customer_invoices where id=$1",
+    [invoice.id],
+  );
+  assert.equal(safeInvoiceRows.length, 1, "customer may read non-financial invoice headers");
+  const safeInvoiceLines = await db.unsafe(
+    "select id,invoice_id,item_code,description,unit,quantity from public.customer_invoice_items where invoice_id=$1",
+    [invoice.id],
+  );
+  assert.equal(safeInvoiceLines.length, 1, "customer may read non-financial invoice line descriptions");
+  await expectFailure(
+    "customer direct invoice total access",
+    () => db.unsafe("select total_amount from public.customer_invoices where id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer SELECT * on invoices",
+    () => db.unsafe("select * from public.customer_invoices where id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer direct invoice line unit-price access",
+    () => db.unsafe("select unit_price from public.customer_invoice_items where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer direct invoice line total access",
+    () => db.unsafe("select line_total from public.customer_invoice_items where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer direct payment amount access",
+    () => db.unsafe("select amount from public.customer_payments where invoice_id=$1", [invoice.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer cannot call staff finance RPC",
+    () => db.unsafe("select public.fetch_staff_finance_data()"),
+    /staff role required/i,
+  );
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const authorizedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const staffInvoice = authorizedFinance[0].result.invoices.find((row) => row.id === invoice.id);
+  const staffPayment = authorizedFinance[0].result.payments.find((row) => row.invoice_id === invoice.id);
+  assert.equal(Number(staffInvoice.total_amount), 370000, "staff finance RPC retains invoice totals");
+  assert.equal(Number(staffPayment.amount), 100000, "staff finance RPC retains payment amounts");
 
   await db.unsafe("update public.orders set status='processing' where id=$1", [order.id]);
   await db.unsafe("update public.orders set status='shipped' where id=$1", [order.id]);
@@ -298,19 +426,28 @@ async function main() {
   );
   const reviewOrder = reviewOrderResult[0].result;
   const reviewItemRows = await db.unsafe(
-    "select id,quantity,unit_price_snapshot from public.order_items where order_id=$1",
+    "select id,quantity from public.order_items where order_id=$1",
     [reviewOrder.id],
   );
-  assert.equal(reviewItemRows.length, 1, "review smoke order should have one line");
+  assert.equal(reviewItemRows.length, 1, "customer may read the non-financial review line identity");
+  assert.equal(Number(reviewItemRows[0].quantity), 2);
+
+  // Switch to staff identity before reading any financial line fields.
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const staffReviewItems = await db.unsafe(
+    "select id,quantity,unit_price_snapshot from public.fetch_staff_order_items($1::uuid)",
+    [reviewOrder.id],
+  );
+  assert.equal(staffReviewItems.length, 1, "staff must get review lines from the tenant-scoped RPC");
+  assert.equal(Number(staffReviewItems[0].unit_price_snapshot), 38500, "the original quantity-two line snapshot must remain intact before the one-order override");
   const reviewLines = [{
     item_id: reviewItemRows[0].id,
     quantity: 1,
     unit_price: 36000,
     price_reason: "CI one-order override; not a catalog price change",
   }];
-  await db.unsafe("reset role");
-  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
-  await db.unsafe("set role authenticated");
   const stagedReview = await db.unsafe(
     "select public.review_order_lines($1::uuid,$2::jsonb,$3,$4) as result",
     [reviewOrder.id, db.json(reviewLines), "stage", "CI order review"],
@@ -328,7 +465,7 @@ async function main() {
   assert.equal(approvedReview[0].result.status, "confirmed", "approved review must confirm the order");
   assert.equal(Number(approvedReview[0].result.total_amount), 36000, "order total must be recalculated from approved price and quantity");
   const reviewedState = await db.unsafe(
-    "select status,total_amount,quantity_review_required,payment_request_status,customer_payment_requested_at from public.orders where id=$1",
+    "select status,total_amount,quantity_review_required,payment_request_status,customer_payment_requested_at from public.fetch_staff_orders() where id=$1",
     [reviewOrder.id],
   );
   assert.equal(reviewedState[0].status, "confirmed");
@@ -337,7 +474,7 @@ async function main() {
   assert.equal(reviewedState[0].payment_request_status, "requested");
   assert.ok(reviewedState[0].customer_payment_requested_at, "customer payment request should be recorded at confirmation");
   const reviewedLines = await db.unsafe(
-    "select quantity,requested_quantity,approved_quantity,unit_price_snapshot,approved_unit_price,price_override_reason from public.order_items where order_id=$1",
+    "select quantity,requested_quantity,approved_quantity,unit_price_snapshot,approved_unit_price,price_override_reason from public.fetch_staff_order_items($1::uuid)",
     [reviewOrder.id],
   );
   assert.equal(Number(reviewedLines[0].requested_quantity), 2, "original requested quantity must remain auditable");
@@ -345,7 +482,8 @@ async function main() {
   assert.equal(Number(reviewedLines[0].quantity), 1);
   assert.equal(Number(reviewedLines[0].approved_unit_price), 36000);
   assert.match(reviewedLines[0].price_override_reason, /CI one-order override/);
-  const reviewedInvoice = await db.unsafe("select total_amount from public.customer_invoices where order_id=$1", [reviewOrder.id]);
+  const reviewedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const reviewedInvoice = reviewedFinance[0].result.invoices.filter((row) => row.order_id === reviewOrder.id);
   assert.equal(reviewedInvoice.length, 1, "approval should issue exactly one invoice");
   assert.equal(Number(reviewedInvoice[0].total_amount), 36000);
   process.stdout.write("PASS order-review approval, stale/unapproved confirmation guard, one-order price override, invoice and payment-request lifecycle\\n");
