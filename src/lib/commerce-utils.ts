@@ -68,6 +68,59 @@ export function validateQuickOrderLines(lines: QuickOrderLineInput[]): QuickOrde
   return { valid: true };
 }
 
+export type CustomerOrderStatusSnapshot = { order_number: string | number; status: string; created_at: string };
+export type CustomerInvoiceStatusSnapshot = { invoice_number: string; status: string; issued_at: string };
+
+const CUSTOMER_ORDER_STATUS_LABELS: Record<string, string> = {
+  draft: 'مسودة',
+  pending: 'بانتظار المراجعة',
+  confirmed: 'مؤكد',
+  processing: 'قيد التجهيز',
+  shipped: 'تم الشحن',
+  delivered: 'تم التسليم',
+  cancelled: 'ملغي',
+  needs_customer_amendment: 'بانتظار تعديل العميل',
+  returned_for_adjustment: 'أُعيد للتعديل',
+  awaiting_customer_payment: 'بانتظار السداد',
+};
+
+const CUSTOMER_INVOICE_STATUS_LABELS: Record<string, string> = {
+  issued: 'صادرة',
+  unpaid: 'مستحقة',
+  partially_paid: 'مدفوعة جزئيًا',
+  paid: 'مدفوعة',
+  void: 'ملغاة',
+  overdue: 'متأخرة',
+};
+
+type DateFormatter = (value: string) => string;
+
+/** Customer assistant status summaries intentionally omit every monetary field. */
+export function summarizeCustomerOrderStatuses(
+  rows: CustomerOrderStatusSnapshot[],
+  formatDate: DateFormatter,
+): string {
+  if (!rows.length) return 'لم يُعثر على طلبات مسجلة لحسابك.';
+  return 'أحدث طلبات حسابك:\\n' + rows.slice(0, 10).map((row) =>
+    String(row.order_number) + ' — ' + (CUSTOMER_ORDER_STATUS_LABELS[row.status] ?? row.status) +
+    ' — ' + formatDate(row.created_at),
+  ).join('\\n') + (rows.length > 10 ? '\\nوتوجد ' + (rows.length - 10) + ' طلبات أقدم.' : '');
+}
+
+/** Invoice numbers and states are safe to summarize; amounts belong only on the statement surface. */
+export function summarizeCustomerInvoiceStatuses(
+  rows: CustomerInvoiceStatusSnapshot[],
+  formatDate: DateFormatter,
+): string {
+  const statementNote = 'للاطلاع على الأرصدة والمدفوعات، افتح شاشة كشف الحساب.';
+  if (!rows.length) return 'لا توجد فواتير مسجلة لحسابك. ' + statementNote;
+  return 'الفواتير المسجلة لحسابك:\\n' + rows.slice(0, 10).map((row) =>
+    row.invoice_number + ' — ' + (CUSTOMER_INVOICE_STATUS_LABELS[row.status] ?? row.status) +
+    ' — ' + formatDate(row.issued_at),
+  ).join('\\n') + (rows.length > 10 ? '\\nوتوجد ' + (rows.length - 10) + ' فواتير أقدم.' : '') +
+    '\\n' + statementNote;
+}
+
 export type AssistantIntent = 'order_status' | 'catalog_search' | 'invoice_help' | 'offline_help' | 'general';
 export function classifyAssistantIntent(question: string): AssistantIntent {
   const q = question.trim().toLocaleLowerCase('ar');
