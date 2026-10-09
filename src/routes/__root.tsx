@@ -12,7 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
 function NotFoundComponent() {
   return (
@@ -115,6 +115,21 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthHealthNotice() {
+  const { configurationError } = useAuth();
+  if (!configurationError) return null;
+  return (
+    <div role="alert" dir="rtl" style={{
+      position: "relative", zIndex: 1000, padding: "12px 16px",
+      background: "#fff3cd", color: "#664d03", borderBottom: "1px solid #ffecb5",
+      fontFamily: "Cairo, system-ui, sans-serif", fontSize: 14, lineHeight: 1.8,
+    }}>
+      <strong>تعذر الاتصال بالخدمات الخلفية.</strong>
+      <span style={{ marginInlineStart: 8 }}>{configurationError}</span>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => {
@@ -127,6 +142,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <AuthProvider>
+        <AuthHealthNotice />
         <Outlet />
       </AuthProvider>
     </QueryClientProvider>
