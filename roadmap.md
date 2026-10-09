@@ -1,8 +1,9 @@
 # Aghbari Commerce — completion roadmap
 
-Current implementation branch: `fix/commerce-completion-20261009`  
-Pull request: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/1  
-Status: implementation is on `fix/commerce-completion-20261009`; the draft PR is not merged to `main`. Latest CI runs for the newest code are being rechecked. Database migrations have not been applied.
+Last state audit: 2026-10-09. Repository: `Aghbari-Technologies/aghbari-commerce-evolved`.  
+Current `main` HEAD observed during audit: `c94d808a98246c02c8171a6d4729901bb9720faf`.  
+Pull request #1: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/1 — **MERGED** at `7a80eb70e5c5c6c3d52dd282a28bb4e76d30d9ab`. The branch has since advanced on `main`; do not describe PR #1 as draft/unmerged.  
+Release status: **NOT production-certified**. Exact target Supabase project `ffxxjaolfntzbapmfbuv` is still unavailable through the current connector, so live migrations, live RLS/RPC validation, authenticated browser E2E, and production behavior remain NOT PROVEN. Do not apply these migrations to the similarly named but schema-incompatible `aghbari-commerce` Supabase project.
 
 ## Implemented in the draft PR
 
