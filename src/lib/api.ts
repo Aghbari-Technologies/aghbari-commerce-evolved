@@ -335,12 +335,6 @@ export async function createPricingRule(input: CreatePricingRuleInput): Promise<
   const { error } = await supabase.from('pricing_rules').insert({
     organization_id: ORG_ID,
     ...fields,
-    requires_approval: false,
-    approved_by: null,
-    approved_at: null,
-    manually_locked: false,
-    is_active: true,
-    version: 1,
   });
   if (error) throw new Error('تعذر إنشاء قاعدة التسعير: ' + error.message);
 }
@@ -349,7 +343,7 @@ export async function updatePricingRule(id: string, input: CreatePricingRuleInpu
   const fields = buildPricingRuleDatabaseFields(input);
   const { data: current, error: readError } = await supabase
     .from('pricing_rules')
-    .select('id,manually_locked,requires_approval,approved_at,version')
+    .select('id,manually_locked,requires_approval,approved_at')
     .eq('organization_id', ORG_ID)
     .eq('id', id)
     .maybeSingle();
@@ -362,7 +356,7 @@ export async function updatePricingRule(id: string, input: CreatePricingRuleInpu
 
   const { data, error } = await supabase
     .from('pricing_rules')
-    .update({ ...fields, version: Number(current.version ?? 1) + 1 })
+    .update(fields)
     .eq('organization_id', ORG_ID)
     .eq('id', id)
     .eq('manually_locked', false)
@@ -373,7 +367,7 @@ export async function updatePricingRule(id: string, input: CreatePricingRuleInpu
   if (!data) throw new Error('لم تُحدّث القاعدة؛ قد تكون مقفلة أو أصبحت خاضعة للموافقة.');
 }
 
-export async function togglePricingRule(id: string, isActive: boolean): Promise<void> {
+export async function togglePricingRule(id: string, isActive: boolean): Promise<{ requires_approval: boolean; approved_at: string | null; is_active: boolean }> {
   const { data: rule, error: readError } = await supabase
     .from('pricing_rules')
     .select('id,scope_type,manually_locked')
@@ -392,10 +386,11 @@ export async function togglePricingRule(id: string, isActive: boolean): Promise<
     .eq('organization_id', ORG_ID)
     .eq('id', id)
     .eq('manually_locked', false)
-    .select('id')
+    .select('id,requires_approval,approved_at,is_active')
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('لم تتغير القاعدة؛ قد تكون مقفلة أو لم تعد موجودة.');
+  return data;
 }
 
 export async function deletePricingRule(id: string): Promise<void> {
@@ -409,6 +404,29 @@ export async function deletePricingRule(id: string): Promise<void> {
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('تعذر حذف القاعدة؛ تأكد أنها غير مقفلة وأنها تتبع المؤسسة الحالية.');
+}
+
+export type CustomerTierPricePreview = {
+  customer_id: string; customer_name: string; product_id: string; product_name: string;
+  item_code: string; tier: string; quantity: number; unit_price: number; line_total: number; currency: string;
+};
+
+export async function previewCustomerTierPrice(input: { customer_id: string; product_id: string; quantity: number }): Promise<CustomerTierPricePreview> {
+  if (!input.customer_id || !input.product_id || !Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 10000) {
+    throw new Error('اختر العميل والصنف وأدخل كمية صحيحة بين 1 و10000.');
+  }
+  const { data, error } = await supabase.rpc('preview_customer_tier_price', {
+    p_customer_id: input.customer_id, p_product_id: input.product_id, p_quantity: input.quantity,
+  });
+  if (error) throw new Error('تعذر معاينة سعر العميل: ' + error.message);
+  return data as CustomerTierPricePreview;
+}
+
+export async function approvePricingRule(id: string, approvalNote: string): Promise<void> {
+  const note = approvalNote.trim();
+  if (!id || note.length < 3 || note.length > 1000) throw new Error('سبب الاعتماد مطلوب ولا يتجاوز 1000 حرف.');
+  const { error } = await supabase.rpc('approve_pricing_rule', { p_rule_id: id, p_approval_note: note });
+  if (error) throw new Error('تعذر اعتماد قاعدة التسعير: ' + error.message);
 }
 
 // ─── Promotions ───

@@ -852,9 +852,9 @@ async function main() {
     `insert into public.pricing_rules(
        organization_id,name,scope_type,scope_value,base_type,base_source,adjustment_type,
        calculation_method,adjustment_value,target_tier,min_quantity,min_price,max_price,
-       priority,is_active,requires_approval,manually_locked,version
+       priority,is_active
      ) values($1,'CI pricing calculation rule','product',$2,'base_price','base_price','percentage',
-       'add_percentage',10,'both',1,null,null,1,true,false,false,1)
+       'add_percentage',10,'both',1,null,null,1,true)
      returning id`,
     [organizationId, productId],
   );
@@ -901,6 +901,116 @@ async function main() {
     await db.unsafe("update public.pricing_rules set is_active=true where id=any($1::uuid[])", [previouslyActiveRules.map((row) => row.id)]);
   }
   process.stdout.write("PASS pricing rules: all four formulas, tier targeting, deletion resets both derived tier prices to base, and audited mutations\n");
+
+
+  // Capture the effective tier price before submitting the product-specific rule. An existing
+  // global/legacy active rule may apply; the pending rule must not change that baseline.
+  const previewProductId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,cost_price,min_stock,status) values($1,$2,'CI Pricing Preview Product','CI-PRICE-PREVIEW-01','unit',1000,500,0,'active') on conflict(id) do nothing",
+    [previewProductId, organizationId],
+  );
+  const retailCustomerRows = await db.unsafe(
+    "select id from public.customers where organization_id=$1 and profile_id=$2 order by created_at limit 1",
+    [organizationId, secondProfileId],
+  );
+  assert.equal(retailCustomerRows.length, 1, "retail preview customer fixture should exist");
+  const retailCustomerId = retailCustomerRows[0].id;
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const baselineRows = await db.unsafe(
+    "select public.preview_customer_tier_price($1::uuid,$2::uuid,$3::numeric) as result",
+    [retailCustomerId, previewProductId, 3],
+  );
+  const baselinePreview = baselineRows[0].result;
+  const baselineUnitPrice = Number(baselinePreview.unit_price);
+  assert.ok(Number.isFinite(baselineUnitPrice) && baselineUnitPrice >= 0, "baseline price must come from the shared deterministic resolver");
+
+  await db.unsafe("reset role");
+  await setIdentity(operationsStaffAuthUserId, "ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  const submittedRuleRows = await db.unsafe(
+    "insert into public.pricing_rules(organization_id,name,scope_type,scope_value,base_type,base_source,adjustment_type,calculation_method,adjustment_value,target_tier,min_quantity,min_price,max_price,priority,is_active) values($1,'CI approval workflow rule','product',$2,'base_price','base_price','percentage','add_percentage',5,'both',1,null,null,1,true) returning id,requires_approval,submitted_by,approved_at",
+    [organizationId, previewProductId],
+  );
+  const submittedRule = submittedRuleRows[0];
+  assert.equal(submittedRule.requires_approval, true, "ordinary staff-created rule must require managerial approval");
+  assert.equal(submittedRule.approved_at, null);
+  assert.equal(submittedRule.submitted_by, operationsStaffProfileId, "submission identity must be server-derived");
+  await expectFailure(
+    "ordinary staff cannot forge pricing-rule approval state",
+    () => db.unsafe("update public.pricing_rules set approved_at=now(),approved_by=$1 where id=$2", [operationsStaffProfileId, submittedRule.id]),
+    /permission denied|pricing approval state can only be changed through the governed approval RPC/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot switch a submitted pricing rule out of approval",
+    () => db.unsafe("update public.pricing_rules set requires_approval=false where id=$1", [submittedRule.id]),
+    /permission denied|requires_approval can only be changed by the governed creation path/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot edit an existing pricing rule in place",
+    () => db.unsafe("update public.pricing_rules set adjustment_value=6 where id=$1", [submittedRule.id]),
+    /ordinary staff must submit a new pricing rule for approval/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot approve submitted pricing rule",
+    () => db.unsafe("select public.approve_pricing_rule($1::uuid,$2)", [submittedRule.id, "staff must not approve"]),
+    /pricing approval requires admin or manager/i,
+  );
+  const previewBeforeApprovalRows = await db.unsafe(
+    "select public.preview_customer_tier_price($1::uuid,$2::uuid,$3::numeric) as result",
+    [retailCustomerId, previewProductId, 3],
+  );
+  const previewBeforeApproval = previewBeforeApprovalRows[0].result;
+  assert.equal(Number(previewBeforeApproval.unit_price), baselineUnitPrice, "pending product-specific rule must not change the previously effective price");
+  assert.equal(Number(previewBeforeApproval.line_total), Math.round(baselineUnitPrice * 3 * 100) / 100);
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const approvedRuleResult = await db.unsafe(
+    "select public.approve_pricing_rule($1::uuid,$2) as result",
+    [submittedRule.id, "CI: approved after reviewing scope, margin and tier impact"],
+  );
+  assert.equal(approvedRuleResult[0].result.approved, true);
+  assert.equal(approvedRuleResult[0].result.approval_note, "CI: approved after reviewing scope, margin and tier impact");
+  const previewAfterApprovalRows = await db.unsafe(
+    "select public.preview_customer_tier_price($1::uuid,$2::uuid,$3::numeric) as result",
+    [retailCustomerId, previewProductId, 3],
+  );
+  assert.equal(Number(previewAfterApprovalRows[0].result.unit_price), 1050, "approved product-specific 5% rule must outrank global/legacy rules via the shared resolver");
+  assert.equal(Number(previewAfterApprovalRows[0].result.line_total), 3150);
+  const approvalAuditRows = await db.unsafe(
+    "select action,new_value from public.audit_logs where organization_id=$1 and entity_type='pricing_rule' and entity_id=$2",
+    [organizationId, submittedRule.id],
+  );
+  assert.ok(approvalAuditRows.some((row) => row.action === 'pricing_rule.updated' && row.new_value?.approval_note === "CI: approved after reviewing scope, margin and tier impact"),
+    "approval decision and rationale must be auditable");
+
+  await db.unsafe("reset role");
+  await setIdentity(accountantAuthUserId, "ci-accountant@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "accountant cannot open operational pricing preview",
+    () => db.unsafe("select public.preview_customer_tier_price($1::uuid,$2::uuid,$3::numeric)", [retailCustomerId, previewProductId, 1]),
+    /active staff role required for pricing preview/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "customer cannot call staff-only pricing preview",
+    () => db.unsafe("select public.preview_customer_tier_price($1::uuid,$2::uuid,$3::numeric)", [retailCustomerId, previewProductId, 1]),
+    /active staff role required for pricing preview/i,
+  );
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  await db.unsafe("delete from public.pricing_rules where id=$1", [submittedRule.id]);
+  process.stdout.write("PASS pricing approval gate, protected approval state, audit rationale, shared customer-tier preview and role denial\n");
 
   process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle and pricing-rule CRUD semantics.\n");
 }
