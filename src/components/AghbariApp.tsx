@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Activity, AlertTriangle, BarChart3, Bell, Bot, Box, Check, ChevronLeft,
   CircleDollarSign, Database, FileText, LayoutDashboard, LogOut, Menu, Package,
@@ -24,6 +24,10 @@ import {
 } from '@/components/AdminPages';
 import { OperationsCenter } from '@/components/OperationsCenter';
 import { StaffQuotesPage, StaffFinancePage } from '@/components/CustomerWorkflows';
+import {
+  CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
+} from '@/components/ui/command';
+import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
 
 type View = 'dashboard' | 'products' | 'customers' | 'orders' | 'pricing' | 'offers' | 'reports' | 'data' | 'operations' | 'notifications' | 'ai' | 'suppliers' | 'devices' | 'settings' | 'quotes' | 'finance';
 type IconType = typeof LayoutDashboard;
@@ -61,9 +65,29 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const setMode = (_m: 'storefront') => { void navigate({ to: '/' }); };
   const [view, setView] = useState<View>(initialView);
   const [mobileNav, setMobileNav] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(null), 2800); };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
+
+  const runAdminCommand = (id: View) => {
+    setCommandOpen(false);
+    setView(id);
+    setOrderDetailId(null);
+    setMobileNav(false);
+    void navigate({ to: adminPaths[id] as never });
+  };
 
   if (!ready) return <div className="login-screen" dir="rtl"><div style={{ margin: 'auto' }}><Loading /></div></div>;
   if (!user) return <Login />;
@@ -85,7 +109,7 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
         <div className="sidebar-bottom"><button onClick={() => setMode('storefront')}><Store size={18} /> عرض المتجر</button><button onClick={signOut}><LogOut size={18} /> خروج</button><div className="secure"><span /> النظام متصل وآمن</div></div>
       </aside>
       <main className="main">
-        <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)}><Menu size={20} /></button><div className="topbar-title"><span className="live" /> مركز تشغيل الأغبري <small>الطلبات والمخزون والأسعار والعملاء</small></div><div className="top-actions"><button className="search-button"><Search size={16} /> بحث سريع <kbd>Ctrl K</kbd></button><button className="notification" onClick={() => setView('notifications')}><Bell size={18} /><b>4</b></button></div></header>
+        <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)}><Menu size={20} /></button><div className="topbar-title"><span className="live" /> مركز تشغيل الأغبري <small>الطلبات والمخزون والأسعار والعملاء</small></div><div className="top-actions"><button type="button" className="search-button" aria-haspopup="dialog" aria-label="بحث سريع (Ctrl K)" onClick={() => setCommandOpen(true)}><Search size={16} /> بحث سريع <kbd>Ctrl K</kbd></button><button className="notification" aria-label="فتح التنبيهات" onClick={() => runAdminCommand('notifications')}><Bell size={18} /><b>4</b></button></div></header>
         <div className="page-wrap">
           {view === 'dashboard' && <Dashboard onNavigate={setView} />}
           {view === 'products' && <Products onNotice={showNotice} />}
@@ -106,6 +130,29 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
           {view === 'finance' && <StaffFinancePage />}
         </div>
       </main>
+      <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+        <DialogTitle className="sr-only">التنقل السريع في لوحة الأغبري</DialogTitle>
+        <DialogDescription className="sr-only">ابحث عن قسم ثم اضغط Enter لفتحه. يمكنك فتح البحث باستخدام Ctrl K.</DialogDescription>
+        <CommandInput placeholder="ابحث عن قسم أو صفحة أو إجراء..." />
+        <CommandList dir="rtl">
+          <CommandEmpty>لا توجد نتائج مطابقة.</CommandEmpty>
+          <CommandGroup heading="أقسام لوحة التحكم">
+            {nav.map(({ id, label, icon: Icon }) => (
+              <CommandItem key={id} value={`${label} ${id} ${adminPaths[id]}`} onSelect={() => runAdminCommand(id)}>
+                <Icon size={17} aria-hidden="true" />
+                <span>{label}</span>
+                <span className="ml-auto text-xs text-muted-foreground" dir="ltr">{adminPaths[id]}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandGroup heading="مسارات إضافية">
+            <CommandItem value="المتجر واجهة العميل storefront home catalog" onSelect={() => { setCommandOpen(false); setMode('storefront'); }}>
+              <Store size={17} aria-hidden="true" />
+              <span>فتح واجهة المتجر</span>
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
       {notice && <div className="toast"><Check size={17} /> {notice}</div>}
     </div>
   );
