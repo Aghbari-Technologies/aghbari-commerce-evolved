@@ -134,7 +134,7 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
     const lines = payload();
     if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 10000 ||
       !Number.isFinite(line.unit_price) || line.unit_price < 0 ||
-      !Number.isInteger(Math.round(line.quantity * 1000)))) {
+      Math.abs(line.quantity * 1000 - Math.round(line.quantity * 1000)) > 0.000001)) {
       setReviewMessage('تحقق من أن كل كمية بين 0.001 و10,000 وأن الأسعار أرقام غير سالبة.');
       return;
     }
