@@ -116,12 +116,19 @@ async function main() {
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
 
+  const previewInput10 = JSON.stringify([{ product_id: productId, quantity: 10 }]);
+  const payloadCheck = await db.unsafe(
+    "select jsonb_typeof($1::jsonb) as json_type, $1::jsonb as payload",
+    [previewInput10],
+  );
+  process.stdout.write("JSONB PARAMETER CHECK " + JSON.stringify(payloadCheck[0]) + "\\n");
   const preview10 = await db.unsafe(
     "select public.preview_order_pricing($1::jsonb) as result",
-    [JSON.stringify([{ product_id: productId, quantity: 10 }])],
+    [previewInput10],
   );
   assert.equal(Number(preview10[0].result.total_amount), 370000, "quantity 10 should use the wholesale price break of 37,000");
 
+  process.stdout.write("PASS preview quantity 10\\n");
   const preview20 = await db.unsafe(
     "select public.preview_order_pricing($1::jsonb) as result",
     [JSON.stringify([{ product_id: productId, quantity: 20 }])],
