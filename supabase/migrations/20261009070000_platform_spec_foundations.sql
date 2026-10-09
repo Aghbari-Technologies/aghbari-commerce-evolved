@@ -1383,3 +1383,20 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.create_central_synonym(text,text,uuid,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_central_synonym(text,text,uuid,text) TO authenticated;
+
+
+-- Backward-compatible defaults for existing checkout clients that do not yet send review snapshots.
+CREATE OR REPLACE FUNCTION public.default_order_item_approval_snapshot()
+RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+AS $$
+BEGIN
+  NEW.requested_quantity := coalesce(NEW.requested_quantity,NEW.quantity);
+  NEW.approved_quantity := coalesce(NEW.approved_quantity,NEW.quantity);
+  NEW.approved_unit_price := coalesce(NEW.approved_unit_price,NEW.unit_price_snapshot);
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS order_items_default_approval_snapshot ON public.order_items;
+CREATE TRIGGER order_items_default_approval_snapshot
+  BEFORE INSERT ON public.order_items
+  FOR EACH ROW EXECUTE FUNCTION public.default_order_item_approval_snapshot();
