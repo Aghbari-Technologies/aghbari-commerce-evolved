@@ -87,6 +87,7 @@ const CUSTOMER_ORDER_STATUS_LABELS: Record<string, string> = {
 const CUSTOMER_INVOICE_STATUS_LABELS: Record<string, string> = {
   issued: 'صادرة',
   unpaid: 'مستحقة',
+  unpaid: 'مستحقة',
   partially_paid: 'مدفوعة جزئيًا',
   paid: 'مدفوعة',
   void: 'ملغاة',
