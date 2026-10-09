@@ -10,7 +10,7 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  normalizeHeader, validateCsvRow, type ParsedImportRow, type QualityResult,
+  applyImportProfileRules, normalizeHeader, validateCsvRow, validateImportProfileRules, type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
 
@@ -66,13 +66,21 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
   const activeProfileId = profileId || (profiles ?? []).find((p: ImportProfile) => p.profile_name === "Unified CSV" && p.status === "active")?.id || null;
   const synonymMap = useMemo(() => {
     const result: Record<string, string> = { ...DEFAULT_SYNONYMS };
+    const normalizeSource = (value: string) => value.trim().toLocaleLowerCase("ar").replace(/[ـ_-]+/g, " ").replace(/\s+/g, " ");
     for (const row of storedSynonyms ?? []) {
-      const source = String(row.source_header ?? "").trim().toLocaleLowerCase("ar").replace(/[ـ_-]+/g, " ").replace(/\s+/g, " ");
+      if (row.profile_id && row.profile_id !== activeProfileId) continue;
+      const source = normalizeSource(String(row.source_header ?? ""));
       const target = String(row.canonical_field ?? "").trim();
       if (source && /^[a-z][a-z0-9_]{0,79}$/.test(target)) result[source] = target;
     }
+    const selectedProfile = (profiles ?? []).find((p: ImportProfile) => p.id === activeProfileId);
+    for (const [sourceHeader, canonicalField] of Object.entries(selectedProfile?.synonyms ?? {})) {
+      const source = normalizeSource(sourceHeader);
+      const target = String(canonicalField).trim();
+      if (source && /^[a-z][a-z0-9_]{0,79}$/.test(target)) result[source] = target;
+    }
     return result;
-  }, [storedSynonyms]);
+  }, [storedSynonyms, profiles, activeProfileId]);
 
   function updatePaused(next: boolean) {
     pausedRef.current = next;
@@ -137,6 +145,28 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
+      const profile = (profiles ?? []).find((p: ImportProfile) => p.id === selectedProfile) as ImportProfile | undefined;
+      const transformations = profile?.transformation_rules ?? [];
+      const validations = profile?.validation_rules ?? [];
+      // Fail fast on malformed declarative profiles before any rows are staged.
+      validateImportProfileRules(transformations, validations);
+      const profileSynonyms: Record<string, string> = { ...DEFAULT_SYNONYMS };
+      const normalizeSynonymSource = (value: string) => value.trim().toLocaleLowerCase("ar").replace(/[ـ_-]+/g, " ").replace(/\s+/g, " ");
+      for (const row of storedSynonyms ?? []) {
+        if (row.profile_id && row.profile_id !== selectedProfile) continue;
+        const source = normalizeSynonymSource(String(row.source_header ?? ""));
+        const target = String(row.canonical_field ?? "").trim();
+        if (source && /^[a-z][a-z0-9_]{0,79}$/.test(target)) profileSynonyms[source] = target;
+      }
+      for (const [sourceHeader, canonicalField] of Object.entries(profile?.synonyms ?? {})) {
+        const source = normalizeSynonymSource(sourceHeader);
+        const target = String(canonicalField).trim();
+        if (source && /^[a-z][a-z0-9_]{0,79}$/.test(target)) profileSynonyms[source] = target;
+      }
+      const ignoredColumns = new Set((profile?.ignored_columns ?? []).map((field) => normalizeHeader(String(field), profileSynonyms)));
+      const requiredColumns = Array.isArray(profile?.required_columns) ? profile.required_columns.map(String) : ["item_code"];
+      const matchingKey = String(profile?.matching_key ?? "item_code");
+
       setStage("reading");
       uploadSession = await createImportUploadSession(job.id);
       const parser = new StreamingCsvParser();
@@ -146,9 +176,6 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       let rowCounter = 0;
       let dataRows = 0;
       let batch: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors: string[] }> = [];
-      const profile = (profiles ?? []).find((p: ImportProfile) => p.id === selectedProfile) as ImportProfile | undefined;
-      const requiredColumns = Array.isArray(profile?.required_columns) ? profile.required_columns.map(String) : ["item_code"];
-      const matchingKey = String(profile?.matching_key ?? "item_code");
 
       const flushBatch = async () => {
         if (!batch.length) return;
@@ -164,7 +191,11 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         if (cancelRef.current) return;
         if (!headers) {
           if (values.length > MAX_IMPORT_COLUMNS) throw new Error("عدد الأعمدة يتجاوز الحد الأقصى " + MAX_IMPORT_COLUMNS);
-          headers = values.map((value) => normalizeHeader(value, synonymMap));
+          headers = values.map((value) => {
+            const canonical = normalizeHeader(value, profileSynonyms);
+            const rawKey = normalizeSynonymSource(value);
+            return ignoredColumns.has(canonical) || ignoredColumns.has(rawKey) ? "" : canonical;
+          });
           if (!headers.length || headers.every((value) => !value)) throw new Error("صف العناوين فارغ؛ يلزم تعيين الأعمدة يدويًا.");
           if (new Set(headers.filter(Boolean)).size !== headers.filter(Boolean).length) {
             throw new Error("يوجد أكثر من عنوان يتحول إلى العمود نفسه بعد التطبيع؛ راجع قاموس المرادفات.");
@@ -176,7 +207,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         if (values.length > MAX_IMPORT_COLUMNS) throw new Error("صف البيانات تجاوز حد الأعمدة.");
         if (dataRows >= MAX_IMPORT_ROWS) throw new Error("تجاوز الملف الحد الأقصى " + MAX_IMPORT_ROWS + " صف.");
         dataRows += 1;
-        const parsed: ParsedImportRow = validateCsvRow(values, headers, dataRows + 1);
+        const baseRow: ParsedImportRow = validateCsvRow(values, headers, dataRows + 1);
+        const parsed: ParsedImportRow = applyImportProfileRules(baseRow, transformations, validations);
         quality?.add(parsed);
         batch.push({ rowNumber: parsed.row_number, data: parsed.data, status: parsed.status, errors: parsed.errors });
         setStage("validating");
