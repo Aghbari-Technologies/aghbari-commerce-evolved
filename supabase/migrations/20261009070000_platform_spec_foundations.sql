@@ -1098,3 +1098,288 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.record_import_upload_chunk(uuid,integer,bigint,integer,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.record_import_upload_chunk(uuid,integer,bigint,integer,text) TO authenticated;
+
+
+CREATE OR REPLACE FUNCTION public.find_import_duplicate(
+  p_file_hash text, p_profile_id uuid DEFAULT NULL, p_period_key text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_actor uuid := public.current_profile_id();
+  v_org uuid;
+  v_profile uuid;
+  v_period text := nullif(left(coalesce(p_period_key,''),120),'');
+  v_jobs jsonb;
+  v_snapshots jsonb;
+BEGIN
+  SELECT p.organization_id INTO v_org FROM public.profiles p
+   WHERE p.id=v_actor AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='غير مصرح بالتحقق من تكرار الاستيراد';
+  END IF;
+  IF coalesce(p_file_hash,'') !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='بصمة ملف الاستيراد غير صالحة';
+  END IF;
+  IF p_profile_id IS NULL THEN
+    SELECT ip.id INTO v_profile FROM public.import_profiles ip
+     WHERE ip.organization_id=v_org AND ip.profile_name='Unified CSV' AND ip.status='active'
+     ORDER BY ip.version DESC LIMIT 1;
+  ELSE
+    SELECT ip.id INTO v_profile FROM public.import_profiles ip
+     WHERE ip.id=p_profile_id AND ip.organization_id=v_org AND ip.status='active';
+    IF v_profile IS NULL THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='الملف التعريفي غير نشط أو لا يتبع المؤسسة'; END IF;
+  END IF;
+  IF v_profile IS NULL THEN RETURN jsonb_build_object('duplicate',false,'profile_id',NULL,'jobs','[]'::jsonb,'snapshots','[]'::jsonb); END IF;
+
+  SELECT coalesce(jsonb_agg(to_jsonb(j) ORDER BY j.created_at DESC),'[]'::jsonb) INTO v_jobs
+    FROM (
+      SELECT id,file_name,file_hash,file_size,status,total_rows,processed_rows,success_rows,failed_rows,
+             data_quality_score,error_summary,created_at,completed_at,upload_session_id
+        FROM public.import_jobs
+       WHERE organization_id=v_org AND profile_id=v_profile AND file_hash=p_file_hash
+         AND period_key IS NOT DISTINCT FROM v_period
+       ORDER BY created_at DESC LIMIT 20
+    ) j;
+  SELECT coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.snapshot_version DESC),'[]'::jsonb) INTO v_snapshots
+    FROM (
+      SELECT id,source_import_job_id,source_file_hash,source_file_name,period_key,snapshot_version,
+             row_count,data_quality_score,status,created_at
+        FROM public.onyx_snapshots
+       WHERE organization_id=v_org AND profile_id=v_profile AND source_file_hash=p_file_hash
+         AND period_key IS NOT DISTINCT FROM v_period
+       ORDER BY snapshot_version DESC LIMIT 20
+    ) s;
+  RETURN jsonb_build_object(
+    'duplicate',jsonb_array_length(v_jobs)>0 OR jsonb_array_length(v_snapshots)>0,
+    'profile_id',v_profile,'period_key',v_period,'jobs',v_jobs,'snapshots',v_snapshots
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.find_import_duplicate(text,uuid,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.find_import_duplicate(text,uuid,text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.finalize_import_job(p_job_id uuid, p_duplicate_action text)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_job public.import_jobs%ROWTYPE;
+  v_quality jsonb;
+  v_profile public.import_profiles%ROWTYPE;
+  v_score integer;
+  v_status text;
+  v_snapshot uuid;
+  v_prior_snapshot uuid;
+  v_snapshot_version integer;
+  v_rows integer;
+  v_old_rows integer := 0;
+  v_new_rows integer := 0;
+  v_conflicts integer := 0;
+  v_actor uuid := public.current_profile_id();
+  v_org uuid;
+  v_policy text := 'manual_review';
+  v_matching_key text := 'item_code';
+BEGIN
+  SELECT p.organization_id INTO v_org FROM public.profiles p
+   WHERE p.id=v_actor AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='غير مصرح بإنهاء الاستيراد';
+  END IF;
+  IF coalesce(p_duplicate_action,'') NOT IN ('ignore','replace','merge','new_version') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='إجراء النسخة المكررة غير صالح';
+  END IF;
+  SELECT j.* INTO v_job FROM public.import_jobs j WHERE j.id=p_job_id AND j.organization_id=v_org FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='P0002', MESSAGE='دفعة الاستيراد غير موجودة'; END IF;
+  IF v_job.status IN ('completed','completed_with_warnings','rejected','manual_review','ignored_duplicate') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='دفعة الاستيراد منتهية مسبقاً';
+  END IF;
+  IF v_job.profile_id IS NOT NULL THEN
+    SELECT ip.* INTO v_profile FROM public.import_profiles ip
+     WHERE ip.id=v_job.profile_id AND ip.organization_id=v_org;
+    IF FOUND THEN v_policy:=v_profile.merge_strategy; v_matching_key:=coalesce(nullif(v_profile.matching_key,''),'item_code'); END IF;
+  END IF;
+
+  SELECT s.id INTO v_prior_snapshot
+    FROM public.onyx_snapshots s
+   WHERE s.organization_id=v_org AND s.profile_id=v_job.profile_id
+     AND s.period_key IS NOT DISTINCT FROM v_job.period_key
+     AND s.status='ready'
+   ORDER BY s.snapshot_version DESC LIMIT 1;
+
+  IF p_duplicate_action='ignore' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.onyx_snapshots s
+       WHERE s.organization_id=v_org AND s.profile_id=v_job.profile_id
+         AND s.source_file_hash=v_job.file_hash
+         AND s.period_key IS NOT DISTINCT FROM v_job.period_key
+    ) THEN
+      UPDATE public.import_jobs SET status='ignored_duplicate',completed_at=now(),
+        error_summary=coalesce(error_summary,'{}'::jsonb)||jsonb_build_object('duplicate_action','ignore','reason','no prior snapshot for this exact file')
+       WHERE id=p_job_id;
+      RETURN jsonb_build_object('job_id',p_job_id,'status','ignored_duplicate','data_quality_score',0,'snapshot_id',NULL,'review_required',false,'duplicate_action','ignore');
+    END IF;
+    UPDATE public.import_jobs SET status='ignored_duplicate',completed_at=now(),
+      error_summary=coalesce(error_summary,'{}'::jsonb)||jsonb_build_object('duplicate_action','ignore','reason','matching hash/profile/period already imported')
+     WHERE id=p_job_id;
+    RETURN jsonb_build_object('job_id',p_job_id,'status','ignored_duplicate','data_quality_score',coalesce(v_job.data_quality_score,0),'snapshot_id',v_prior_snapshot,'review_required',false,'duplicate_action','ignore');
+  END IF;
+
+  v_quality := public.calculate_import_job_quality(p_job_id);
+  v_score := coalesce((v_quality->>'score')::integer,0);
+  v_rows := coalesce((v_quality->>'total_rows')::integer,0);
+  IF v_score<50 OR v_rows=0 THEN v_status:='rejected';
+  ELSIF v_score<75 THEN v_status:='manual_review';
+  ELSE v_status:='completed'; END IF;
+  UPDATE public.import_jobs
+     SET status=v_status,processed_rows=v_rows,
+         success_rows=(SELECT count(*) FROM public.import_job_rows r WHERE r.import_job_id=p_job_id AND r.status<>'rejected'),
+         failed_rows=(SELECT count(*) FROM public.import_job_rows r WHERE r.import_job_id=p_job_id AND r.status='rejected'),
+         data_quality_score=v_score,quality_breakdown=coalesce(v_quality->'components','{}'::jsonb),
+         review_required=(v_score>=50 AND v_score<75),
+         error_summary=coalesce(error_summary,'{}'::jsonb)||jsonb_build_object('quality_label',v_quality->>'label','quality_components',v_quality->'components','no_raw_file_retained',true,'duplicate_action',p_duplicate_action),
+         completed_at=CASE WHEN v_status='rejected' THEN now() ELSE completed_at END
+   WHERE id=p_job_id;
+  IF v_status<>'completed' THEN
+    RETURN jsonb_build_object('job_id',v_job.id,'status',v_status,'data_quality_score',v_score,'quality',v_quality,'snapshot_id',NULL,'review_required',v_status='manual_review','duplicate_action',p_duplicate_action);
+  END IF;
+
+  IF p_duplicate_action='replace' AND v_job.file_hash IS NOT NULL THEN
+    UPDATE public.onyx_snapshots SET status='archived'
+     WHERE organization_id=v_org AND profile_id=v_job.profile_id
+       AND period_key IS NOT DISTINCT FROM v_job.period_key
+       AND source_file_hash=v_job.file_hash AND status='ready';
+  END IF;
+
+  IF p_duplicate_action='merge' AND v_prior_snapshot IS NOT NULL THEN
+    SELECT count(*)::integer INTO v_conflicts
+      FROM public.import_job_rows incoming
+      JOIN public.onyx_snapshot_rows existing
+        ON existing.snapshot_id=v_prior_snapshot
+       AND existing.canonical_key=nullif(btrim(coalesce(incoming.data->>v_matching_key,'')),'')
+     WHERE incoming.import_job_id=p_job_id AND incoming.status<>'rejected';
+    IF v_policy='manual_review' AND v_conflicts>0 THEN
+      UPDATE public.import_jobs SET status='manual_review',review_required=true,completed_at=now(),
+        error_summary=coalesce(error_summary,'{}'::jsonb)||jsonb_build_object('merge_conflicts',v_conflicts,'reason','manual review required before merging canonical-key conflicts')
+       WHERE id=p_job_id;
+      RETURN jsonb_build_object('job_id',v_job.id,'status','manual_review','data_quality_score',v_score,'snapshot_id',NULL,'review_required',true,'merge_conflicts',v_conflicts,'duplicate_action','merge');
+    END IF;
+  ELSE
+    v_prior_snapshot:=NULL;
+  END IF;
+
+  SELECT coalesce(max(s.snapshot_version),0)+1 INTO v_snapshot_version
+    FROM public.onyx_snapshots s
+   WHERE s.organization_id=v_org AND s.profile_id=v_job.profile_id
+     AND s.period_key IS NOT DISTINCT FROM v_job.period_key;
+  INSERT INTO public.onyx_snapshots(
+    organization_id,source_import_job_id,profile_id,profile_version,snapshot_version,period_key,
+    source_file_hash,source_file_name,report_type,row_count,data_quality_score,quality_breakdown,status,created_by
+  )
+  VALUES(
+    v_org,v_job.id,v_job.profile_id,coalesce(v_job.profile_version,1),v_snapshot_version,v_job.period_key,
+    coalesce(v_job.file_hash,repeat('0',64)),v_job.file_name,coalesce(v_profile.report_type,v_job.job_type,'import'),
+    v_rows,v_score,coalesce(v_quality->'components','{}'::jsonb),'building',v_actor
+  )
+  RETURNING id INTO v_snapshot;
+
+  IF v_prior_snapshot IS NOT NULL THEN
+    INSERT INTO public.onyx_snapshot_rows(organization_id,snapshot_id,row_number,canonical_key,row_hash,status,data,errors)
+    SELECT v_org,v_snapshot,row_number,canonical_key,row_hash,status,data,errors
+      FROM public.onyx_snapshot_rows old_rows
+     WHERE old_rows.snapshot_id=v_prior_snapshot
+       AND (
+         v_policy IN ('existing_wins','reject_row','manual_review')
+         OR old_rows.canonical_key IS NULL
+         OR NOT EXISTS (
+           SELECT 1 FROM public.import_job_rows incoming
+            WHERE incoming.import_job_id=p_job_id AND incoming.status<>'rejected'
+              AND nullif(btrim(coalesce(incoming.data->>v_matching_key,'')),'')=old_rows.canonical_key
+         )
+       )
+     ORDER BY old_rows.row_number;
+    GET DIAGNOSTICS v_old_rows = ROW_COUNT;
+  END IF;
+
+  INSERT INTO public.onyx_snapshot_rows(organization_id,snapshot_id,row_number,canonical_key,row_hash,status,data,errors)
+  SELECT v_org,v_snapshot,
+         v_old_rows+row_number,
+         nullif(btrim(coalesce(incoming.data->>v_matching_key,'')),''),
+         md5(incoming.data::text),incoming.status,coalesce(incoming.data,'{}'::jsonb),coalesce(incoming.errors,'[]'::jsonb)
+    FROM public.import_job_rows incoming
+   WHERE incoming.import_job_id=p_job_id AND incoming.status<>'rejected'
+     AND (
+       v_prior_snapshot IS NULL
+       OR v_policy IN ('incoming_wins','auto_accept')
+       OR NOT EXISTS (
+         SELECT 1 FROM public.onyx_snapshot_rows old_rows
+          WHERE old_rows.snapshot_id=v_prior_snapshot
+            AND old_rows.canonical_key=nullif(btrim(coalesce(incoming.data->>v_matching_key,'')),'')
+       )
+     )
+   ORDER BY incoming.row_number;
+  GET DIAGNOSTICS v_new_rows = ROW_COUNT;
+
+  UPDATE public.onyx_snapshots
+     SET status='ready',row_count=v_old_rows+v_new_rows
+   WHERE id=v_snapshot;
+  RETURN jsonb_build_object(
+    'job_id',v_job.id,'status','completed','data_quality_score',v_score,'quality',v_quality,
+    'snapshot_id',v_snapshot,'snapshot_version',v_snapshot_version,'row_count',v_old_rows+v_new_rows,
+    'review_required',false,'duplicate_action',p_duplicate_action,'merge_conflicts',v_conflicts
+  );
+END;
+$$;
+REVOKE ALL ON FUNCTION public.finalize_import_job(uuid,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.finalize_import_job(uuid,text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.finalize_import_job(p_job_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  RETURN public.finalize_import_job(p_job_id,'new_version');
+END;
+$$;
+REVOKE ALL ON FUNCTION public.finalize_import_job(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.finalize_import_job(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.create_central_synonym(
+  p_source_header text, p_canonical_field text, p_profile_id uuid DEFAULT NULL, p_locale text DEFAULT 'ar'
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_actor uuid := public.current_profile_id();
+  v_org uuid;
+  v_row public.central_synonym_dictionary%ROWTYPE;
+  v_source text := btrim(coalesce(p_source_header,''));
+  v_canonical text := btrim(coalesce(p_canonical_field,''));
+  v_locale text := coalesce(nullif(btrim(p_locale),''),'ar');
+BEGIN
+  SELECT p.organization_id INTO v_org FROM public.profiles p
+   WHERE p.id=v_actor AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='إذن تعديل قاموس المرادفات مطلوب';
+  END IF;
+  IF v_source='' OR length(v_source)>200 OR v_canonical !~ '^[a-z][a-z0-9_]{0,79}$' OR length(v_locale)>16 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='بيانات المرادف غير صالحة';
+  END IF;
+  IF p_profile_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.import_profiles ip WHERE ip.id=p_profile_id AND ip.organization_id=v_org
+  ) THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='الملف التعريفي لا يتبع المؤسسة'; END IF;
+  INSERT INTO public.central_synonym_dictionary(
+    organization_id,profile_id,source_header,normalized_header,canonical_field,locale,created_by
+  ) VALUES(
+    v_org,p_profile_id,v_source,public.normalize_arabic_search(v_source),v_canonical,v_locale,v_actor
+  )
+  ON CONFLICT (organization_id,coalesce(profile_id,'00000000-0000-0000-0000-000000000000'::uuid),normalized_header,locale)
+  DO UPDATE SET canonical_field=excluded.canonical_field,source_header=excluded.source_header,updated_at=now()
+  RETURNING * INTO v_row;
+  RETURN to_jsonb(v_row);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.create_central_synonym(text,text,uuid,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_central_synonym(text,text,uuid,text) TO authenticated;
