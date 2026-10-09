@@ -38,7 +38,6 @@ export function Storefront({ onExit }: { onExit: () => void }) {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [lastOrderNo, setLastOrderNo] = useState('');
   const [lastOrderId, setLastOrderId] = useState('');
-  const [lastOrderTotal, setLastOrderTotal] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(null);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [compare, setCompare] = useState<string[]>([]);
@@ -81,7 +80,6 @@ export function Storefront({ onExit }: { onExit: () => void }) {
   }, [cart, cartRestored]);
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-  const cartTotal = cart.reduce((s, i) => s + i.product.base_price * i.quantity, 0);
 
   function addToCart(product: ProductWithInventory) {
     setCart((prev) => {
@@ -203,22 +201,21 @@ export function Storefront({ onExit }: { onExit: () => void }) {
               <div className="sf-cart-list">
                 {cart.map((item) => (
                   <div className="sf-cart-row" key={item.product.id}>
-                    <div className="sf-cart-info"><div className="sf-cart-img"><Package size={20} /></div><div><strong>{item.product.name}</strong><span>{formatCurrency(item.product.base_price)} / {item.product.unit}</span></div></div>
+                    <div className="sf-cart-info"><div className="sf-cart-img"><Package size={20} /></div><div><strong>{item.product.name}</strong><span>الوحدة: {item.product.unit}</span></div></div>
                     <div className="sf-cart-qty"><button onClick={() => updateQty(item.product.id, -1)}><Minus size={14} /></button><span>{item.quantity}</span><button onClick={() => updateQty(item.product.id, 1)}><Plus size={14} /></button></div>
-                    <strong className="sf-cart-line">{formatCurrency(item.product.base_price * item.quantity)}</strong>
                     <button className="sf-cart-remove" onClick={() => removeFromCart(item.product.id)}><Trash2 size={16} /></button>
                   </div>
                 ))}
               </div>
-              <div className="sf-cart-total"><span>الإجمالي</span><strong>{formatCurrency(cartTotal)}</strong></div>
+              <div role="note" style={{ marginTop: 12, padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70' }}>سيُراجع الطلب ويُعتمد من جهة الإدارة. الأسعار والإجماليات لا تظهر في شاشة الطلب للعميل.</div>
               <div className="sf-cart-actions"><button className="sf-btn-secondary" onClick={() => setView('shop')}>متابعة التسوق</button><button className="sf-btn-primary" onClick={() => setView('checkout')}>إتمام الطلب <ChevronLeft size={16} /></button></div>
             </>
             }
           </section>
         )}
 
-        {view === 'checkout' && <Checkout cart={cart} total={cartTotal} onBack={() => setView('cart')} onComplete={(order) => { setLastOrderNo(order.order_number); setLastOrderId(order.id); setLastOrderTotal(order.total_amount); setView('confirm'); setCart([]); }} />}
-        {view === 'confirm' && <OrderConfirm orderNo={lastOrderNo} orderId={lastOrderId} total={lastOrderTotal} onContinue={() => setView('shop')} />}
+        {view === 'checkout' && <Checkout cart={cart} onBack={() => setView('cart')} onComplete={(order) => { setLastOrderNo(order.order_number); setLastOrderId(order.id); setView('confirm'); setCart([]); }} />}
+        {view === 'confirm' && <OrderConfirm orderNo={lastOrderNo} orderId={lastOrderId} onContinue={() => setView('shop')} />}
       </main>
 
       <footer className="sf-footer">
