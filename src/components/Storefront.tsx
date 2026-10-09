@@ -7,7 +7,7 @@ import {
 import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { normalizeCartDraft } from '@/lib/commerce-utils';
+import { normalizeCartDraft, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { Link } from '@tanstack/react-router';
@@ -100,17 +100,20 @@ export function Storefront({ onExit }: { onExit: () => void }) {
       if (!raw.trim()) return [];
       return [{ product, quantity: Number(raw) }];
     });
-    if (!selected.length) {
-      setMatrixFeedback({ kind: 'error', message: 'أدخل كمية صحيحة لصنف واحد على الأقل.' });
-      return;
-    }
-    const invalid = selected.find(({ product, quantity }) => {
-      const available = Math.max(0, Math.floor(Number(product.inventory?.quantity_available ?? 0)));
-      const alreadyInCart = cart.find((item) => item.product.id === product.id)?.quantity ?? 0;
-      return !Number.isSafeInteger(quantity) || quantity <= 0 || available < alreadyInCart + quantity;
-    });
-    if (invalid) {
-      setMatrixFeedback({ kind: 'error', message: `الكمية المطلوبة للصنف «${invalid.product.name}» تتجاوز المخزون الظاهر أو غير صحيحة. راجع الكمية ثم حاول مجددًا.` });
+    const validation = validateQuickOrderLines(selected.map(({ product, quantity }) => ({
+      product_id: product.id,
+      product_name: product.name,
+      quantity,
+      available: Math.max(0, Math.floor(Number(product.inventory?.quantity_available ?? 0))),
+      already_in_cart: cart.find((item) => item.product.id === product.id)?.quantity ?? 0,
+    })));
+    if (!validation.valid) {
+      const message = validation.reason === 'empty'
+        ? 'أدخل كمية صحيحة لصنف واحد على الأقل.'
+        : validation.reason === 'invalid_quantity'
+          ? `الكمية المطلوبة للصنف «${validation.product_name ?? ''}» غير صحيحة. أدخل عددًا صحيحًا أكبر من صفر.`
+          : `الكمية المطلوبة للصنف «${validation.product_name ?? ''}» تتجاوز المخزون الظاهر بما في ذلك الكمية الموجودة في السلة.`;
+      setMatrixFeedback({ kind: 'error', message });
       return;
     }
     setCart((previous) => {
