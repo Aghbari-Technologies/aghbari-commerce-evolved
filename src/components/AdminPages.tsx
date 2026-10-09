@@ -329,8 +329,8 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
       {loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>الكمية المعتمدة</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>{items.map((item: OrderItem) => <tr key={item.id}>
         <td><strong>{item.product_name_snapshot}</strong></td><td><code>{item.item_code}</code></td><td>{formatNumber(Number(item.approved_quantity ?? item.quantity))} {item.unit_snapshot ?? ''}</td><td>{formatCurrency(Number(item.approved_unit_price ?? item.unit_price_snapshot))}</td><td>{formatCurrency(Number(item.line_total))}</td>
       </tr>)}</tbody></table></TableWrap>}
-      {order.quantity_review_required && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800 }}>توجد مراجعة معلقة. يجب إكمالها قبل متابعة الطلب.</p>}
-      {order.customer_adjustment_note && <p>{order.customer_adjustment_note}</p>}
+      {order?.quantity_review_required && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800 }}>توجد مراجعة معلقة. يجب إكمالها قبل متابعة الطلب.</p>}
+      {order?.customer_adjustment_note && <p>{order?.customer_adjustment_note}</p>}
     </section>}
     {blocker.status === 'blocked' && <div className="modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="order-review-navigation-title">
       <section className="modal" style={{ maxWidth: 460 }} dir="rtl">

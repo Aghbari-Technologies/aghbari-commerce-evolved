@@ -213,8 +213,6 @@ export type ImportJob = {
   error_summary: Record<string, unknown> | null;
   created_at: string;
   completed_at: string | null;
-  file_hash?: string | null;
-  file_size?: number | null;
   profile_id?: string | null;
   upload_session_id?: string | null;
   profile_version?: number | null;

@@ -798,7 +798,7 @@ export async function parseXlsxFirstWorksheet(
     {
       if (typeof DecompressionStream === 'undefined') throw new Error('المتصفح لا يدعم فك ضغط XLSX؛ استخدم CSV أو اطلب تحويل الملف.');
       try {
-        stream = xlsxBlobStream(member).pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat)) as ReadableStream<Uint8Array>;
+        stream = xlsxBlobStream(member).pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>) as ReadableStream<Uint8Array>;
       } catch {
         throw new Error('تعذر تهيئة فك ضغط XLSX في هذا المتصفح.');
       }
