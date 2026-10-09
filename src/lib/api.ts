@@ -1,7 +1,7 @@
 import { supabase, ORG_ID, WAREHOUSE_ID } from './supabase';
 import type {
   Product, Category, Customer, Supplier, Order, OrderItem,
-  InventoryBalance, PricingRule, Promotion, AiAlert, AiTask, Notification,
+  InventoryBalance, PricingRule, CreatePricingRuleInput, Promotion, AiAlert, AiTask, Notification,
   ProductWithInventory, OrderWithCustomer, AdminSetting, ImportJob, ImportJobRow,
 } from './types';
 
@@ -259,9 +259,104 @@ export async function fetchPricingRules(): Promise<PricingRule[]> {
   return data as PricingRule[];
 }
 
+const SUPPORTED_PRICING_SCOPES = new Set(['default', 'all', 'product', 'category']);
+
+export async function createPricingRule(input: CreatePricingRuleInput): Promise<void> {
+  if (!input.name.trim() || input.name.trim().length > 120) throw new Error('اسم القاعدة مطلوب ولا يتجاوز 120 حرفًا.');
+  if (!SUPPORTED_PRICING_SCOPES.has(input.scope_type)) throw new Error('نطاق القاعدة غير مدعوم في محرك التسعير.');
+  if ((input.scope_type === 'product' || input.scope_type === 'category') && !input.scope_value) {
+    throw new Error('حدد المنتج أو التصنيف الذي ستطبّق عليه القاعدة.');
+  }
+  if (!Number.isFinite(input.adjustment_value) || !Number.isFinite(input.min_quantity) || input.min_quantity <= 0 || input.min_quantity > 10000) {
+    throw new Error('قيمة التسعير أو حد الكمية غير صالح.');
+  }
+  if (input.calculation_method === 'margin_percentage' && (input.adjustment_value < 0 || input.adjustment_value >= 100)) {
+    throw new Error('هامش الربح يجب أن يكون من 0% إلى أقل من 100%.');
+  }
+  if (input.calculation_method === 'fixed_price' && input.adjustment_value < 0) {
+    throw new Error('السعر الثابت لا يمكن أن يكون سالبًا.');
+  }
+  if ((input.min_price != null && (!Number.isFinite(input.min_price) || input.min_price < 0)) ||
+      (input.max_price != null && (!Number.isFinite(input.max_price) || input.max_price < 0)) ||
+      (input.min_price != null && input.max_price != null && input.min_price > input.max_price)) {
+    throw new Error('تحقق من الحد الأدنى والأقصى للسعر.');
+  }
+  if (!Number.isInteger(input.priority) || input.priority < 1 || input.priority > 100000) {
+    throw new Error('الأولوية يجب أن تكون عددًا صحيحًا بين 1 و100000.');
+  }
+  if (input.effective_from && input.effective_until && new Date(input.effective_from) > new Date(input.effective_until)) {
+    throw new Error('تاريخ بدء القاعدة يجب أن يسبق تاريخ انتهائها.');
+  }
+
+  const legacyAdjustmentType: Record<CreatePricingRuleInput['calculation_method'], string> = {
+    add_percentage: 'percentage',
+    margin_percentage: 'margin',
+    fixed_price: 'fixed',
+    add_subtract_amount: 'amount',
+  };
+  const { error } = await supabase.from('pricing_rules').insert({
+    organization_id: ORG_ID,
+    name: input.name.trim(),
+    scope_type: input.scope_type,
+    scope_value: input.scope_value,
+    base_type: input.base_source,
+    base_source: input.base_source,
+    adjustment_type: legacyAdjustmentType[input.calculation_method],
+    calculation_method: input.calculation_method,
+    adjustment_value: input.adjustment_value,
+    target_tier: input.target_tier,
+    min_quantity: input.min_quantity,
+    min_price: input.min_price,
+    max_price: input.max_price,
+    priority: input.priority,
+    effective_from: input.effective_from,
+    effective_until: input.effective_until,
+    requires_approval: false,
+    approved_by: null,
+    approved_at: null,
+    manually_locked: false,
+    is_active: true,
+    version: 1,
+  });
+  if (error) throw new Error('تعذر إنشاء قاعدة التسعير: ' + error.message);
+}
+
 export async function togglePricingRule(id: string, isActive: boolean): Promise<void> {
-  const { error } = await supabase.from('pricing_rules').update({ is_active: isActive }).eq('id', id);
+  const { data: rule, error: readError } = await supabase
+    .from('pricing_rules')
+    .select('id,scope_type,manually_locked')
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!rule) throw new Error('قاعدة التسعير غير موجودة ضمن المؤسسة الحالية.');
+  if (rule.manually_locked) throw new Error('هذه القاعدة مقفلة يدويًا ولا يمكن تعديل حالتها.');
+  if (isActive && !SUPPORTED_PRICING_SCOPES.has(rule.scope_type)) {
+    throw new Error('لا يمكن تفعيل هذه القاعدة القديمة؛ نطاقها غير مدعوم في محرك التسعير الحالي. أوقفها أو أنشئ قاعدة جديدة.');
+  }
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .update({ is_active: isActive })
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .eq('manually_locked', false)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error('لم تتغير القاعدة؛ قد تكون مقفلة أو لم تعد موجودة.');
+}
+
+export async function deletePricingRule(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .delete()
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .eq('manually_locked', false)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('تعذر حذف القاعدة؛ تأكد أنها غير مقفلة وأنها تتبع المؤسسة الحالية.');
 }
 
 // ─── Promotions ───
