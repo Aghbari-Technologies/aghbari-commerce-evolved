@@ -101,10 +101,10 @@ export function summarizeCustomerOrderStatuses(
   formatDate: DateFormatter,
 ): string {
   if (!rows.length) return 'لم يُعثر على طلبات مسجلة لحسابك.';
-  return 'أحدث طلبات حسابك:\\n' + rows.slice(0, 10).map((row) =>
+  return 'أحدث طلبات حسابك:\n' + rows.slice(0, 10).map((row) =>
     String(row.order_number) + ' — ' + (CUSTOMER_ORDER_STATUS_LABELS[row.status] ?? row.status) +
     ' — ' + formatDate(row.created_at),
-  ).join('\\n') + (rows.length > 10 ? '\\nوتوجد ' + (rows.length - 10) + ' طلبات أقدم.' : '');
+  ).join('\n') + (rows.length > 10 ? '\nوتوجد ' + (rows.length - 10) + ' طلبات أقدم.' : '');
 }
 
 /** Invoice numbers and states are safe to summarize; amounts belong only on the statement surface. */
@@ -114,11 +114,11 @@ export function summarizeCustomerInvoiceStatuses(
 ): string {
   const statementNote = 'للاطلاع على الأرصدة والمدفوعات، افتح شاشة كشف الحساب.';
   if (!rows.length) return 'لا توجد فواتير مسجلة لحسابك. ' + statementNote;
-  return 'الفواتير المسجلة لحسابك:\\n' + rows.slice(0, 10).map((row) =>
+  return 'الفواتير المسجلة لحسابك:\n' + rows.slice(0, 10).map((row) =>
     row.invoice_number + ' — ' + (CUSTOMER_INVOICE_STATUS_LABELS[row.status] ?? row.status) +
     ' — ' + formatDate(row.issued_at),
-  ).join('\\n') + (rows.length > 10 ? '\\nوتوجد ' + (rows.length - 10) + ' فواتير أقدم.' : '') +
-    '\\n' + statementNote;
+  ).join('\n') + (rows.length > 10 ? '\nوتوجد ' + (rows.length - 10) + ' فواتير أقدم.' : '') +
+    '\n' + statementNote;
 }
 
 export type AssistantIntent = 'order_status' | 'catalog_search' | 'invoice_help' | 'offline_help' | 'general';
