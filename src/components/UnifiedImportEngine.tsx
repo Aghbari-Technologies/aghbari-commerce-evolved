@@ -10,7 +10,7 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
+  applyImportProfileRules, canResumeImportStatus, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
@@ -458,7 +458,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
     }
     if (action === "resume") {
       const openJob = pending.duplicate.jobs.find((item) =>
-        ["staging", "uploading", "failed"].includes(item.status) && Boolean(item.upload_session_id),
+        canResumeImportStatus(item.status, Boolean(item.upload_session_id)),
       );
       if (!openJob) {
         setErrorMessage("لا توجد دفعة غير مكتملة قابلة للاستئناف لهذا الملف.");
@@ -525,7 +525,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           <p>الاسم: <strong>{duplicatePrompt.file.name}</strong> • SHA-256: <code>{duplicatePrompt.fileHash.slice(0, 20)}…</code> • دفعات سابقة: {duplicatePrompt.duplicate.jobs.length} • لقطات: {duplicatePrompt.duplicate.snapshots.length}</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button variant="outline" onClick={() => void resolveDuplicate("ignore")}>تجاهل</Button>
-            {duplicatePrompt.duplicate.jobs.some((item) => ["staging", "uploading", "failed"].includes(item.status) && Boolean(item.upload_session_id)) &&
+            {duplicatePrompt.duplicate.jobs.some((item) => canResumeImportStatus(item.status, Boolean(item.upload_session_id))) &&
               <Button variant="secondary" onClick={() => void resolveDuplicate("resume")}>استئناف دفعة غير مكتملة</Button>}
             <Button variant="secondary" onClick={() => void resolveDuplicate("replace")}>استبدال النسخة</Button>
             <Button variant="secondary" onClick={() => void resolveDuplicate("merge")}>دمج وفق سياسة الملف</Button>
