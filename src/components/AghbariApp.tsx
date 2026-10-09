@@ -61,8 +61,10 @@ const adminPaths: Record<View, string> = {
 
 function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const { user, ready, signOut } = useAuth();
-  const canManageFinance = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
-  const visibleNav = nav.filter(({ id }) => id !== 'finance' || canManageFinance);
+  const canOperateAdmin = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'staff'));
+  const canManageFinance = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'accountant'));
+  const isFinanceOnly = canManageFinance && !canOperateAdmin;
+  const visibleNav = nav.filter(({ id }) => isFinanceOnly ? id === 'finance' : id !== 'finance' || canManageFinance);
   const navigate = useNavigate();
   const [view, setView] = useState<View>(initialView);
   const [mobileNav, setMobileNav] = useState(false);
@@ -89,6 +91,10 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
 
   const runAdminCommand = (id: View) => {
     setCommandOpen(false);
+    if (isFinanceOnly && id !== 'finance') {
+      showNotice('حساب المحاسب مخصص للفواتير والتحصيل فقط.');
+      return;
+    }
     if (id === 'finance' && !canManageFinance) {
       showNotice('لا تملك صلاحية الوصول إلى الفواتير والتحصيل.');
       return;
@@ -118,13 +124,21 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
     <div className="app-shell" dir="rtl">
       <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
         <div className="brand" onClick={() => setMode('storefront')} style={{ cursor: 'pointer' }}><div className="brand-icon"><Activity size={22} /></div><div><strong>الأغبري</strong><span>منصة التوزيع الذكية</span></div></div>
-        <div className="user-card"><div className="avatar">{user.name.charAt(0)}</div><div><strong>{user.name}</strong><span>مدير النظام</span></div><span className="online-dot" /></div>
+        <div className="user-card"><div className="avatar">{user.name.charAt(0)}</div><div><strong>{user.name}</strong><span>{isFinanceOnly ? 'المحاسبة' : user.roles.includes('admin') ? 'مدير النظام' : user.roles.includes('manager') ? 'مدير' : 'فريق الأغبري'}</span></div><span className="online-dot" /></div>
         <nav>{visibleNav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} aria-disabled={navigationBlocked || undefined} onClick={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الانتقال إلى قسم آخر.'); return; } setView(id); setOrderDetailId(null); setMobileNav(false); void navigate({ to: adminPaths[id] as never }); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
         <div className="sidebar-bottom"><button onClick={() => setMode('storefront')}><Store size={18} /> عرض المتجر</button><button onClick={() => { if (navigationBlocked) { showNotice('لا يمكن تسجيل الخروج قبل اعتماد تغييرات الطلب أو إلغائها.'); return; } void signOut(); }}><LogOut size={18} /> خروج</button><div className="secure"><span /> النظام متصل وآمن</div></div>
       </aside>
       <main className="main">
-        <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)}><Menu size={20} /></button><div className="topbar-title"><span className="live" /> مركز تشغيل الأغبري <small>الطلبات والمخزون والأسعار والعملاء</small></div><div className="top-actions"><button type="button" className="search-button" aria-haspopup="dialog" aria-label="بحث سريع (Ctrl K)" onClick={() => setCommandOpen(true)}><Search size={16} /> بحث سريع <kbd>Ctrl K</kbd></button><button className="notification" aria-label="فتح التنبيهات" onClick={() => runAdminCommand('notifications')}><Bell size={18} /></button></div></header>
+        <header className="topbar"><button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)}><Menu size={20} /></button><div className="topbar-title"><span className="live" /> {isFinanceOnly ? 'المحاسبة — الأغبري' : 'مركز تشغيل الأغبري'} <small>{isFinanceOnly ? 'الفواتير والتحصيل وكشف الحساب' : 'الطلبات والمخزون والأسعار والعملاء'}</small></div><div className="top-actions"><button type="button" className="search-button" aria-haspopup="dialog" aria-label="بحث سريع (Ctrl K)" onClick={() => setCommandOpen(true)}><Search size={16} /> بحث سريع <kbd>Ctrl K</kbd></button><button className="notification" aria-label="فتح التنبيهات" onClick={() => runAdminCommand('notifications')}><Bell size={18} /></button></div></header>
         <div className="page-wrap">
+          {isFinanceOnly && view !== 'finance' ? (
+            <section className="panel" role="status" style={{ padding: 24 }}>
+              <h1 style={{ marginTop: 0 }}>بوابة المحاسبة</h1>
+              <p>هذا الحساب مخصص للفواتير والتحصيل فقط، ولا يملك صلاحيات إدارة الطلبات أو المنتجات أو النظام.</p>
+              <button className="btn primary" onClick={() => runAdminCommand('finance')}>فتح الفواتير والتحصيل</button>
+            </section>
+          ) : (
+            <>
           {view === 'dashboard' && <Dashboard onNavigate={setView} />}
           {view === 'products' && <Products onNotice={showNotice} />}
           {view === 'customers' && <Customers onNotice={showNotice} />}
@@ -142,6 +156,8 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
           {view === 'settings' && <SettingsPage onNotice={showNotice} />}
           {view === 'quotes' && <StaffQuotesPage />}
           {view === 'finance' && <StaffFinancePage />}
+            </>
+          )}
         </div>
       </main>
       <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>

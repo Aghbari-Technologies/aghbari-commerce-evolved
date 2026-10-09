@@ -105,6 +105,16 @@ async function main() {
     "insert into public.user_roles(profile_id,role) values($1,'staff') on conflict(profile_id,role) do nothing",
     [operationsStaffProfileId],
   );
+  const accountantProfileId = "f5555555-5555-4555-8555-555555555555";
+  const accountantAuthUserId = "55555555-5555-4555-8555-555555555555";
+  await db.unsafe(
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Accountant','ci-accountant@example.test',true) on conflict(id) do nothing",
+    [accountantProfileId, accountantAuthUserId, organizationId],
+  );
+  await db.unsafe(
+    "insert into public.user_roles(profile_id,role) values($1,'accountant') on conflict(profile_id,role) do nothing",
+    [accountantProfileId],
+  );
   await db.unsafe(
     "insert into public.organizations(id,name,currency) values($1,'Foreign organization','YER') on conflict(id) do nothing",
     [otherOrganizationId],
@@ -527,6 +537,25 @@ async function main() {
     "ordinary staff cannot write payment ledger directly",
     () => db.unsafe("insert into public.customer_payments(organization_id,customer_id,invoice_id,amount,payment_method,created_by) values($1,$2,$3,1,'cash',$4)", [organizationId, invoice.customer_id, invoice.id, operationsStaffProfileId]),
     /permission denied/i,
+  );
+
+  await db.unsafe("reset role");
+  await setIdentity(accountantAuthUserId, "ci-accountant@example.test");
+  await db.unsafe("set role authenticated");
+  const accountantFinanceResult = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const accountantInvoice = accountantFinanceResult[0].result.invoices.find((row) => row.id === invoice.id);
+  assert.equal(Number(accountantInvoice.total_amount), 370000, "accountant may read the authorized invoice financial snapshot");
+  const accountantPayment = accountantFinanceResult[0].result.payments.find((row) => row.invoice_id === invoice.id);
+  assert.equal(Number(accountantPayment.amount), 100000, "accountant may read authorized customer payments");
+  await expectFailure(
+    "accountant cannot access operational staff order RPC",
+    () => db.unsafe("select * from public.fetch_staff_orders()"),
+    /staff role required for order access/i,
+  );
+  await expectFailure(
+    "accountant payment command still validates invoice balance",
+    () => db.unsafe("select public.record_customer_payment($1::uuid,$2::numeric,$3,$4,$5)", [invoice.id, 500000, "cash", "CI-ACCOUNTANT-OVERPAY", "must fail balance check"]),
+    /payment exceeds invoice balance/i,
   );
 
   await db.unsafe("reset role");
