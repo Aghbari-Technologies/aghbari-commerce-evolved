@@ -47,6 +47,7 @@ DECLARE
   v_total numeric(15,2) := 0;
   v_total_items integer := 0;
   v_line jsonb;
+  v_aggregated record;
   v_product_id uuid;
   v_quantity numeric(15,3);
   v_product public.products%ROWTYPE;
@@ -158,15 +159,15 @@ BEGIN
   END LOOP;
 
   -- Consolidate duplicate product rows and price each aggregate using the customer's tier.
-  FOR v_line IN
+  FOR v_aggregated IN
     SELECT (entry.value->>'product_id')::uuid AS product_id,
            sum((entry.value->>'quantity')::numeric)::numeric(15,3) AS quantity
       FROM pg_catalog.jsonb_array_elements(_items) AS entry(value)
      GROUP BY (entry.value->>'product_id')::uuid
      ORDER BY (entry.value->>'product_id')::uuid
   LOOP
-    v_product_id := v_line.product_id;
-    v_quantity := v_line.quantity;
+    v_product_id := v_aggregated.product_id;
+    v_quantity := v_aggregated.quantity;
 
     SELECT p.* INTO v_product
       FROM public.products p
