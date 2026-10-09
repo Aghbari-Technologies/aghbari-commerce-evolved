@@ -23,8 +23,9 @@ import {
   TableWrap, Modal, Notifications, OrderDetail, SettingsPage, Suppliers,
 } from '@/components/AdminPages';
 import { OperationsCenter } from '@/components/OperationsCenter';
+import { StaffQuotesPage, StaffFinancePage } from '@/components/CustomerWorkflows';
 
-type View = 'dashboard' | 'products' | 'customers' | 'orders' | 'pricing' | 'offers' | 'reports' | 'data' | 'operations' | 'notifications' | 'ai' | 'suppliers' | 'devices' | 'settings';
+type View = 'dashboard' | 'products' | 'customers' | 'orders' | 'pricing' | 'offers' | 'reports' | 'data' | 'operations' | 'notifications' | 'ai' | 'suppliers' | 'devices' | 'settings' | 'quotes' | 'finance';
 type IconType = typeof LayoutDashboard;
 
 const nav: { id: View; label: string; icon: IconType }[] = [
@@ -42,13 +43,23 @@ const nav: { id: View; label: string; icon: IconType }[] = [
   { id: 'data', label: 'مركز البيانات', icon: Database },
   { id: 'operations', label: 'العمليات الذكية', icon: Zap },
   { id: 'settings', label: 'الإعدادات', icon: Settings },
+  { id: 'quotes', label: 'عروض الأسعار', icon: FileText },
+  { id: 'finance', label: 'الفواتير والتحصيل', icon: CircleDollarSign },
 ];
 
-function AppContent() {
+const adminPaths: Record<View, string> = {
+  dashboard: '/admin', products: '/admin/products', customers: '/admin/customers', orders: '/admin/orders',
+  pricing: '/admin/pricing', offers: '/admin/offers', reports: '/admin/reports', data: '/admin/data',
+  operations: '/admin/operations', notifications: '/admin/notifications', ai: '/admin/ai',
+  suppliers: '/admin/suppliers', devices: '/admin/devices', settings: '/admin/settings',
+  quotes: '/admin/quotes', finance: '/admin/finance',
+};
+
+function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const { user, ready, signOut } = useAuth();
   const navigate = useNavigate();
   const setMode = (_m: 'storefront') => { void navigate({ to: '/' }); };
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<View>(initialView);
   const [mobileNav, setMobileNav] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
@@ -70,7 +81,7 @@ function AppContent() {
       <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
         <div className="brand" onClick={() => setMode('storefront')} style={{ cursor: 'pointer' }}><div className="brand-icon"><Activity size={22} /></div><div><strong>الأغبري</strong><span>منصة التوزيع الذكية</span></div></div>
         <div className="user-card"><div className="avatar">{user.name.charAt(0)}</div><div><strong>{user.name}</strong><span>مدير النظام</span></div><span className="online-dot" /></div>
-        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); setOrderDetailId(null); setMobileNav(false); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
+        <nav>{nav.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => { setView(id); setOrderDetailId(null); setMobileNav(false); void navigate({ to: adminPaths[id] as never }); }}><Icon size={18} /><span>{label}</span></button>)}</nav>
         <div className="sidebar-bottom"><button onClick={() => setMode('storefront')}><Store size={18} /> عرض المتجر</button><button onClick={signOut}><LogOut size={18} /> خروج</button><div className="secure"><span /> النظام متصل وآمن</div></div>
       </aside>
       <main className="main">
@@ -91,6 +102,8 @@ function AppContent() {
           {view === 'data' && <DataCenter onNotice={showNotice} />}
           {view === 'operations' && <OperationsCenter onNotice={showNotice} />}
           {view === 'settings' && <SettingsPage onNotice={showNotice} />}
+          {view === 'quotes' && <StaffQuotesPage />}
+          {view === 'finance' && <StaffFinancePage />}
         </div>
       </main>
       {notice && <div className="toast"><Check size={17} /> {notice}</div>}
@@ -98,8 +111,8 @@ function AppContent() {
   );
 }
 
-export function AdminApp() {
-  return <AppContent />;
+export function AdminApp({ initialView = 'dashboard' }: { initialView?: View }) {
+  return <AppContent initialView={initialView} />;
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
