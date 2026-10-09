@@ -104,12 +104,20 @@ function OrderInvoiceInner({ id }: { id: string }) {
           <div style={{ textAlign: 'left' }}><strong>تأكيد طلب</strong><div>{order.order_number}</div><small>{formatDate(order.created_at)}</small></div>
         </header>
         <p style={{ margin: '14px 0' }}>العميل: <strong>{user?.name}</strong> — الحالة: <strong>{STATUS_LABELS[order.status] ?? order.status}</strong></p>
+        <div style={{ margin: '16px 0', padding: 12, borderRadius: 10, background: '#f4f8f9', color: '#536b70' }}>
+          تفاصيل الكميات المطلوبة للمتابعة. لا تُعرض الأسعار أو الإجماليات في مستند العميل.
+        </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead><tr style={{ background: '#f4f8f9', textAlign: 'right' }}><th style={{ padding: 8 }}>الصنف</th><th>الرمز</th><th>الوحدة</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
-          <tbody>{items.map((it) => (
-            <tr key={it.id} style={{ borderTop: '1px solid #edf2f3' }}><td style={{ padding: 8 }}>{it.product_name_snapshot}</td><td>{it.item_code}</td><td>{it.unit_snapshot}</td><td>{formatNumber(it.quantity)}</td><td>{formatCurrency(it.unit_price_snapshot)}</td><td>{formatCurrency(it.line_total)}</td></tr>
-          ))}</tbody>
-          <tfoot><tr style={{ borderTop: '2px solid #0b97a5' }}><td colSpan={5} style={{ padding: 10, fontWeight: 800 }}>الإجمالي</td><td style={{ fontWeight: 800 }}>{formatCurrency(order.total_amount)}</td></tr></tfoot>
+          <thead><tr style={{ background: '#f4f8f9', textAlign: 'right' }}><th style={{ padding: 8 }}>الصنف</th><th>الرمز</th><th>الوحدة</th><th>الكمية</th><th>حالة الكمية</th></tr></thead>
+          <tbody>{items.map((it) => {
+            const requested = Number(it.requested_quantity ?? it.quantity);
+            const approved = Number(it.approved_quantity ?? it.quantity);
+            const adjusted = it.approved_quantity != null && requested !== approved;
+            return <tr key={it.id} style={{ borderTop: '1px solid #edf2f3' }}>
+              <td style={{ padding: 8 }}>{it.product_name_snapshot}</td><td>{it.item_code}</td><td>{it.unit_snapshot}</td><td>{formatNumber(approved)}</td>
+              <td>{adjusted ? <strong style={{ color: '#9a5b13' }}>عُدّلت من {formatNumber(requested)}</strong> : 'كما طُلب'}</td>
+            </tr>;
+          })}</tbody>
         </table>
         {order.notes && <p style={{ marginTop: 14 }}>ملاحظات: {order.notes}</p>}
         {history.length > 0 && <section style={{ marginTop: 18 }}><h3 style={{ fontSize: 15 }}>مسار الطلب</h3><ol>{history.map((h) => <li key={h.id}>{STATUS_LABELS[h.to_status] ?? h.to_status} — {formatDate(h.created_at)}</li>)}</ol></section>}
