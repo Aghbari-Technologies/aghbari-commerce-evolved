@@ -142,8 +142,8 @@ BEGIN
     IF NOT v_has_reservation THEN PERFORM public.reserve_order_inventory(NEW.id); END IF;
 
   ELSIF NEW.status='cancelled' THEN
-    IF OLD.status NOT IN ('draft','pending','confirmed','processing','shipped') THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='this order cannot be cancelled from its current state';
+    IF OLD.status NOT IN ('draft','pending','confirmed','processing') THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='a shipped order cannot be cancelled without a documented return process';
     END IF;
 
   ELSIF NEW.status='pending' THEN
@@ -173,7 +173,14 @@ DECLARE
 BEGIN
   IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
 
-  IF NEW.status='delivered' AND OLD.status IN ('confirmed','processing','shipped') THEN
+  IF NEW.status IN ('shipped','delivered')
+     AND OLD.status IN ('confirmed','processing','shipped')
+     AND NOT EXISTS (
+       SELECT 1 FROM public.inventory_movements im
+        WHERE im.reference_type='order' AND im.reference_id=NEW.id AND im.movement_type='sale'
+     ) THEN
+    -- Treat shipment as the stock-issue point. Older orders that move directly to
+    -- delivered are also reconciled here exactly once.
     FOR v_move IN
       SELECT im.product_id,im.warehouse_id,sum(im.quantity)::numeric(15,3) AS quantity
         FROM public.inventory_movements im
@@ -196,7 +203,7 @@ BEGIN
         'خصم المخزون عند التسليم',v_actor);
     END LOOP;
 
-  ELSIF NEW.status='cancelled' AND OLD.status IN ('confirmed','processing','shipped') THEN
+  ELSIF NEW.status='cancelled' AND OLD.status IN ('confirmed','processing') THEN
     FOR v_move IN
       SELECT im.product_id,im.warehouse_id,sum(im.quantity)::numeric(15,3) AS quantity
         FROM public.inventory_movements im
