@@ -180,12 +180,9 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
     setBusy(true);
     setReviewMessage('');
     try {
-      // If the visible grid differs from a previously staged draft, persist this exact full grid first.
-      // Confirmation itself remains a separate atomic server operation that checks inventory, credit,
-      // creates the invoice and raises the payment request in the same transaction.
-      if (dirty || !hasStaged) {
-        await reviewOrderLines(orderId, lines, 'stage', customerNote);
-      }
+      // Submit the complete visible grid to one database transaction. When no prior draft exists,
+      // the server stages this exact grid and approves it inside the same transaction; on any stock,
+      // credit or invoice failure, the complete approval is rolled back.
       const result = await reviewOrderLines(orderId, lines, 'approve', customerNote);
       await Promise.all([refetch(), refetchOrders()]);
       setDirty(false);
