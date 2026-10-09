@@ -1,41 +1,20 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  Activity, AlertTriangle, BarChart3, Check, Database, FileDown, FileText,
-  Gauge, History, Package, Pause, Play, RefreshCw, ShieldCheck,
-  Upload, XCircle, Zap,
+  Activity, AlertTriangle, BarChart3, Check, Database, FileText,
+  Gauge, History, Package, RefreshCw, ShieldCheck, Upload, Zap,
 } from 'lucide-react';
 import {
-  createImportJob, createImportUploadSession, fetchCentralSynonyms, fetchImportJobs, fetchImportProfiles,
-  fetchImportRows, fetchOnyxSnapshots, fetchOnyxSnapshotRows, fetchProducts, findImportDuplicate,
-  finalizeImportJob, insertImportRows, recordImportUploadChunk, runInventoryReconciliation,
-  fetchInventoryReconciliationRuns, fetchInventoryReconciliationItems, saveCentralSynonym, updateImportJob,
+  fetchCentralSynonyms, fetchImportProfiles, fetchOnyxSnapshots, fetchOnyxSnapshotRows,
+  runInventoryReconciliation, fetchInventoryReconciliationRuns, fetchInventoryReconciliationItems,
+  saveCentralSynonym,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatNumber } from '@/lib/format';
-import {
-  DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_CELL_CHARS, MAX_IMPORT_COLUMNS,
-  MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS, PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES,
-  StreamingCsvParser, chooseImportStatus, hashFileSha256, normalizeHeader as normalizeImportHeader,
-  validateCsvRow, type ParsedImportRow, type QualityResult,
-} from '@/lib/unified-import';
-import type { ImportJobRow, ProductWithInventory } from '@/lib/types';
+import { DEFAULT_SYNONYMS, normalizeHeader as normalizeImportHeader } from '@/lib/unified-import';
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from '@/components/AdminPages';
 import { UnifiedImportEngine } from '@/components/UnifiedImportEngine';
 
 type OperationTab = 'imports' | 'onyx' | 'reconcile' | 'dictionary';
-type PipelineStage = 'reading' | 'detecting' | 'mapping' | 'validating' | 'normalizing' | 'deduplicating' | 'merging' | 'analytics' | 'complete';
-type ParsedRow = { rowNumber: number; data: Record<string, unknown>; status: 'valid' | 'warning' | 'rejected'; errors: string[] };
-
-const stages: Array<{ id: PipelineStage; label: string }> = [
-  { id: 'reading', label: 'قراءة الملف' },
-  { id: 'detecting', label: 'اكتشاف النوع' },
-  { id: 'mapping', label: 'توحيد الأعمدة' },
-  { id: 'validating', label: 'التحقق والجودة' },
-  { id: 'normalizing', label: 'التطبيع' },
-  { id: 'deduplicating', label: 'منع التكرار' },
-  { id: 'merging', label: 'دمج السجلات' },
-  { id: 'analytics', label: 'التحليل الحسابي' },
-];
 
 const synonymMap: Record<string, string> = { ...DEFAULT_SYNONYMS };
 
