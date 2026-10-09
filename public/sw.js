@@ -33,7 +33,9 @@ self.addEventListener('fetch', (event) => {
           const homeResponse = response.clone();
           void caches.open(CACHE_NAME).then(async (cache) => {
             await cache.put(request, routeResponse);
-            await cache.put('/', homeResponse);
+            if (new URL(request.url).pathname === '/') {
+              await cache.put('/', homeResponse);
+            }
           });
         }
         return response;
