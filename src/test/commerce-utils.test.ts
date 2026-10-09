@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, validateQuickOrderLines } from '@/lib/commerce-utils';
 
 describe('commerce completion utilities', () => {
   it('calculates totals only from persisted invoice and payment records', () => {
@@ -25,6 +25,23 @@ describe('commerce completion utilities', () => {
       { product_id: 'p4', quantity: 10001 },
       null,
     ])).toEqual([{ product_id: 'p1', quantity: 2 }]);
+  });
+
+  it('validates multi-product quick orders and rejects quantities beyond stock', () => {
+    expect(validateQuickOrderLines([
+      { product_id: 'p1', product_name: 'Sugar', quantity: 3, available: 8, already_in_cart: 2 },
+      { product_id: 'p2', product_name: 'Rice', quantity: 4, available: 4 },
+    ])).toEqual({ valid: true });
+    expect(validateQuickOrderLines([
+      { product_id: 'p1', product_name: 'Sugar', quantity: 7, available: 8, already_in_cart: 2 },
+    ])).toEqual({ valid: false, reason: 'insufficient_stock', product_name: 'Sugar' });
+  });
+
+  it('rejects empty or fractional quick-order quantities', () => {
+    expect(validateQuickOrderLines([])).toEqual({ valid: false, reason: 'empty' });
+    expect(validateQuickOrderLines([
+      { product_id: 'p1', product_name: 'Sugar', quantity: 1.5, available: 8 },
+    ])).toEqual({ valid: false, reason: 'invalid_quantity', product_name: 'Sugar' });
   });
 
   it('classifies common Arabic questions to evidence-backed actions', () => {
