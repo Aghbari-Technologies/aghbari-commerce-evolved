@@ -261,7 +261,25 @@ export async function fetchPricingRules(): Promise<PricingRule[]> {
 
 const SUPPORTED_PRICING_SCOPES = new Set(['default', 'all', 'product', 'category']);
 
-export async function createPricingRule(input: CreatePricingRuleInput): Promise<void> {
+type PricingRuleDatabaseFields = {
+  name: string;
+  scope_type: CreatePricingRuleInput['scope_type'];
+  scope_value: string | null;
+  base_type: CreatePricingRuleInput['base_source'];
+  base_source: CreatePricingRuleInput['base_source'];
+  adjustment_type: string;
+  calculation_method: CreatePricingRuleInput['calculation_method'];
+  adjustment_value: number;
+  target_tier: CreatePricingRuleInput['target_tier'];
+  min_quantity: number;
+  min_price: number | null;
+  max_price: number | null;
+  priority: number;
+  effective_from: string | null;
+  effective_until: string | null;
+};
+
+function buildPricingRuleDatabaseFields(input: CreatePricingRuleInput): PricingRuleDatabaseFields {
   if (!input.name.trim() || input.name.trim().length > 120) throw new Error('اسم القاعدة مطلوب ولا يتجاوز 120 حرفًا.');
   if (!SUPPORTED_PRICING_SCOPES.has(input.scope_type)) throw new Error('نطاق القاعدة غير مدعوم في محرك التسعير.');
   if ((input.scope_type === 'product' || input.scope_type === 'category') && !input.scope_value) {
@@ -287,6 +305,10 @@ export async function createPricingRule(input: CreatePricingRuleInput): Promise<
   if (input.effective_from && input.effective_until && new Date(input.effective_from) > new Date(input.effective_until)) {
     throw new Error('تاريخ بدء القاعدة يجب أن يسبق تاريخ انتهائها.');
   }
+  if ((input.effective_from && !Number.isFinite(new Date(input.effective_from).getTime())) ||
+      (input.effective_until && !Number.isFinite(new Date(input.effective_until).getTime()))) {
+    throw new Error('وقت بدء القاعدة أو انتهائها غير صالح.');
+  }
 
   const legacyAdjustmentType: Record<CreatePricingRuleInput['calculation_method'], string> = {
     add_percentage: 'percentage',
@@ -294,8 +316,7 @@ export async function createPricingRule(input: CreatePricingRuleInput): Promise<
     fixed_price: 'fixed',
     add_subtract_amount: 'amount',
   };
-  const { error } = await supabase.from('pricing_rules').insert({
-    organization_id: ORG_ID,
+  return {
     name: input.name.trim(),
     scope_type: input.scope_type,
     scope_value: input.scope_value,
@@ -311,6 +332,14 @@ export async function createPricingRule(input: CreatePricingRuleInput): Promise<
     priority: input.priority,
     effective_from: input.effective_from,
     effective_until: input.effective_until,
+  };
+}
+
+export async function createPricingRule(input: CreatePricingRuleInput): Promise<void> {
+  const fields = buildPricingRuleDatabaseFields(input);
+  const { error } = await supabase.from('pricing_rules').insert({
+    organization_id: ORG_ID,
+    ...fields,
     requires_approval: false,
     approved_by: null,
     approved_at: null,
@@ -319,6 +348,34 @@ export async function createPricingRule(input: CreatePricingRuleInput): Promise<
     version: 1,
   });
   if (error) throw new Error('تعذر إنشاء قاعدة التسعير: ' + error.message);
+}
+
+export async function updatePricingRule(id: string, input: CreatePricingRuleInput): Promise<void> {
+  const fields = buildPricingRuleDatabaseFields(input);
+  const { data: current, error: readError } = await supabase
+    .from('pricing_rules')
+    .select('id,manually_locked,requires_approval,approved_at,version')
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!current) throw new Error('قاعدة التسعير غير موجودة ضمن المؤسسة الحالية.');
+  if (current.manually_locked) throw new Error('هذه القاعدة مقفلة يدويًا ولا يمكن تعديلها.');
+  if (current.requires_approval) {
+    throw new Error('هذه القاعدة خاضعة للموافقة؛ لا يمكن تعديلها من دون مسار اعتماد معتمد.');
+  }
+
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .update({ ...fields, version: Number(current.version ?? 1) + 1 })
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .eq('manually_locked', false)
+    .eq('requires_approval', false)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error('تعذر تحديث قاعدة التسعير: ' + error.message);
+  if (!data) throw new Error('لم تُحدّث القاعدة؛ قد تكون مقفلة أو أصبحت خاضعة للموافقة.');
 }
 
 export async function togglePricingRule(id: string, isActive: boolean): Promise<void> {
