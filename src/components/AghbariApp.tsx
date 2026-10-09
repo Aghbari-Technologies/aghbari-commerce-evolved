@@ -13,7 +13,7 @@ import {
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber } from '@/lib/format';
-import type { Category, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
+import type { Category, CreatePricingRuleInput, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from '@tanstack/react-router';
 import { Login } from '@/components/Login';
@@ -336,22 +336,54 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
   </>;
 }
 
-function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> | void }) {
+function pricingRuleMethodForForm(rule?: PricingRule): CreatePricingRuleInput['calculation_method'] {
+  const legacy: Record<string, CreatePricingRuleInput['calculation_method']> = {
+    percentage: 'add_percentage',
+    margin: 'margin_percentage',
+    fixed: 'fixed_price',
+    amount: 'add_subtract_amount',
+  };
+  const candidate = rule?.calculation_method ?? legacy[rule?.adjustment_type ?? ''];
+  return candidate && ['add_percentage', 'margin_percentage', 'fixed_price', 'add_subtract_amount'].includes(candidate)
+    ? candidate
+    : 'add_percentage';
+}
+
+function pricingRuleScopeForForm(rule?: PricingRule): CreatePricingRuleInput['scope_type'] {
+  return rule && ['default', 'all', 'product', 'category'].includes(rule.scope_type)
+    ? rule.scope_type as CreatePricingRuleInput['scope_type']
+    : 'default';
+}
+
+function pricingRuleTierForForm(rule?: PricingRule): CreatePricingRuleInput['target_tier'] {
+  return rule?.target_tier && ['both', 'wholesale', 'retail'].includes(rule.target_tier)
+    ? rule.target_tier as CreatePricingRuleInput['target_tier']
+    : 'both';
+}
+
+function localDateTimeValue(value?: string | null): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function PricingRuleModal({ rule, onClose, onSaved }: { rule?: PricingRule; onClose: () => void; onSaved: () => Promise<void> | void }) {
   const { data: products, loading: productsLoading } = useFetch(fetchProducts);
   const { data: categories, loading: categoriesLoading } = useFetch(fetchCategories);
-  const [name, setName] = useState('');
-  const [scopeType, setScopeType] = useState<'default' | 'all' | 'product' | 'category'>('default');
-  const [scopeValue, setScopeValue] = useState('');
-  const [targetTier, setTargetTier] = useState<'both' | 'wholesale' | 'retail'>('both');
-  const [method, setMethod] = useState<'add_percentage' | 'margin_percentage' | 'fixed_price' | 'add_subtract_amount'>('add_percentage');
-  const [baseSource, setBaseSource] = useState<'base_price' | 'cost_price'>('base_price');
-  const [adjustmentValue, setAdjustmentValue] = useState('10');
-  const [minQuantity, setMinQuantity] = useState('1');
-  const [minPrice, setMinPrice] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
-  const [priority, setPriority] = useState('100');
-  const [effectiveFrom, setEffectiveFrom] = useState('');
-  const [effectiveUntil, setEffectiveUntil] = useState('');
+  const [name, setName] = useState(rule?.name ?? '');
+  const [scopeType, setScopeType] = useState<CreatePricingRuleInput['scope_type']>(pricingRuleScopeForForm(rule));
+  const [scopeValue, setScopeValue] = useState(rule?.scope_value ?? '');
+  const [targetTier, setTargetTier] = useState<CreatePricingRuleInput['target_tier']>(pricingRuleTierForForm(rule));
+  const [method, setMethod] = useState<CreatePricingRuleInput['calculation_method']>(pricingRuleMethodForForm(rule));
+  const [baseSource, setBaseSource] = useState<CreatePricingRuleInput['base_source']>(rule?.base_source === 'cost_price' || rule?.base_type === 'cost_price' ? 'cost_price' : 'base_price');
+  const [adjustmentValue, setAdjustmentValue] = useState(String(rule?.adjustment_value ?? 10));
+  const [minQuantity, setMinQuantity] = useState(String(rule?.min_quantity ?? 1));
+  const [minPrice, setMinPrice] = useState(rule?.min_price == null ? '' : String(rule.min_price));
+  const [maxPrice, setMaxPrice] = useState(rule?.max_price == null ? '' : String(rule.max_price));
+  const [priority, setPriority] = useState(String(rule?.priority ?? 100));
+  const [effectiveFrom, setEffectiveFrom] = useState(localDateTimeValue(rule?.effective_from));
+  const [effectiveUntil, setEffectiveUntil] = useState(localDateTimeValue(rule?.effective_until));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
