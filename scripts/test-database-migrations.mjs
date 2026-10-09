@@ -441,7 +441,7 @@ async function main() {
     [reviewOrder.id],
   );
   assert.equal(staffReviewItems.length, 1, "staff must get review lines from the tenant-scoped RPC");
-  assert.equal(Number(staffReviewItems[0].unit_price_snapshot), 37000);
+  assert.equal(Number(staffReviewItems[0].unit_price_snapshot), 38500, "the original quantity-two line snapshot must remain intact before the one-order override");
   const reviewLines = [{
     item_id: reviewItemRows[0].id,
     quantity: 1,
@@ -465,7 +465,7 @@ async function main() {
   assert.equal(approvedReview[0].result.status, "confirmed", "approved review must confirm the order");
   assert.equal(Number(approvedReview[0].result.total_amount), 36000, "order total must be recalculated from approved price and quantity");
   const reviewedState = await db.unsafe(
-    "select status,total_amount,quantity_review_required,payment_request_status,customer_payment_requested_at from public.orders where id=$1",
+    "select status,total_amount,quantity_review_required,payment_request_status,customer_payment_requested_at from public.fetch_staff_orders() where id=$1",
     [reviewOrder.id],
   );
   assert.equal(reviewedState[0].status, "confirmed");
@@ -474,7 +474,7 @@ async function main() {
   assert.equal(reviewedState[0].payment_request_status, "requested");
   assert.ok(reviewedState[0].customer_payment_requested_at, "customer payment request should be recorded at confirmation");
   const reviewedLines = await db.unsafe(
-    "select quantity,requested_quantity,approved_quantity,unit_price_snapshot,approved_unit_price,price_override_reason from public.order_items where order_id=$1",
+    "select quantity,requested_quantity,approved_quantity,unit_price_snapshot,approved_unit_price,price_override_reason from public.fetch_staff_order_items($1::uuid)",
     [reviewOrder.id],
   );
   assert.equal(Number(reviewedLines[0].requested_quantity), 2, "original requested quantity must remain auditable");
@@ -482,7 +482,8 @@ async function main() {
   assert.equal(Number(reviewedLines[0].quantity), 1);
   assert.equal(Number(reviewedLines[0].approved_unit_price), 36000);
   assert.match(reviewedLines[0].price_override_reason, /CI one-order override/);
-  const reviewedInvoice = await db.unsafe("select total_amount from public.customer_invoices where order_id=$1", [reviewOrder.id]);
+  const reviewedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
+  const reviewedInvoice = reviewedFinance[0].result.invoices.filter((row) => row.order_id === reviewOrder.id);
   assert.equal(reviewedInvoice.length, 1, "approval should issue exactly one invoice");
   assert.equal(Number(reviewedInvoice[0].total_amount), 36000);
   process.stdout.write("PASS order-review approval, stale/unapproved confirmation guard, one-order price override, invoice and payment-request lifecycle\\n");
