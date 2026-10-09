@@ -1,5 +1,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient } from '@tanstack/react-query';
+import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
+import { routeTree } from '@/routeTree.gen';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase', () => ({
@@ -36,6 +39,48 @@ describe('Auth bootstrap resilience', () => {
     }
     host?.remove();
     host = undefined;
+  });
+
+  it.each([
+    '/',
+    '/login',
+    '/orders',
+    '/orders/route-smoke-test',
+    '/invoices',
+    '/statement',
+    '/quotes',
+    '/reorder',
+    '/barcode',
+    '/assistant',
+    '/offline',
+    '/admin',
+    '/admin/orders',
+    '/admin/products',
+    '/admin/customers',
+    '/admin/pricing',
+    '/admin/data',
+    '/admin/operations',
+    '/admin/finance',
+  ])('does not collapse %s to the generic app error when Supabase bootstrapping fails', async (path) => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: [path] }),
+      context: { queryClient: new QueryClient() },
+    });
+    await router.load();
+
+    await act(async () => {
+      root?.render(<RouterProvider router={router} />);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host.textContent).toContain('اتصال قاعدة البيانات غير مهيأ');
+    expect(host.textContent).not.toContain('حدث خطأ غير متوقع. حاول مرة أخرى أو عد للرئيسية.');
   });
 
   it('keeps the root mounted and reports an actionable Supabase configuration issue', async () => {
