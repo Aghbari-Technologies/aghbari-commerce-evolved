@@ -201,3 +201,5 @@ Definition of Done:
 - 2026-10-09: finance least-privilege follow-up — add an explicit admin/manager finance capability, restrict the staff finance data and payment RPCs, remove direct invoice/payment ledger writes through PostgREST, and change invoice policies to read-only. Isolated acceptance tests distinguish generic `staff` from authorized finance roles; CI on the exact commit remains required.
 
 - 2026-10-09: added a dedicated accountant role to the finance capability without adding it to operational `is_staff()` privileges. The accountant identity is confined to the finance navigation and guarded against opening operations through direct admin URLs; isolated PostgreSQL tests verify finance reads/payment RPC validation succeed while the operational staff-order RPC remains denied.
+
+- 2026-10-09: corrected duplicate Supabase migration version prefix by moving finance role boundary migration to `20261009151000`; added a chronological slot after atomic staff order creation and before accountant role access. Production migration rollout remains unperformed.
