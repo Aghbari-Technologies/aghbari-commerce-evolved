@@ -15,20 +15,23 @@ Status: implementation and CI checks are in the draft PR; not merged to `main`. 
 - [x] Arabic data-backed commerce assistant for order status, catalogue lookup, invoice summary, and offline guidance. It does not invent database values and does not call an external LLM.
 - [x] Limited offline catalogue caching, persisted cart drafts, PWA manifest/service worker, and an explicit warning that current stock/prices must be revalidated online.
 - [x] Direct customer paths for the added workspaces and direct `/admin/*` paths for admin sections.
-- [x] Finance/quote RPC hardening, tenant-scoped RLS policies for the new tables, and prevention of first-signup automatic administrator assignment.
+- [x] Finance/quote RPC hardening, tenant-scoped RLS policies for new tables, and safe first-signup role assignment.
+- [x] Checkout RPC now includes server-side customer-tier pricing, a persistent idempotency key, explicit cash-on-delivery/credit terms, tenant-safe product validation, and credit checks.
+- [x] Order confirmation now requires an approved customer, locks/reserves sufficient stock atomically, tracks stock movements, and consumes/releases reservations on delivery/cancellation.
+- [x] Order status transitions are constrained to legal next steps and status history is recorded by the database trigger in the same transaction.
 - [x] CI workflow runs tests, correctness lint (excluding the repository-wide Prettier formatting rule), and production build.
 
 ## Still open — do not mark complete until verified
 
-- [ ] Apply migrations `20261009010000`, `20261009020000`, and `20261009030000` to the Supabase project configured by this repository's `.env`. The connected Supabase tool currently denies access to that project, so no database writes have been attempted.
+- [ ] Apply migrations `20261009010000`, `20261009020000`, `20261009030000`, `20261009040000`, and `20261009050000` to the exact Supabase project configured by this repository's `.env`. The current Supabase connection does not include that project, so no database writes or live SQL validation have been attempted.
 - [ ] Run authenticated browser end-to-end checks for customer and staff flows against that exact database, including invoice issue, statement totals, payment overpayment rejection, RFQ/quote expiry, reorder restore, camera fallback, and offline recovery.
-- [ ] Harden the pre-existing checkout RPC for authoritative tier pricing, credit-limit policy, inventory reservation/oversell prevention, and request idempotency. The legacy `place_order` implementation still prices from `base_price`; the roadmap's previous claim that all contract/credit checks were complete was premature.
+- [ ] Execute database-level tests on the target Supabase project for duplicate checkout replay, tier break pricing, cross-tenant product rejection, credit-limit rejection, concurrent stock reservation, legal state transitions, invoice creation, cancellation-release, and delivery stock consumption. The migration code is committed to the draft PR but is not runtime-proven.
 - [ ] Customer address book and company-user management.
 - [ ] Matrix order entry and command palette.
 - [ ] Native/server-generated PDF documents (current invoice/statement output uses the browser print dialog).
 - [ ] Model-backed Lovable AI integration and generated business insights. The current assistant is deliberately deterministic and database-backed.
 - [ ] Full offline field-sales queue and conflict-safe synchronization after reconnect. Current support is cached catalogue + cart draft only; it does not place orders offline.
-- [ ] Merge the PR to `main` only after migrations can be applied safely and the required database/browser checks pass. Verify the Lovable sync and deployed URL after merge.
+- [ ] Merge the PR to `main` only after the matching database migrations can be applied and database/browser checks pass. Until then, the existing Lovable project remains on `main`; these branch changes are not yet visible in the normal Lovable preview or live URL.
 
 ## Evidence rules
 
