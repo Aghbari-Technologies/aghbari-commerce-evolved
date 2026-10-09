@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase', () => ({
   supabase: new Proxy({}, {
@@ -25,17 +26,29 @@ function AuthBootstrapProbe() {
 }
 
 describe('Auth bootstrap resilience', () => {
-  it('keeps the app mounted and gives an actionable message when Supabase configuration is missing', async () => {
-    render(
-      <AuthProvider>
-        <AuthBootstrapProbe />
-      </AuthProvider>,
-    );
+  let root: Root | undefined;
+  let host: HTMLDivElement | undefined;
 
-    await waitFor(() => {
-      expect(screen.getByText('auth-ready')).toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent('اربط Supabase من إعدادات Lovable Cloud');
-      expect(screen.getByRole('alert')).toHaveTextContent('SUPABASE_URL');
+  afterEach(async () => {
+    if (root) {
+      await act(async () => root?.unmount());
+      root = undefined;
+    }
+    host?.remove();
+    host = undefined;
+  });
+
+  it('keeps the root mounted and reports an actionable Supabase configuration issue', async () => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+
+    await act(async () => {
+      root?.render(<AuthProvider><AuthBootstrapProbe /></AuthProvider>);
     });
+
+    expect(host.textContent).toContain('auth-ready');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('اربط Supabase من إعدادات Lovable Cloud');
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('SUPABASE_URL');
   });
 });
