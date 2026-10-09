@@ -12,6 +12,10 @@ export type Product = {
   category_id: string | null;
   image_url: string | null;
   created_at: string;
+  retail_price?: number;
+  wholesale_price?: number;
+  search_name_norm?: string;
+  normalization_version?: number;
 };
 
 export type Category = {
@@ -56,6 +60,12 @@ export type Order = {
   total_items: number;
   notes: string | null;
   created_at: string;
+  quantity_review_required?: boolean;
+  customer_adjustment_note?: string | null;
+  customer_payment_requested_at?: string | null;
+  customer_confirmed_at?: string | null;
+  admin_adjusted_at?: string | null;
+  payment_request_status?: 'not_requested' | 'requested' | 'reported' | 'verified' | 'cancelled';
 };
 
 export type OrderItem = {
@@ -68,6 +78,15 @@ export type OrderItem = {
   quantity: number;
   unit_price_snapshot: number;
   line_total: number;
+  requested_quantity?: number;
+  approved_quantity?: number;
+  approved_unit_price?: number;
+  price_override_reason?: string | null;
+  adjusted_by?: string | null;
+  adjusted_at?: string | null;
+  proposed_quantity?: number | null;
+  proposed_unit_price?: number | null;
+  proposed_price_reason?: string | null;
 };
 
 export type InventoryBalance = {
@@ -158,6 +177,73 @@ export type ImportJob = {
   error_summary: Record<string, unknown> | null;
   created_at: string;
   completed_at: string | null;
+  file_hash?: string | null;
+  file_size?: number | null;
+  profile_id?: string | null;
+  upload_session_id?: string | null;
+  profile_version?: number | null;
+  period_key?: string | null;
+  source_system?: string;
+  quality_breakdown?: Record<string, number>;
+  review_required?: boolean;
+  merge_strategy?: string;
+  retention_expires_at?: string | null;
+  purge_status?: string;
+  raw_file_retained?: boolean;
+  total_chunks?: number;
+  processed_chunks?: number;
+};
+
+export type ImportProfile = {
+  id: string;
+  organization_id: string;
+  profile_name: string;
+  report_type: string;
+  source: string;
+  version: number;
+  required_columns: string[];
+  optional_columns: string[];
+  ignored_columns: string[];
+  synonyms: Record<string, string>;
+  transformation_rules: unknown[];
+  validation_rules: unknown[];
+  matching_key: string;
+  merge_strategy: string;
+  date_rules: Record<string, unknown>;
+  is_full_dataset: boolean;
+  status: 'draft' | 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+};
+
+export type OnyxSnapshot = {
+  id: string;
+  organization_id: string;
+  source_import_job_id: string;
+  profile_id: string | null;
+  profile_version: number | null;
+  snapshot_version: number;
+  source_file_hash: string;
+  source_file_name: string | null;
+  report_type: string;
+  row_count: number;
+  data_quality_score: number;
+  quality_breakdown: Record<string, number>;
+  normalization_version: number;
+  metrics: Record<string, unknown>;
+  status: string;
+  created_at: string;
+};
+
+export type OnyxSnapshotRow = {
+  id: string;
+  snapshot_id: string;
+  row_number: number;
+  canonical_key: string | null;
+  row_hash: string;
+  status: string;
+  data: Record<string, unknown>;
+  errors: string[];
 };
 
 export type ImportJobRow = {

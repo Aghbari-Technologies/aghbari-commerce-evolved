@@ -171,14 +171,41 @@ export async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
   return data as OrderItem[];
 }
 
+export type OrderReviewLineInput = {
+  item_id: string;
+  quantity: number;
+  unit_price: number;
+  price_reason?: string | null;
+};
+
+export async function reviewOrderLines(
+  orderId: string,
+  lines: OrderReviewLineInput[],
+  action: 'stage' | 'approve' | 'discard',
+  customerNote?: string,
+): Promise<{
+  order_id: string; action?: string; status?: string; total_amount?: number;
+  total_items?: number; quantity_review_required: boolean; adjusted?: boolean;
+  changed_lines?: number; payment_request_status?: string;
+}> {
+  const { data, error } = await supabase.rpc('review_order_lines', {
+    p_order_id: orderId,
+    p_lines: lines,
+    p_action: action,
+    p_customer_note: customerNote?.trim() || null,
+  });
+  if (error) throw error;
+  return data as {
+    order_id: string; action?: string; status?: string; total_amount?: number;
+    total_items?: number; quantity_review_required: boolean; adjusted?: boolean;
+    changed_lines?: number; payment_request_status?: string;
+  };
+}
+
 export async function updateOrderStatus(id: string, status: string): Promise<void> {
+  // The database transition trigger validates the state change and writes status history atomically.
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
   if (error) throw error;
-  await supabase.from('order_status_history').insert({
-    order_id: id,
-    to_status: status,
-    notes: `Status changed to ${status}`,
-  });
 }
 
 export async function createOrder(order: {
@@ -347,42 +374,174 @@ export async function createImportJob(input: {
   fileHash: string;
   fileSize: number;
   jobType: string;
-  totalRows: number;
+  totalRows?: number;
+  profileId?: string | null;
+  periodKey?: string | null;
+  sourceSystem?: string;
 }): Promise<ImportJob> {
-  const { data, error } = await supabase.from('import_jobs').insert({
-    organization_id: ORG_ID,
-    file_name: input.fileName,
-    file_hash: input.fileHash,
-    file_size: input.fileSize,
-    job_type: input.jobType,
-    total_rows: input.totalRows,
-    status: 'staging',
-    processed_rows: 0,
-    success_rows: 0,
-    failed_rows: 0,
-  }).select().single();
+  // Tenant identity is derived by the database from auth.uid(); no organization_id comes from the browser.
+  const { data, error } = await supabase.rpc('create_import_job', {
+    p_file_name: input.fileName,
+    p_file_hash: input.fileHash,
+    p_file_size: input.fileSize,
+    p_job_type: input.jobType,
+    p_profile_id: input.profileId ?? null,
+    p_period_key: input.periodKey ?? null,
+    p_source_system: input.sourceSystem ?? 'manual',
+  });
   if (error) throw error;
   return data as ImportJob;
 }
 
+export async function createImportUploadSession(jobId: string) {
+  const { data, error } = await supabase.rpc('create_import_upload_session', { p_job_id: jobId });
+  if (error) throw error;
+  return data as {
+    id: string; import_job_id: string; chunk_size_bytes: number; total_chunks: number;
+    verified_chunks: number; status: string; file_hash: string; file_size: number;
+  };
+}
+
+export async function cancelImportUploadSession(sessionId: string): Promise<void> {
+  const { error } = await supabase.from('import_upload_sessions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', sessionId);
+  if (error) throw error;
+}
+
+export async function recordImportUploadChunk(input: {
+  sessionId: string; chunkNumber: number; byteOffset: number; byteSize: number; chunkHash: string;
+}) {
+  const { data, error } = await supabase.rpc('record_import_upload_chunk', {
+    p_session_id: input.sessionId,
+    p_chunk_number: input.chunkNumber,
+    p_byte_offset: input.byteOffset,
+    p_byte_size: input.byteSize,
+    p_chunk_hash: input.chunkHash,
+  });
+  if (error) throw error;
+  return data as { session_id: string; verified_chunks: number; total_chunks: number; complete: boolean };
+}
+
+export async function findImportDuplicate(fileHash: string, profileId: string | null, periodKey: string | null) {
+  const { data, error } = await supabase.rpc('find_import_duplicate', {
+    p_file_hash: fileHash, p_profile_id: profileId, p_period_key: periodKey,
+  });
+  if (error) throw error;
+  return data as { duplicate: boolean; jobs: ImportJob[]; snapshots: unknown[] };
+}
+
+export async function fetchInventoryReconciliationRuns() {
+  const { data, error } = await supabase.from('inventory_reconciliation_runs').select('*').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchInventoryReconciliationItems(runId: string) {
+  const { data, error } = await supabase.from('inventory_reconciliation_items').select('*').eq('run_id', runId).order('item_code').limit(100000);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchCentralSynonyms() {
+  const { data, error } = await supabase.from('central_synonym_dictionary').select('*').order('normalized_header').limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCentralSynonym(input: {
+  sourceHeader: string; normalizedHeader?: string; canonicalField: string; profileId?: string | null; locale?: string;
+}) {
+  // Tenant identity and normalized key are derived server-side; the browser cannot supply organization_id.
+  const { data, error } = await supabase.rpc('create_central_synonym', {
+    p_source_header: input.sourceHeader.trim(),
+    p_canonical_field: input.canonicalField.trim(),
+    p_profile_id: input.profileId ?? null,
+    p_locale: input.locale ?? 'ar',
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function finalizeImportJob(jobId: string, duplicateAction: 'ignore' | 'replace' | 'merge' | 'new_version' = 'new_version'): Promise<{
+  job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
+  snapshot_id: string | null; review_required: boolean;
+}> {
+  const { data, error } = await supabase.rpc('finalize_import_job', { p_job_id: jobId, p_duplicate_action: duplicateAction });
+  if (error) throw error;
+  return data as {
+    job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
+    snapshot_id: string | null; review_required: boolean;
+  };
+}
+
+export async function fetchImportProfiles() {
+  const { data, error } = await supabase.from('import_profiles').select('*').order('profile_name').order('version', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchOnyxSnapshots() {
+  const { data, error } = await supabase.from('onyx_snapshots').select('*').eq('status', 'ready').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data;
+}
+
+export type OnyxSnapshotAnalytics = {
+  snapshot: {
+    id: string; version: number; file_name: string | null; file_hash: string; report_type: string;
+    created_at: string; data_quality_score: number; quality_breakdown: Record<string, number>;
+  };
+  metrics: {
+    row_count: number; unique_keys: number; valid_rows: number; rejected_rows: number; warning_rows: number;
+    quantity_total: number; revenue_total: number; sales_total: number; customer_count: number;
+    supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
+  };
+  status_distribution: Array<{ status: string; count: number }>;
+  top_items: Array<{ item_code: string; name: string | null; quantity: number; revenue: number }>;
+  top_customers: Array<{ customer_code: string; revenue: number; quantity: number }>;
+  forecast_status: string;
+  forecast_reason: string;
+};
+
+export async function fetchOnyxSnapshotAnalytics(snapshotId: string): Promise<OnyxSnapshotAnalytics> {
+  const { data, error } = await supabase.rpc('get_onyx_snapshot_analytics', { p_snapshot_id: snapshotId });
+  if (error) throw error;
+  return data as OnyxSnapshotAnalytics;
+}
+
+export async function fetchOnyxSnapshotRows(snapshotId: string) {
+  const { data, error } = await supabase.from('onyx_snapshot_rows').select('*').eq('snapshot_id', snapshotId).order('row_number').limit(100);
+  if (error) throw error;
+  return data;
+}
+
+export async function runInventoryReconciliation(snapshotId: string) {
+  const { data, error } = await supabase.rpc('run_inventory_reconciliation', { p_snapshot_id: snapshotId });
+  if (error) throw error;
+  return data as {
+    run_id: string; snapshot_id: string; source_row_count: number; matched_count: number;
+    changed_count: number; new_count: number; invalid_count: number;
+  };
+}
+
 export async function insertImportRows(jobId: string, rows: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors?: string[] }>): Promise<void> {
-  const { error } = await supabase.from('import_job_rows').insert(rows.map((row) => ({
+  const { error } = await supabase.from('import_job_rows').upsert(rows.map((row) => ({
     import_job_id: jobId,
     row_number: row.rowNumber,
     data: row.data,
     status: row.status,
     errors: row.errors ?? null,
-  })));
+  })), { onConflict: 'import_job_id,row_number' });
   if (error) throw error;
 }
 
 export async function updateImportJob(id: string, updates: Partial<ImportJob>): Promise<void> {
-  const { error } = await supabase.from('import_jobs').update(updates).eq('id', id).eq('organization_id', ORG_ID);
+  const { error } = await supabase.from('import_jobs').update(updates).eq('id', id);
   if (error) throw error;
 }
 
 export async function fetchImportJobs(): Promise<ImportJob[]> {
-  const { data, error } = await supabase.from('import_jobs').select('*').eq('organization_id', ORG_ID).order('created_at', { ascending: false }).limit(30);
+  // Tenant-scoped RLS filters rows from the authenticated profile, not a browser-provided org ID.
+  const { data, error } = await supabase.from('import_jobs').select('*').order('created_at', { ascending: false }).limit(30);
   if (error) throw error;
   return data as ImportJob[];
 }

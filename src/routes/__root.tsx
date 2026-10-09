@@ -12,7 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
 function NotFoundComponent() {
   return (
@@ -89,6 +89,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" },
@@ -114,13 +115,34 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthHealthNotice() {
+  const { configurationError } = useAuth();
+  if (!configurationError) return null;
+  return (
+    <div role="alert" dir="rtl" style={{
+      position: "relative", zIndex: 1000, padding: "12px 16px",
+      background: "#fff3cd", color: "#664d03", borderBottom: "1px solid #ffecb5",
+      fontFamily: "Cairo, system-ui, sans-serif", fontSize: 14, lineHeight: 1.8,
+    }}>
+      <strong>تعذر الاتصال بالخدمات الخلفية.</strong>
+      <span style={{ marginInlineStart: 8 }}>{configurationError}</span>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <AuthProvider>
+        <AuthHealthNotice />
         <Outlet />
       </AuthProvider>
     </QueryClientProvider>

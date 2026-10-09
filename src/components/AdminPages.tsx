@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
@@ -8,7 +8,7 @@ import {
   fetchAiAlerts, fetchAiTasks, fetchNotifications, fetchOrders, fetchOrderItems,
   fetchSettings, fetchSuppliers,
   markAllNotificationsRead, markNotificationRead, resolveAiAlert, toggleAiTaskStatus,
-  updateOrderStatus, updateSetting, createSupplier,
+  updateOrderStatus, reviewOrderLines, updateSetting, createSupplier,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber, timeAgo } from '@/lib/format';
@@ -40,15 +40,282 @@ export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
   </AdminPage>;
 }
 
+type OrderReviewDraft = { quantity: string; unitPrice: string; reason: string };
+
 export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; onBack: () => void; onNotice: (m: string) => void }) {
-  const { data: orders } = useFetch(fetchOrders);
-  const { data: items, loading, refetch } = useFetch(() => fetchOrderItems(orderId), [orderId]);
+  const { data: orders, refetch: refetchOrders } = useFetch(fetchOrders);
+  const { data: items, loading, error, refetch } = useFetch(() => fetchOrderItems(orderId), [orderId]);
   const order = orders?.find((o) => o.id === orderId);
-  async function changeStatus(status: string) { try { await updateOrderStatus(orderId, status); refetch(); onNotice(`تم تحديث حالة الطلب إلى: ${status}`); } catch (e) { onNotice(e instanceof Error ? e.message : 'خطأ'); } }
-  const statuses = ['pending', 'confirmed', 'processing', 'delivered'];
-  return <AdminPage eyebrow="المبيعات والعملاء" title={`الطلب #${order?.order_number ?? ''}`} description="تفاصيل الطلب وبنوده وحالة التجهيز" icon={Package} note="" toolbar={<Button variant="secondary" onClick={onBack}><ChevronLeft size={16} /> رجوع</Button>}>
-    {order && <div className="order-detail-grid"><div className="order-info-panel"><div className="order-info-row"><span>العميل</span><strong>{order.customer?.business_name ?? '—'}</strong></div><div className="order-info-row"><span>التاريخ</span><strong>{formatDateShort(order.created_at)}</strong></div><div className="order-info-row"><span>الإجمالي</span><strong>{formatCurrency(order.total_amount)}</strong></div><div className="order-info-row"><span>عدد البنود</span><strong>{formatNumber(order.total_items)}</strong></div><div className="order-info-row"><span>الحالة الحالية</span><span className={`badge ${order.status === 'delivered' ? 'success' : 'info'}`}>{order.status}</span></div></div><div className="order-status-panel"><h3>تغيير الحالة</h3><div className="order-status-btns">{statuses.map((s) => <button key={s} className={order.status === s ? 'active' : ''} onClick={() => changeStatus(s)}>{s}</button>)}</div></div></div>}
-    <section className="panel table-panel" style={{ marginTop: 16 }}><div className="table-head"><h2>بنود الطلب</h2></div>{loading ? <Loading /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>{items?.map((it: OrderItem) => <tr key={it.id}><td><strong>{it.product_name_snapshot}</strong></td><td><code>{it.item_code}</code></td><td>{formatNumber(it.quantity)} {it.unit_snapshot ?? ''}</td><td>{formatCurrency(it.unit_price_snapshot)}</td><td>{formatCurrency(it.line_total)}</td></tr>)}</tbody></table></TableWrap>}</section>
+  const [drafts, setDrafts] = useState<Record<string, OrderReviewDraft>>({});
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [customerNote, setCustomerNote] = useState('');
+  const [reviewMessage, setReviewMessage] = useState('');
+  const quantityInputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    if (!items) return;
+    const next: Record<string, OrderReviewDraft> = {};
+    for (const item of items) {
+      next[item.id] = {
+        quantity: String(item.proposed_quantity ?? item.approved_quantity ?? item.quantity),
+        unitPrice: String(item.proposed_unit_price ?? item.approved_unit_price ?? item.unit_price_snapshot),
+        reason: item.proposed_price_reason ?? item.price_override_reason ?? '',
+      };
+    }
+    setDrafts(next);
+    setDirty(false);
+  }, [items]);
+
+  const editable = order?.status === 'pending' || order?.status === 'draft';
+  const hasStaged = Boolean(order?.quantity_review_required) || Boolean(items?.some((item) =>
+    item.proposed_quantity != null || item.proposed_unit_price != null,
+  ));
+  const blocked = dirty || hasStaged;
+  const transitions: Record<string, string[]> = {
+    draft: ['pending', 'cancelled'],
+    pending: ['cancelled'],
+    confirmed: ['processing', 'shipped', 'delivered', 'cancelled'],
+    processing: ['shipped', 'delivered', 'cancelled'],
+    shipped: ['delivered'],
+    delivered: [],
+    cancelled: [],
+  };
+  const statuses = transitions[order?.status ?? 'pending'] ?? [];
+  const projectedTotal = (items ?? []).reduce((sum, item) => {
+    const draft = drafts[item.id];
+    const quantity = Number(draft?.quantity ?? item.quantity);
+    const unitPrice = Number(draft?.unitPrice ?? item.unit_price_snapshot);
+    return sum + (Number.isFinite(quantity) && Number.isFinite(unitPrice) ? quantity * unitPrice : 0);
+  }, 0);
+
+  function payload() {
+    return (items ?? []).map((item) => ({
+      item_id: item.id,
+      quantity: Number(drafts[item.id]?.quantity ?? item.proposed_quantity ?? item.approved_quantity ?? item.quantity),
+      unit_price: Number(drafts[item.id]?.unitPrice ?? item.proposed_unit_price ?? item.approved_unit_price ?? item.unit_price_snapshot),
+      price_reason: (drafts[item.id]?.reason ?? item.proposed_price_reason ?? item.price_override_reason ?? '').trim() || null,
+    }));
+  }
+
+  async function changeStatus(status: string) {
+    if (blocked) {
+      setReviewMessage('لا يمكن مغادرة مراجعة الطلب أو تغيير حالته قبل اعتماد الكميات والأسعار أو إلغاء المسودة.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateOrderStatus(orderId, status);
+      await Promise.all([refetch(), refetchOrders()]);
+      onNotice('تم تحديث حالة الطلب إلى: ' + status);
+    } catch (cause) {
+      onNotice(cause instanceof Error ? cause.message : 'تعذر تحديث حالة الطلب');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateDraft(itemId: string, patch: Partial<OrderReviewDraft>) {
+    setDrafts((previous) => ({ ...previous, [itemId]: { ...previous[itemId], ...patch } }));
+    setDirty(true);
+    setReviewMessage('توجد تعديلات لم تُحفظ بعد. اعتمدها أو ألغها قبل مغادرة القسم.');
+  }
+
+  function enterNext(event: React.KeyboardEvent<HTMLInputElement>, index: number) {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const next = items?.[index + 1];
+    if (next) quantityInputs.current[next.id]?.focus();
+    else setReviewMessage('وصلت إلى آخر بند. احفظ المسودة ثم نفّذ اعتماد الكميات لتأكيد الطلب.');
+  }
+
+  async function stageReview() {
+    if (!items?.length || busy) return;
+    const lines = payload();
+    if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 10000 ||
+      !Number.isFinite(line.unit_price) || line.unit_price < 0 ||
+      Math.abs(line.quantity * 1000 - Math.round(line.quantity * 1000)) > 0.000001)) {
+      setReviewMessage('تحقق من أن كل كمية بين 0.001 و10,000 وأن الأسعار أرقام غير سالبة.');
+      return;
+    }
+    if (lines.some((line) => {
+      const current = items.find((item) => item.id === line.item_id);
+      return current && line.unit_price !== Number(current.unit_price_snapshot) && !line.price_reason;
+    })) {
+      setReviewMessage('سبب تعديل السعر مطلوب لكل بند تغير سعره. تعديل طلب واحد لا يغيّر سعر الكتالوج.');
+      return;
+    }
+    setBusy(true);
+    setReviewMessage('');
+    try {
+      const result = await reviewOrderLines(orderId, lines, 'stage', customerNote);
+      await Promise.all([refetch(), refetchOrders()]);
+      setDirty(false);
+      setReviewMessage(result.quantity_review_required
+        ? 'حُفظت مسودة التعديلات في الخادم. ما تزال غير معتمدة؛ لا يمكن تأكيد الطلب أو مغادرة هذه المراجعة.'
+        : 'حُفظت المسودة؛ راجع جميع البنود ثم أكد الطلب عند الجاهزية.');
+      onNotice('تم حفظ مسودة مراجعة الطلب دون تعديل المخزون أو إصدار فاتورة.');
+    } catch (cause) {
+      setReviewMessage(cause instanceof Error ? cause.message : 'تعذر حفظ مسودة المراجعة');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveReview() {
+    if (!items?.length || busy) return;
+    const lines = payload();
+    if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 10000 ||
+      !Number.isFinite(line.unit_price) || line.unit_price < 0)) {
+      setReviewMessage('تحقق من صحة جميع الكميات والأسعار قبل الاعتماد.');
+      return;
+    }
+    if (lines.some((line) => {
+      const current = items.find((item) => item.id === line.item_id);
+      return current && line.unit_price !== Number(current.unit_price_snapshot) && !line.price_reason;
+    })) {
+      setReviewMessage('أضف سببًا لكل تعديل سعر قبل الاعتماد.');
+      return;
+    }
+    setBusy(true);
+    setReviewMessage('');
+    try {
+      // Submit the complete visible grid to one database transaction. When no prior draft exists,
+      // the server stages this exact grid and approves it inside the same transaction; on any stock,
+      // credit or invoice failure, the complete approval is rolled back.
+      const result = await reviewOrderLines(orderId, lines, 'approve', customerNote);
+      await Promise.all([refetch(), refetchOrders()]);
+      setDirty(false);
+      setReviewMessage(result.adjusted
+        ? 'اعتمدت التعديلات، تأكد الطلب، أُنشئت الفاتورة من الخادم، وسُجل طلب السداد للعميل.'
+        : 'اعتمدت الكميات وأُكد الطلب. أُنشئت الفاتورة وطلب السداد من الخادم.');
+      onNotice('تم اعتماد الطلب ذريًا. حالة طلب السداد: ' + (result.payment_request_status ?? 'requested'));
+    } catch (cause) {
+      await Promise.all([refetch(), refetchOrders()]);
+      setReviewMessage(cause instanceof Error ? cause.message : 'تعذر اعتماد الطلب؛ بقي الطلب دون تأكيد إذا رفض الخادم العملية.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function discardReview() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (hasStaged && editable) await reviewOrderLines(orderId, [], 'discard');
+      if (items) {
+        const next: Record<string, OrderReviewDraft> = {};
+        for (const item of items) next[item.id] = {
+          quantity: String(item.approved_quantity ?? item.quantity),
+          unitPrice: String(item.approved_unit_price ?? item.unit_price_snapshot),
+          reason: item.price_override_reason ?? '',
+        };
+        setDrafts(next);
+      }
+      setDirty(false);
+      await Promise.all([refetch(), refetchOrders()]);
+      setReviewMessage('أُلغيت المسودة غير المعتمدة. لم يتغير المخزون ولم تصدر فاتورة من هذه المسودة.');
+    } catch (cause) {
+      setReviewMessage(cause instanceof Error ? cause.message : 'تعذر إلغاء المسودة');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function goBack() {
+    if (blocked) {
+      setReviewMessage('أكمل الاعتماد أو ألغ المسودة قبل مغادرة مراجعة الطلب.');
+      return;
+    }
+    onBack();
+  }
+
+  return <AdminPage eyebrow="المبيعات والعملاء" title={'الطلب #' + (order?.order_number ?? '')}
+    description="راجع البنود والكميات والأسعار، ثم احفظ المسودة واعتمدها في معاملة واحدة قبل تأكيد الطلب."
+    icon={Package} note="" toolbar={<Button variant="secondary" onClick={goBack} disabled={blocked || busy}><ChevronLeft size={16} /> رجوع</Button>}>
+    {order && <div className="order-detail-grid">
+      <div className="order-info-panel">
+        <div className="order-info-row"><span>العميل</span><strong>{order.customer?.business_name ?? '—'}</strong></div>
+        <div className="order-info-row"><span>التاريخ</span><strong>{formatDateShort(order.created_at)}</strong></div>
+        <div className="order-info-row"><span>الإجمالي المقترح</span><strong>{formatCurrency(projectedTotal)}</strong></div>
+        <div className="order-info-row"><span>عدد البنود</span><strong>{formatNumber(order.total_items)}</strong></div>
+        <div className="order-info-row"><span>الحالة الحالية</span><span className={'badge ' + (order.status === 'confirmed' ? 'success' : 'info')}>{order.status}</span></div>
+        <div className="order-info-row"><span>طلب السداد</span><strong>{order.payment_request_status === 'requested' ? 'مطلوب من العميل' : order.payment_request_status ?? 'غير مطلوب'}</strong></div>
+      </div>
+      <div className="order-status-panel">
+        <h3>تغيير الحالة</h3>
+        <p>تأكيد الطلب يصدر الفاتورة ويطلب السداد. استخدم الاعتماد أدناه حتى تمر الكميات والأسعار عبر مسار المراجعة المحكوم.</p>
+        <div className="order-status-btns">{statuses.map((status) =>
+          <button key={status} disabled={busy || blocked} className={order.status === status ? 'active' : ''} onClick={() => void changeStatus(status)}>
+            {({ pending: 'بانتظار المراجعة', processing: 'قيد التجهيز', shipped: 'تم الشحن', delivered: 'تم التسليم', cancelled: 'إلغاء الطلب' } as Record<string, string>)[status] ?? status}
+          </button>,
+        )}</div>
+      </div>
+    </div>}
+
+    {editable && <section className="panel table-panel" style={{ marginTop: 16 }}>
+      <div className="panel-head"><div><h2>مراجعة بنود الطلب</h2><p>Enter ينتقل إلى كمية السطر التالي. اللون الأزرق الفاتح يميز الحقول القابلة للتعديل. أي تغيير يبقى غير معتمد حتى تنفيذ الاعتماد.</p></div>
+        <span className={'badge ' + (blocked ? 'warning' : 'success')}>{blocked ? 'مراجعة غير معتمدة' : 'جاهز للمراجعة'}</span>
+      </div>
+      {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !items?.length ? <Empty text="لا توجد بنود يمكن مراجعتها." /> :
+        <TableWrap><table><thead><tr><th>المنتج / SKU</th><th>الكمية المطلوبة</th><th>الكمية المقترحة/المعتمدة</th><th>السعر للوحدة</th><th>سبب تعديل السعر</th><th>الإجمالي المقترح</th></tr></thead><tbody>
+          {items.map((item, index) => {
+            const draft = drafts[item.id] ?? { quantity: String(item.quantity), unitPrice: String(item.unit_price_snapshot), reason: '' };
+            const quantity = Number(draft.quantity);
+            const price = Number(draft.unitPrice);
+            const valid = Number.isFinite(quantity) && quantity > 0 && quantity <= 10000 && Number.isFinite(price) && price >= 0;
+            return <tr key={item.id}>
+              <td><strong>{item.product_name_snapshot}</strong><small style={{ display: 'block' }}><code>{item.item_code}</code> · {item.unit_snapshot ?? ''}</small></td>
+              <td>{formatNumber(Number(item.requested_quantity ?? item.quantity))}</td>
+              <td><input
+                ref={(element) => { quantityInputs.current[item.id] = element; }}
+                aria-label={'الكمية المقترحة ' + item.product_name_snapshot}
+                type="number" min="0.001" max="10000" step="0.001"
+                value={draft.quantity}
+                disabled={busy}
+                onChange={(event) => updateDraft(item.id, { quantity: event.target.value })}
+                onKeyDown={(event) => enterNext(event, index)}
+                style={{ width: 130, padding: '8px 10px', border: '1px solid #b8d7f3', borderRadius: 8, background: '#eef7ff', color: '#193b56' }}
+              /></td>
+              <td><input
+                aria-label={'السعر المقترح ' + item.product_name_snapshot}
+                type="number" min="0" max="999999999999" step="0.01"
+                value={draft.unitPrice}
+                disabled={busy}
+                onChange={(event) => updateDraft(item.id, { unitPrice: event.target.value })}
+                style={{ width: 130, padding: '8px 10px', border: '1px solid #b8d7f3', borderRadius: 8, background: '#eef7ff', color: '#193b56' }}
+              /></td>
+              <td><input
+                aria-label={'سبب تعديل السعر ' + item.product_name_snapshot}
+                value={draft.reason}
+                disabled={busy}
+                maxLength={500}
+                onChange={(event) => updateDraft(item.id, { reason: event.target.value })}
+                placeholder="مطلوب إذا تغير السعر"
+                style={{ width: 180, padding: '8px 10px', border: '1px solid #d9e5eb', borderRadius: 8, background: '#fff' }}
+              /></td>
+              <td>{valid ? formatCurrency(quantity * price) : '—'}</td>
+            </tr>;
+          })}
+        </tbody></table></TableWrap>}
+      <label className="form-field" style={{ marginTop: 12 }}><span>ملاحظة للعميل (اختيارية)</span><textarea value={customerNote} onChange={(event) => { setCustomerNote(event.target.value); setDirty(true); }} maxLength={1000} rows={2} placeholder="توضيح أي تغيير في الأصناف أو الكميات" /></label>
+      {reviewMessage && <div className={blocked ? 'form-error' : 'privacy-note'} role={blocked ? 'alert' : 'status'}>{reviewMessage}</div>}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+        <Button variant="secondary" disabled={busy || loading || !items?.length} onClick={() => void stageReview()}>{busy ? 'جارٍ الحفظ...' : 'حفظ المسودة دون اعتماد'}</Button>
+        <Button disabled={busy || loading || !items?.length} onClick={() => void approveReview()}>{busy ? 'جارٍ الاعتماد...' : 'اعتماد الكميات وتأكيد الطلب'}</Button>
+        {(blocked || dirty) && <Button variant="outline" disabled={busy} onClick={() => void discardReview()}>إلغاء المسودة</Button>}
+      </div>
+      {blocked && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800, marginTop: 12 }}>لا يمكن مغادرة هذا القسم أو تغيير حالة الطلب قبل اعتماد الكميات/الأسعار المقترحة أو إلغاء المسودة.</p>}
+    </section>}
+
+    {!editable && items && <section className="panel table-panel" style={{ marginTop: 16 }}>
+      <div className="panel-head"><div><h2>البنود المعتمدة</h2><p>الأسعار للعرض الداخلي للموظفين المخولين فقط.</p></div></div>
+      {loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>الكمية المعتمدة</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>{items.map((item: OrderItem) => <tr key={item.id}>
+        <td><strong>{item.product_name_snapshot}</strong></td><td><code>{item.item_code}</code></td><td>{formatNumber(Number(item.approved_quantity ?? item.quantity))} {item.unit_snapshot ?? ''}</td><td>{formatCurrency(Number(item.approved_unit_price ?? item.unit_price_snapshot))}</td><td>{formatCurrency(Number(item.line_total))}</td>
+      </tr>)}</tbody></table></TableWrap>}
+      {order.quantity_review_required && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800 }}>توجد مراجعة معلقة. يجب إكمالها قبل متابعة الطلب.</p>}
+      {order.customer_adjustment_note && <p>{order.customer_adjustment_note}</p>}
+    </section>}
   </AdminPage>;
 }
 
