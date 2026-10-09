@@ -220,11 +220,15 @@ export async function createOrder(order: {
     unit_price?: number;
   }[];
   notes?: string;
-  idempotency_key?: string;
+  // Generate once per user intent and reuse across retries; never silently mint a new key on retry.
+  idempotency_key: string;
   payment_terms?: 'cash_on_delivery' | 'credit';
 }): Promise<Order> {
   if (!order.items.length) throw new Error('يجب إضافة صنف واحد على الأقل إلى الطلب.');
-  const idempotencyKey = order.idempotency_key ?? crypto.randomUUID();
+  const idempotencyKey = order.idempotency_key;
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey)) {
+    throw new Error('مفتاح منع التكرار مطلوب (16–128 حرفاً) ويجب إعادة استخدامه عند إعادة المحاولة.');
+  }
   const { data, error } = await supabase.rpc('create_staff_order', {
     p_customer_id: order.customer_id,
     p_items: order.items.map((item) => ({
