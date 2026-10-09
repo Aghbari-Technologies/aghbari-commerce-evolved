@@ -211,6 +211,17 @@ function CollectionView({ title, icon: Icon, products, wishlist, compare, onOpen
   return <section className="sf-collection"><button className="sf-back-link" onClick={onBack}><ArrowRight size={16} /> العودة للمتجر</button><div className="sf-products-head"><div><h2><Icon size={21} /> {title}</h2><span>{products.length} منتجات</span></div></div>{products.length ? <ProductGrid products={products} wishlist={wishlist} compare={compare} onOpen={onOpen} onAdd={onAdd} onWishlist={onWishlist} onCompare={onCompare} /> : <div className="sf-empty"><Icon size={32} /><span>{empty}</span><button className="sf-link" onClick={onBack}>تصفح الكتالوج</button></div>}</section>;
 }
 
+type CheckoutPreviewLine = {
+  product_id: string;
+  name: string;
+  item_code: string;
+  unit: string;
+  quantity: number | string;
+  unit_price: number | string;
+  line_total: number | string;
+};
+type CheckoutPricePreview = { items: CheckoutPreviewLine[]; total_amount: number; currency: string; customer_tier: string };
+
 function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total: number; onBack: () => void; onComplete: (order: { id: string; order_number: string; total_amount: number }) => void }) {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
@@ -218,9 +229,53 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
   const [business, setBusiness] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentTerms, setPaymentTerms] = useState<'cash_on_delivery' | 'credit'>('cash_on_delivery');
+  const [pricePreview, setPricePreview] = useState<CheckoutPricePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewError, setPreviewError] = useState('');
+  const [previewRetry, setPreviewRetry] = useState(0);
+  const checkoutItems = useMemo(
+    () => cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })).sort((a, b) => a.product_id.localeCompare(b.product_id)),
+    [cart],
+  );
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setPreviewLoading(true);
+    setPreviewError('');
+    setPricePreview(null);
+    void (async () => {
+      try {
+        const { data, error: rpcError } = await supabase.rpc('preview_order_pricing', { _items: checkoutItems });
+        if (rpcError) throw new Error(rpcError.message || 'تعذر التحقق من الأسعار الحالية');
+        const payload = data as { items?: unknown; total_amount?: unknown; currency?: unknown; customer_tier?: unknown } | null;
+        const amount = typeof payload?.total_amount === 'number' ? payload.total_amount : Number(payload?.total_amount);
+        if (!payload || !Array.isArray(payload.items) || payload.items.length === 0 || !Number.isFinite(amount) || amount < 0) {
+          throw new Error('لم تصل معاينة أسعار صالحة من الخادم');
+        }
+        const rows = payload.items as CheckoutPreviewLine[];
+        if (rows.some((line) =>
+          typeof line.product_id !== 'string' || typeof line.name !== 'string' ||
+          !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0 ||
+          !Number.isFinite(Number(line.unit_price)) || Number(line.unit_price) < 0 ||
+          !Number.isFinite(Number(line.line_total)) || Number(line.line_total) < 0
+        )) throw new Error('استجابة تسعير الخادم غير مكتملة');
+        if (active) setPricePreview({
+          items: rows,
+          total_amount: amount,
+          currency: typeof payload.currency === 'string' ? payload.currency : 'YER',
+          customer_tier: typeof payload.customer_tier === 'string' ? payload.customer_tier : 'retail',
+        });
+      } catch (e) {
+        if (active) setPreviewError(e instanceof Error ? e.message : 'تعذر التحقق من الأسعار الحالية');
+      } finally {
+        if (active) setPreviewLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [checkoutItems, user?.profileId, previewRetry]);
 
   function getIdempotencyKey() {
     const items = cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })).sort((a, b) => a.product_id.localeCompare(b.product_id));
@@ -245,6 +300,7 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
   async function submit() {
     if (!user) { setError('سجّل الدخول أو أنشئ حساباً لإتمام الطلب'); return; }
     if (name.trim().length < 2 || phone.trim().length < 6) { setError('الاسم ورقم الهاتف مطلوبان'); return; }
+    if (previewLoading || !pricePreview) { setError('لا يمكن تسجيل الطلب حتى ينجح التحقق من الأسعار الحالية. أعد المحاولة.'); return; }
     setSubmitting(true); setError('');
     const requestKey = getIdempotencyKey();
     try {
@@ -285,14 +341,18 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
             <small style={{ color: '#71868a' }}>يتحقق الخادم من اعتماد حسابك وحد الائتمان عند اختيار الدفع الآجل.</small>
           </fieldset>
           <label className="sf-form-field"><span>ملاحظات</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي ملاحظات على الطلب..." /></label>
+          {previewError && <div className="sf-form-error" role="alert">{previewError} <button className="sf-link" type="button" onClick={() => setPreviewRetry((n) => n + 1)}>إعادة التحقق</button></div>}
           {error && <div className="sf-form-error">{error}</div>}
-          <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting}>{submitting ? 'جار الإرسال...' : 'تأكيد الطلب'}</button></div>
+          <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting || previewLoading || !pricePreview}>{submitting ? 'جار الإرسال...' : previewLoading ? 'جارٍ التحقق من الأسعار...' : 'تأكيد الطلب'}</button></div>
         </div>
         <aside className="sf-checkout-summary">
           <h3>ملخص الطلب</h3>
-          {cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>{i.quantity} × {formatCurrency(i.product.base_price)}</small></div>)}
-          <div className="sf-summary-total"><span>الإجمالي التقديري</span><strong>{formatCurrency(total)}</strong></div>
-          <small style={{ color: '#71868a', lineHeight: 1.7 }}>قد يختلف الإجمالي النهائي عن تقدير السلة؛ يعتمد الخادم سعر شريحة حسابك والكميات قبل تسجيل الطلب.</small>
+          {previewLoading && <p role="status">جارٍ حساب أسعار حسابك من الخادم...</p>}
+          {pricePreview ? pricePreview.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>{formatNumber(Number(line.quantity))} × {formatCurrency(Number(line.unit_price))}</small></div>)
+            : !previewLoading && cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>{i.quantity} × {formatCurrency(i.product.base_price)} (تقديري فقط)</small></div>)}
+          <div className="sf-summary-total"><span>{pricePreview ? 'الإجمالي المحسوب من الخادم' : 'الإجمالي غير معتمد'}</span><strong>{formatCurrency(pricePreview?.total_amount ?? total)}</strong></div>
+          {pricePreview && <small style={{ color: '#71868a', lineHeight: 1.7 }}>شريحة حسابك: {pricePreview.customer_tier}. أُعيد حساب الأسعار الآن من قاعدة البيانات؛ سيعيد الخادم التحقق داخل معاملة إنشاء الطلب أيضًا.</small>}
+          {!pricePreview && <small style={{ color: '#9b2626', lineHeight: 1.7 }}>لن يُرسل الطلب حتى يتمكن النظام من جلب أسعار موثوقة من الخادم.</small>}
         </aside>
       </div>
     </section>
