@@ -416,7 +416,7 @@ function PricingRuleModal({ rule, onClose, onSaved }: { rule?: PricingRule; onCl
     setError('');
     try {
       const toIso = (date: string) => date ? new Date(date).toISOString() : null;
-      await createPricingRule({
+      const input: CreatePricingRuleInput = {
         name: name.trim(),
         scope_type: scopeType,
         scope_value: scopeType === 'product' || scopeType === 'category' ? scopeValue : null,
@@ -430,16 +430,18 @@ function PricingRuleModal({ rule, onClose, onSaved }: { rule?: PricingRule; onCl
         priority: rank,
         effective_from: toIso(effectiveFrom),
         effective_until: toIso(effectiveUntil),
-      });
+      };
+      if (rule) await updatePricingRule(rule.id, input);
+      else await createPricingRule(input);
       await onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'تعذر إنشاء قاعدة التسعير.');
+      setError(cause instanceof Error ? cause.message : rule ? 'تعذر تحديث قاعدة التسعير.' : 'تعذر إنشاء قاعدة التسعير.');
     } finally {
       setSaving(false);
     }
   }
 
-  return <Modal title="إنشاء قاعدة تسعير" onClose={onClose}>
+  return <Modal title={rule ? "تعديل قاعدة التسعير" : "إنشاء قاعدة تسعير"} onClose={onClose}>
     <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
       <Field label="اسم القاعدة"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required placeholder="مثال: جملة بكمية كبيرة" /></Field>
       <div className="form-grid">
@@ -472,9 +474,9 @@ function PricingRuleModal({ rule, onClose, onSaved }: { rule?: PricingRule; onCl
         <Field label="وقت بدء القاعدة (اختياري)"><input type="datetime-local" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
         <Field label="وقت انتهاء القاعدة (اختياري)"><input type="datetime-local" value={effectiveUntil} onChange={(event) => setEffectiveUntil(event.target.value)} /></Field>
       </div>
-      <p style={{ color: '#71868a', fontSize: 12, lineHeight: 1.7 }}>الحفظ لا يغيّر قائمة الأسعار يدويًا؛ قاعدة البيانات تحسب الجملة والتجزئة وتكتب سجل التدقيق. لا تُطبّق القاعدة إلا ضمن النطاق والشريحة والكمية والفترة المختارة.</p>
+      <p style={{ color: '#71868a', fontSize: 12, lineHeight: 1.7 }}>{rule ? 'سيُحدّث المحرك هذه القاعدة ويزيد رقم إصدارها ويسجل التغيير، ثم يعيد احتساب الأسعار ضمن النطاق والشريحة والكمية والفترة المختارة.' : 'الحفظ لا يغيّر قائمة الأسعار يدويًا؛ قاعدة البيانات تحسب الجملة والتجزئة وتكتب سجل التدقيق. لا تُطبّق القاعدة إلا ضمن النطاق والشريحة والكمية والفترة المختارة.'}</p>
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" className="btn outline" onClick={onClose} disabled={saving}>إلغاء</button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : 'حفظ قاعدة التسعير'}</Button></div>
+      <div className="modal-actions"><button type="button" className="btn outline" onClick={onClose} disabled={saving}>إلغاء</button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : rule ? 'حفظ التعديلات' : 'حفظ قاعدة التسعير'}</Button></div>
     </form>
   </Modal>;
 }
