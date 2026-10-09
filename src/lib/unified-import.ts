@@ -533,3 +533,368 @@ export function chooseImportStatus(score: number): 'completed' | 'manual_review'
   if (score < 75) return 'manual_review';
   return 'completed';
 }
+
+
+type XlsxZipEntry = {
+  name: string;
+  compressionMethod: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+};
+
+const MAX_XLSX_ENTRY_COUNT = 10_000;
+const MAX_XLSX_EXPANDED_BYTES = MAX_IMPORT_FILE_BYTES;
+
+function decodeXlsxXmlText(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_whole, hex: string) => {
+      const point = Number.parseInt(hex, 16);
+      return Number.isInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : '\uFFFD';
+    })
+    .replace(/&#([0-9]+);/g, (_whole, decimal: string) => {
+      const point = Number.parseInt(decimal, 10);
+      return Number.isInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : '\uFFFD';
+    })
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function xlsxAttribute(attributes: string, name: string): string | null {
+  const match = new RegExp('(?:^|\\s)' + name + '\\s*=\\s*"([^"]*)"').exec(attributes);
+  return match ? decodeXlsxXmlText(match[1]) : null;
+}
+
+function xlsxElementText(xml: string, tagName: string): string | null {
+  const match = new RegExp('<' + tagName + '\\b[^>]*>([\\s\\S]*?)<\\/' + tagName + '\\s*>', 'i').exec(xml);
+  return match ? decodeXlsxXmlText(match[1].replace(/<[^>]*>/g, '')) : null;
+}
+
+function xlsxTextRuns(xml: string): string {
+  const parts: string[] = [];
+  const pattern = /<t\b[^>]*>([\s\S]*?)<\/t\s*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(xml))) parts.push(decodeXlsxXmlText(match[1]));
+  return parts.join('');
+}
+
+function xlsxColumnIndex(cellReference: string): number {
+  const match = /^([A-Z]+)/i.exec(cellReference);
+  if (!match) throw new Error('ملف XLSX يحتوي على مرجع خلية غير صالح.');
+  let result = 0;
+  for (const character of match[1].toUpperCase()) result = result * 26 + character.charCodeAt(0) - 64;
+  return result - 1;
+}
+
+function parseXlsxSharedStrings(xml: string): string[] {
+  const values: string[] = [];
+  const pattern = /<si\b[^>]*>([\s\S]*?)<\/si\s*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(xml))) values.push(xlsxTextRuns(match[1]));
+  return values;
+}
+
+type XlsxStyles = { numberFormats: Map<number, string>; cellStyleFormats: number[] };
+
+function parseXlsxStyles(xml: string): XlsxStyles {
+  const numberFormats = new Map<number, string>();
+  const customFormats = /<numFmts\b[^>]*>([\s\S]*?)<\/numFmts\s*>/i.exec(xml)?.[1] ?? '';
+  const formatPattern = /<numFmt\b([^>]*?)\/?\s*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = formatPattern.exec(customFormats))) {
+    const id = Number(xlsxAttribute(match[1], 'numFmtId'));
+    const code = xlsxAttribute(match[1], 'formatCode');
+    if (Number.isInteger(id) && code !== null) numberFormats.set(id, code);
+  }
+  const xfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs\s*>/i.exec(xml)?.[1] ?? '';
+  const cellStyleFormats: number[] = [];
+  const xfPattern = /<xf\b([^>]*?)\/?\s*>/g;
+  while ((match = xfPattern.exec(xfs))) {
+    const id = Number(xlsxAttribute(match[1], 'numFmtId') ?? 0);
+    cellStyleFormats.push(Number.isInteger(id) ? id : 0);
+  }
+  return { numberFormats, cellStyleFormats };
+}
+
+function excelSerialToIso(value: string, date1904: boolean): string {
+  const serial = Number(value);
+  if (!Number.isFinite(serial) || serial < 0 || serial > 2_958_465) return value;
+  const days = date1904 ? serial - 24_107 : serial - (serial < 60 ? 25_568 : 25_569);
+  const date = new Date(Math.round(days * 86_400_000));
+  if (!Number.isFinite(date.getTime())) return value;
+  const iso = date.toISOString();
+  return serial % 1 === 0 ? iso.slice(0, 10) : iso.replace(/\.000Z$/, 'Z');
+}
+
+function formatXlsxNumber(value: string, styleIndex: number, styles: XlsxStyles, date1904: boolean): string {
+  const numFmtId = styles.cellStyleFormats[styleIndex] ?? 0;
+  const customCode = styles.numberFormats.get(numFmtId);
+  const builtInDate = (numFmtId >= 14 && numFmtId <= 22) || (numFmtId >= 45 && numFmtId <= 47);
+  const customDate = Boolean(customCode && /[ymd]/i.test(customCode.replace(/"[^"]*"|\[[^\]]*\]/g, '')));
+  if (builtInDate || customDate) return excelSerialToIso(value, date1904);
+  if (customCode && /^0+$/.test(customCode) && /^\d+$/.test(value)) return value.padStart(customCode.length, '0');
+  return value;
+}
+
+function resolveXlsxSheetPath(target: string): string {
+  const path = target.replace(/\\/g, '/');
+  if (path.startsWith('xl/worksheets/')) return path;
+  if (path.startsWith('/')) {
+    const absolute = path.replace(/^\/+/, '');
+    if (!absolute.startsWith('xl/worksheets/')) throw new Error('مسار ورقة XLSX خارج مجلد المصنف غير مسموح.');
+    return absolute;
+  }
+  const parts = ['xl'];
+  for (const part of path.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (parts.length <= 1) throw new Error('مسار ورقة XLSX خارج مجلد المصنف غير مسموح.');
+      parts.pop();
+    } else parts.push(part);
+  }
+  const result = parts.join('/');
+  if (!result.startsWith('xl/worksheets/')) throw new Error('مسار ورقة XLSX غير مدعوم.');
+  return result;
+}
+
+async function readXlsxBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  const nativeArrayBuffer = (blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
+  if (typeof nativeArrayBuffer === 'function') return nativeArrayBuffer.call(blob);
+  if (typeof FileReader === 'undefined') throw new Error('المتصفح لا يوفر واجهة قراءة أجزاء ملف XLSX.');
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error('تعذر قراءة جزء من ملف XLSX.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('تعذر قراءة جزء من ملف XLSX.'));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function xlsxBlobStream(blob: Blob): ReadableStream<Uint8Array> {
+  const nativeStream = (blob as Blob & { stream?: () => ReadableStream<Uint8Array> }).stream;
+  if (typeof nativeStream === 'function') return nativeStream.call(blob);
+  // Fallback is only for test/legacy Blob implementations. Modern browsers use Blob.stream().
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      void readXlsxBlobArrayBuffer(blob).then((buffer) => {
+        const bytes = new Uint8Array(buffer);
+        const segmentBytes = 64 * 1024;
+        for (let offset = 0; offset < bytes.length; offset += segmentBytes) {
+          controller.enqueue(bytes.slice(offset, Math.min(bytes.length, offset + segmentBytes)));
+        }
+        controller.close();
+      }).catch((cause: unknown) => controller.error(cause));
+    },
+  });
+}
+
+async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntry>> {
+  if (file.size < 22) throw new Error('ملف XLSX تالف أو أقصر من ترويسة ZIP المطلوبة.');
+  const tailStart = Math.max(0, file.size - 22 - 65_535);
+  const tail = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(tailStart)));
+  const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+  let endOffset = -1;
+  for (let offset = tail.length - 22; offset >= Math.max(0, tail.length - 22 - 65_535); offset -= 1) {
+    if (tailView.getUint32(offset, true) === 0x06054b50 &&
+        offset + 22 + tailView.getUint16(offset + 20, true) === tail.length) {
+      endOffset = offset;
+      break;
+    }
+  }
+  if (endOffset < 0) throw new Error('ملف XLSX لا يحتوي على نهاية ZIP سليمة.');
+  const eocdAbsolute = tailStart + endOffset;
+  const disk = tailView.getUint16(endOffset + 4, true);
+  const directoryDisk = tailView.getUint16(endOffset + 6, true);
+  const entriesOnDisk = tailView.getUint16(endOffset + 8, true);
+  const entryCount = tailView.getUint16(endOffset + 10, true);
+  const directorySize = tailView.getUint32(endOffset + 12, true);
+  const directoryOffset = tailView.getUint32(endOffset + 16, true);
+  if (disk !== 0 || directoryDisk !== 0 || entriesOnDisk !== entryCount) throw new Error('ملفات XLSX متعددة الأقراص غير مدعومة.');
+  if (entryCount < 1 || entryCount > MAX_XLSX_ENTRY_COUNT || directorySize > 8 * 1024 * 1024 ||
+      directoryOffset + directorySize > eocdAbsolute) throw new Error('فهرس XLSX غير صالح أو يتجاوز الحدود الآمنة.');
+
+  const bytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(directoryOffset, directoryOffset + directorySize)));
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder('utf-8', { fatal: true });
+  const entries = new Map<string, XlsxZipEntry>();
+  let offset = 0;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > bytes.length || view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error('فهرس ZIP الخاص بملف XLSX يحتوي على سجل غير صالح.');
+    }
+    const flags = view.getUint16(offset + 8, true);
+    const compressionMethod = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localHeaderOffset = view.getUint32(offset + 42, true);
+    const nextOffset = offset + 46 + nameLength + extraLength + commentLength;
+    if (nextOffset > bytes.length || [compressedSize, uncompressedSize, localHeaderOffset].includes(0xffffffff)) {
+      throw new Error('امتداد ZIP64 أو طول سجل غير صالح لا يمكن معالجته بأمان.');
+    }
+    if ((flags & 1) !== 0 || ![0, 8].includes(compressionMethod)) throw new Error('ضغط أو تشفير إحدى مكونات XLSX غير مدعوم.');
+    const name = decoder.decode(bytes.slice(offset + 46, offset + 46 + nameLength));
+    if (name.startsWith('/') || name.split('/').includes('..') || entries.has(name)) {
+      throw new Error('أسماء مسارات مكونات XLSX غير صالحة أو مكررة.');
+    }
+    entries.set(name, { name, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
+    offset = nextOffset;
+  }
+  if (offset !== bytes.length) throw new Error('طول فهرس ZIP لا يطابق عدد سجلات XLSX.');
+  return entries;
+}
+
+/**
+ * Reads the first visible XLSX worksheet and emits rows incrementally to the consumer.
+ * The raw archive and accumulated data rows are never retained; inflated XML is strictly bounded.
+ */
+export async function parseXlsxFirstWorksheet(
+  file: Blob,
+  onRow: (values: string[]) => void | Promise<void>,
+): Promise<{ rowCount: number; worksheetName: string }> {
+  if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_IMPORT_FILE_BYTES) {
+    throw new Error('حجم ملف XLSX يجب أن يكون بين 1 بايت و100MB.');
+  }
+  const entries = await readXlsxZipDirectory(file);
+  let expandedBytes = 0;
+  const expandedLimit = Math.min(MAX_XLSX_EXPANDED_BYTES, Math.max(file.size * MAX_ARCHIVE_EXPANSION_FACTOR, 5 * 1024 * 1024));
+
+  const readEntry = async (name: string, required: boolean): Promise<string | null> => {
+    const entry = entries.get(name);
+    if (!entry) {
+      if (required) throw new Error('ملف XLSX يفتقد المكون المطلوب: ' + name);
+      return null;
+    }
+    if (entry.uncompressedSize > expandedLimit || expandedBytes + entry.uncompressedSize > expandedLimit) {
+      throw new Error('محتوى XLSX بعد فك الضغط يتجاوز الحد الآمن؛ تم إيقاف القراءة قبل اعتماد أي لقطة.');
+    }
+    const localBytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
+    if (localBytes.length !== 30) throw new Error('ترويسة مكون XLSX ناقصة.');
+    const local = new DataView(localBytes.buffer, localBytes.byteOffset, localBytes.byteLength);
+    if (local.getUint32(0, true) !== 0x04034b50 || local.getUint16(8, true) !== entry.compressionMethod) {
+      throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
+    }
+    const dataStart = entry.localHeaderOffset + 30 + local.getUint16(26, true) + local.getUint16(28, true);
+    const dataEnd = dataStart + entry.compressedSize;
+    if (dataStart < entry.localHeaderOffset + 30 || dataEnd > file.size) throw new Error('حدود بيانات مكون XLSX غير صالحة.');
+    const member = file.slice(dataStart, dataEnd);
+    if (entry.compressionMethod === 0) {
+      const plainBytes = new Uint8Array(await readXlsxBlobArrayBuffer(member));
+      if (plainBytes.byteLength !== entry.uncompressedSize ||
+          expandedBytes + plainBytes.byteLength > expandedLimit) {
+        throw new Error('حجم مكون XLSX المخزن لا يطابق الفهرس أو يتجاوز الحد الآمن.');
+      }
+      expandedBytes += plainBytes.byteLength;
+      return new TextDecoder('utf-8', { fatal: false }).decode(plainBytes);
+    }
+    let stream: ReadableStream<Uint8Array>;
+    {
+      if (typeof DecompressionStream === 'undefined') throw new Error('المتصفح لا يدعم فك ضغط XLSX؛ استخدم CSV أو اطلب تحويل الملف.');
+      try {
+        stream = xlsxBlobStream(member).pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat)) as ReadableStream<Uint8Array>;
+      } catch {
+        throw new Error('تعذر تهيئة فك ضغط XLSX في هذا المتصفح.');
+      }
+    }
+    const reader = stream.getReader();
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const parts: string[] = [];
+    let actualBytes = 0;
+    try {
+      while (true) {
+        const result = await reader.read();
+        if (result.done) break;
+        actualBytes += result.value.byteLength;
+        if (actualBytes > entry.uncompressedSize || expandedBytes + actualBytes > expandedLimit) {
+          await reader.cancel();
+          throw new Error('محتوى XLSX بعد فك الضغط تجاوز الحجم المعلن أو الحد الآمن.');
+        }
+        parts.push(decoder.decode(result.value, { stream: true }));
+      }
+      parts.push(decoder.decode());
+    } finally {
+      reader.releaseLock();
+    }
+    if (actualBytes !== entry.uncompressedSize) throw new Error('حجم مكون XLSX بعد فك الضغط لا يطابق الفهرس.');
+    expandedBytes += actualBytes;
+    return parts.join('');
+  };
+
+  const workbookXml = await readEntry('xl/workbook.xml', true) as string;
+  const relsXml = await readEntry('xl/_rels/workbook.xml.rels', true) as string;
+  const sharedStringsXml = await readEntry('xl/sharedStrings.xml', false);
+  const stylesXml = await readEntry('xl/styles.xml', false) ?? '';
+  const sharedStrings = sharedStringsXml ? parseXlsxSharedStrings(sharedStringsXml) : [];
+  const styles = parseXlsxStyles(stylesXml);
+  const workbookProperties = /<workbookPr\b([^>]*?)\/?\s*>/i.exec(workbookXml)?.[1] ?? '';
+  const date1904 = ['1', 'true'].includes((xlsxAttribute(workbookProperties, 'date1904') ?? '').toLowerCase());
+  const sheetsXml = /<sheets\b[^>]*>([\s\S]*?)<\/sheets\s*>/i.exec(workbookXml)?.[1] ?? '';
+  const sheetPattern = /<sheet\b([^>]*?)\/?\s*>/g;
+  let sheet: { name: string; relationshipId: string } | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = sheetPattern.exec(sheetsXml))) {
+    const attributes = match[1];
+    const state = xlsxAttribute(attributes, 'state') ?? 'visible';
+    if (state === 'hidden' || state === 'veryHidden') continue;
+    const name = xlsxAttribute(attributes, 'name') ?? 'Sheet';
+    const relationshipId = xlsxAttribute(attributes, 'r:id');
+    if (relationshipId) { sheet = { name, relationshipId }; break; }
+  }
+  if (!sheet) throw new Error('لم يعثر ملف XLSX على ورقة عمل مرئية قابلة للقراءة.');
+  const relationshipPattern = /<Relationship\b([^>]*?)\/?\s*>/g;
+  let target: string | null = null;
+  while ((match = relationshipPattern.exec(relsXml))) {
+    const attributes = match[1];
+    if (xlsxAttribute(attributes, 'Id') !== sheet.relationshipId) continue;
+    if (!(xlsxAttribute(attributes, 'Type') ?? '').endsWith('/worksheet')) throw new Error('الورقة المحددة لا تشير إلى مكون جدول XLSX.');
+    target = xlsxAttribute(attributes, 'Target');
+    break;
+  }
+  if (!target) throw new Error('تعذر العثور على ملف XML الخاص بورقة XLSX الأولى.');
+  const worksheetXml = await readEntry(resolveXlsxSheetPath(target), true) as string;
+  let rowCount = 0;
+  const rowPattern = /<row\b([^>]*)>([\s\S]*?)<\/row\s*>/g;
+  while ((match = rowPattern.exec(worksheetXml))) {
+    rowCount += 1;
+    if (rowCount > MAX_IMPORT_ROWS + 1) throw new Error('ورقة XLSX تتجاوز حد 100,000 صف بيانات.');
+    const values: string[] = [];
+    const seenColumns = new Set<number>();
+    const cellPattern = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c\s*>)/g;
+    let cell: RegExpExecArray | null;
+    while ((cell = cellPattern.exec(match[2]))) {
+      const attributes = cell[1];
+      const column = xlsxColumnIndex(xlsxAttribute(attributes, 'r') ?? '');
+      if (column < 0 || column >= MAX_IMPORT_COLUMNS) throw new Error('ورقة XLSX تتجاوز حد ' + MAX_IMPORT_COLUMNS + ' عمودًا.');
+      if (seenColumns.has(column)) throw new Error('خلية XLSX مكررة داخل الصف ' + rowCount + '.');
+      seenColumns.add(column);
+      const kind = xlsxAttribute(attributes, 't') ?? 'n';
+      const styleIndex = Number(xlsxAttribute(attributes, 's') ?? 0);
+      const inner = cell[2] ?? '';
+      let value = '';
+      if (kind === 'inlineStr') {
+        const inline = /<is\b[^>]*>([\s\S]*?)<\/is\s*>/i.exec(inner)?.[1] ?? inner;
+        value = xlsxTextRuns(inline);
+      } else {
+        const raw = xlsxElementText(inner, 'v') ?? '';
+        if (kind === 's') {
+          const sharedIndex = Number(raw);
+          value = Number.isInteger(sharedIndex) && sharedIndex >= 0 ? (sharedStrings[sharedIndex] ?? '') : '';
+        } else if (kind === 'b') value = raw === '1' ? 'TRUE' : raw === '0' ? 'FALSE' : raw;
+        else if (kind === 'e') value = raw ? '#ERROR:' + raw : '';
+        else if (kind === 'd') value = raw;
+        else value = formatXlsxNumber(raw, Number.isInteger(styleIndex) ? styleIndex : 0, styles, date1904);
+      }
+      values[column] = value;
+    }
+    await onRow(Array.from({ length: values.length }, (_value, index) => values[index] ?? ''));
+  }
+  if (rowCount === 0) throw new Error('ورقة XLSX الأولى فارغة أو لا تحتوي على صفوف جدولية.');
+  return { rowCount, worksheetName: sheet.name };
+}

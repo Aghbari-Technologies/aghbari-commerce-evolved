@@ -10,7 +10,7 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
+  applyImportProfileRules, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
@@ -132,16 +132,16 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       selectedProfile = job.profile_id ?? selectedProfile ?? activeProfileId;
 
       const extension = file.name.split(".").pop()?.toLocaleLowerCase("en") ?? "";
-      if (extension !== "csv") {
+      if (extension !== "csv" && extension !== "xlsx") {
         const isPdf = extension === "pdf";
         await updateImportJob(job.id, {
           status: "manual_mapping_required",
           data_quality_score: 0,
           error_summary: {
-            code: isPdf ? "PDF_TABLE_EXTRACTION_REQUIRED" : "SPREADSHEET_PARSER_UNAVAILABLE",
+            code: isPdf ? "PDF_TABLE_EXTRACTION_REQUIRED" : "LEGACY_XLS_PARSER_UNAVAILABLE",
             message: isPdf
               ? "لم يتوفر مستخرج جدولي موثوق في هذه النسخة. لم يتم تخمين بيانات PDF أو توليد صفوف وهمية؛ يلزم استخراج/تعيين يدوي قبل الاعتماد."
-              : "لم يتوفر محلل XLS/XLSX في هذه النسخة. حُفظت الميتاداتا والبصمة فقط، ويلزم استخراج جدولي موثوق قبل الاعتماد.",
+              : "صيغة XLS الثنائية القديمة غير مدعومة مباشرة. حُفظت الميتاداتا والبصمة فقط؛ احفظ الملف بصيغة XLSX أو CSV ثم أعد الاستيراد.",
             manual_mapping_required: true,
             no_raw_file_retained: true,
           },
@@ -149,7 +149,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         setStage(null);
         setStatusMessage(isPdf
           ? "سُجل ملف PDF كمسودة تعيين يدوي دون افتراض أنه جدولي."
-          : "سُجل الملف كمسودة؛ لم يتم اختراع أو اعتماد بيانات Excel غير المستخرجة.");
+          : "سُجل ملف XLS القديم كمسودة؛ احفظ نسخة XLSX أو CSV لإتمام الاستيراد.");
         await refetch();
         return;
       }
@@ -244,6 +244,9 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       });
       checkpointFingerprintPersisted = true;
       const verifiedChunks = new Set(verifiedChunkNumbers);
+      if (extension === "xlsx" && verifiedChunks.size > 0) {
+        throw new Error("هذه الدفعة لها شرائح XLSX مؤكدة جزئيًا. لا يمكن استئناف XLSX الجزئي بأمان في هذه النسخة؛ اختر «إنشاء نسخة جديدة» بعد مراجعة السجل.");
+      }
       if (verifiedChunks.size > 0) {
         setStatusMessage("استئناف آمن: سيعاد بناء حالة قراءة CSV محليًا، وتُتجاوز كتابة الشرائح المؤكدة، ويستمر الحفظ من أول شريحة غير مؤكدة.");
       }
@@ -301,35 +304,82 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         setStage("validating");
       };
 
-      const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
       let processedBytes = 0;
-      for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
-        while (pausedRef.current && !cancelRef.current) await delay(180);
-        if (cancelRef.current) break;
-        currentChunkNumber = chunkNumber;
-        const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
-        const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
-        const chunkHash = new IncrementalSha256().update(bytes).digestHex();
-        await parser.push(decoder.decode(bytes, { stream: byteOffset + bytes.length < file.size }), consumeRow, false);
-        await flushBatch();
-        if (verifiedChunks.has(chunkNumber)) {
-          const checkpoint = uploadManifest[chunkNumber];
-          if (!checkpoint || checkpoint.chunk_hash !== chunkHash) {
-            throw new Error("بصمة الشريحة " + (chunkNumber + 1) + " تختلف عن نقطة الاستئناف المحفوظة؛ لم يتم تجاوزها.");
+      let xlsxWorksheetName: string | null = null;
+      if (extension === "csv") {
+        const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+        for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
+          while (pausedRef.current && !cancelRef.current) await delay(180);
+          if (cancelRef.current) break;
+          currentChunkNumber = chunkNumber;
+          const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
+          const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+          const chunkHash = new IncrementalSha256().update(bytes).digestHex();
+          await parser.push(decoder.decode(bytes, { stream: byteOffset + bytes.length < file.size }), consumeRow, false);
+          await flushBatch();
+          if (verifiedChunks.has(chunkNumber)) {
+            const checkpoint = uploadManifest[chunkNumber];
+            if (!checkpoint || checkpoint.chunk_hash !== chunkHash) {
+              throw new Error("بصمة الشريحة " + (chunkNumber + 1) + " تختلف عن نقطة الاستئناف المحفوظة؛ لم يتم تجاوزها.");
+            }
+          } else {
+            await recordImportUploadChunk({
+              sessionId: uploadSession.id,
+              chunkNumber,
+              byteOffset,
+              byteSize: bytes.byteLength,
+              chunkHash,
+            });
           }
-        } else {
-          await recordImportUploadChunk({
-            sessionId: uploadSession.id,
-            chunkNumber,
-            byteOffset,
-            byteSize: bytes.byteLength,
-            chunkHash,
-          });
+          processedBytes += bytes.byteLength;
+          setProcessed(dataRows);
+          setStage("normalizing");
+          setProgress(Math.min(82, 10 + Math.round((processedBytes / Math.max(file.size, 1)) * 72)));
         }
-        processedBytes += bytes.byteLength;
-        setProcessed(dataRows);
-        setStage("normalizing");
-        setProgress(Math.min(82, 10 + Math.round((processedBytes / Math.max(file.size, 1)) * 72)));
+      } else {
+        // XLSX row provenance is inside compressed ZIP members, not raw-file byte chunks.
+        // A failed run with recorded byte checkpoints is therefore fail-closed above. Fresh or
+        // uncheckpointed runs parse once, persist idempotently, then record the raw-byte manifest.
+        setStage("reading");
+        setProgress(18);
+        let worksheetRows = 0;
+        const workbook = await parseXlsxFirstWorksheet(file, async (values) => {
+          while (pausedRef.current && !cancelRef.current) await delay(180);
+          if (cancelRef.current) return;
+          currentChunkNumber = -1;
+          await consumeRow(values);
+          worksheetRows += 1;
+          if (worksheetRows % 100 === 0) {
+            setProcessed(dataRows);
+            setProgress(Math.min(70, 18 + Math.round((worksheetRows / (MAX_IMPORT_ROWS + 1)) * 52)));
+          }
+        });
+        xlsxWorksheetName = workbook.worksheetName;
+        if (cancelRef.current) {
+          setProcessed(dataRows);
+        } else {
+          await flushBatch();
+          if (!headers) throw new Error("ورقة XLSX لا تحتوي على صف عناوين صالح.");
+          setStage("normalizing");
+          setProgress(72);
+          const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+          for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
+            while (pausedRef.current && !cancelRef.current) await delay(180);
+            if (cancelRef.current) break;
+            const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
+            const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+            const chunkHash = new IncrementalSha256().update(bytes).digestHex();
+            await recordImportUploadChunk({
+              sessionId: uploadSession.id,
+              chunkNumber,
+              byteOffset,
+              byteSize: bytes.byteLength,
+              chunkHash,
+            });
+            processedBytes += bytes.byteLength;
+            setProgress(Math.min(82, 72 + Math.round((processedBytes / Math.max(file.size, 1)) * 10)));
+          }
+        }
       }
 
       if (cancelRef.current) {
@@ -346,10 +396,14 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
-      finalizingCsv = true;
-      await parser.push(decoder.decode(), consumeRow, true);
-      await flushBatch();
-      if (!headers) throw new Error("تعذر اكتشاف صف عناوين صالح في CSV.");
+      if (extension === "csv") {
+        finalizingCsv = true;
+        await parser.push(decoder.decode(), consumeRow, true);
+        await flushBatch();
+        if (!headers) throw new Error("تعذر اكتشاف صف عناوين صالح في CSV.");
+      } else if (!headers) {
+        throw new Error("ورقة XLSX لا تحتوي على صف عناوين صالح.");
+      }
       setStage("deduplicating");
       setProgress(86);
       await updateImportJob(job.id, {
@@ -362,7 +416,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           profile_version: profile?.version ?? null,
           processing_config_fingerprint: processingConfigFingerprint,
           period_key: selectedPeriod,
-          parser: "streaming-csv",
+          parser: extension === "csv" ? "streaming-csv" : "xlsx-first-visible-sheet",
+          worksheet_name: xlsxWorksheetName,
           processing_chunk_rows: PROCESSING_CHUNK_ROWS,
           upload_chunk_bytes: UPLOAD_CHUNK_BYTES,
         },
@@ -496,7 +551,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         <section className="panel import-upload-panel">
           <div className="import-upload-icon"><Upload size={26} /></div>
           <h2>رفع ملف للمعالجة</h2>
-          <p>CSV مدعوم مباشرة. ملفات Excel/PDF لا تُعتمد أو تُستخرج بالتخمين؛ تُسجل كمسودة عند غياب محلل جدولي موثوق.</p>
+          <p>يدعم CSV وملفات XLSX الجدولية (الورقة المرئية الأولى). صيغة XLS الثنائية وPDF تبقيان في مسار التعيين اليدوي؛ لا تُخترع بيانات غير مستخرجة.</p>
           <div className="form-grid">
             <label className="form-field"><span>الملف التعريفي</span>
               <select value={profileId} onChange={(event) => setProfileId(event.target.value)}>
@@ -512,7 +567,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           </div>
           <label className="import-dropzone">
             <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={handleFile} disabled={Boolean(stage && stage !== "complete")} />
-            <FileDown size={22} /><strong>اختر CSV أو Excel أو PDF</strong>
+            <FileDown size={22} /><strong>اختر CSV أو XLSX أو XLS أو PDF</strong>
             <span>100MB كحد أقصى • شرائح 4MB • دفعات معالجة 1,000 صف</span>
           </label>
           {errorMessage && <div className="form-error"><XCircle size={15} /> {errorMessage}</div>}
