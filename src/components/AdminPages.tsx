@@ -163,6 +163,7 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
       const result = await reviewOrderLines(orderId, lines, 'stage', customerNote);
       await Promise.all([refetch(), refetchOrders()]);
       setDirty(false);
+      onBlockedChange(Boolean(result.quantity_review_required));
       setReviewMessage(result.quantity_review_required
         ? 'حُفظت مسودة التعديلات في الخادم. ما تزال غير معتمدة؛ لا يمكن تأكيد الطلب أو مغادرة هذه المراجعة.'
         : 'حُفظت المسودة؛ راجع جميع البنود ثم أكد الطلب عند الجاهزية.');
