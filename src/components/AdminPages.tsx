@@ -1,15 +1,14 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useBlocker } from '@tanstack/react-router';
+import { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
-  X, ExternalLink, Save,
+  X, ExternalLink,
 } from 'lucide-react';
 import {
   fetchAiAlerts, fetchAiTasks, fetchNotifications, fetchOrders, fetchOrderItems,
   fetchSettings, fetchSuppliers,
   markAllNotificationsRead, markNotificationRead, resolveAiAlert, toggleAiTaskStatus,
-  updateOrderStatus, reviewOrderLines, updateSetting, createSupplier,
+  updateOrderStatus, updateSetting, createSupplier,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber, timeAgo } from '@/lib/format';
@@ -17,7 +16,6 @@ import type { AiAlert, AiTask, Notification, Supplier, AdminSetting, OrderItem }
 
 import type { LucideIcon } from 'lucide-react';
 import { supabase, ORG_ID } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth';
 type IconType = LucideIcon;
 
 export function Notifications({ onNotice }: { onNotice: (m: string) => void }) {
@@ -42,303 +40,15 @@ export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
   </AdminPage>;
 }
 
-type OrderReviewDraft = { quantity: string; unitPrice: string; reason: string };
-
-export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { orderId: string; onBack: () => void; onNotice: (m: string) => void; onBlockedChange: (blocked: boolean) => void }) {
-  const { data: orders, refetch: refetchOrders } = useFetch(fetchOrders);
-  const { data: items, loading, error, refetch } = useFetch(() => fetchOrderItems(orderId), [orderId]);
+export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; onBack: () => void; onNotice: (m: string) => void }) {
+  const { data: orders } = useFetch(fetchOrders);
+  const { data: items, loading, refetch } = useFetch(() => fetchOrderItems(orderId), [orderId]);
   const order = orders?.find((o) => o.id === orderId);
-  const [drafts, setDrafts] = useState<Record<string, OrderReviewDraft>>({});
-  const [dirty, setDirty] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [customerNote, setCustomerNote] = useState('');
-  const [reviewMessage, setReviewMessage] = useState('');
-  const quantityInputs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  useEffect(() => {
-    if (!items) return;
-    const next: Record<string, OrderReviewDraft> = {};
-    for (const item of items) {
-      next[item.id] = {
-        quantity: String(item.proposed_quantity ?? item.approved_quantity ?? item.quantity),
-        unitPrice: String(item.proposed_unit_price ?? item.approved_unit_price ?? item.unit_price_snapshot),
-        reason: item.proposed_price_reason ?? item.price_override_reason ?? '',
-      };
-    }
-    setDrafts(next);
-    setDirty(false);
-  }, [items]);
-
-  const editable = order?.status === 'pending' || order?.status === 'draft';
-  const hasStaged = Boolean(order?.quantity_review_required) || Boolean(items?.some((item) =>
-    item.proposed_quantity != null || item.proposed_unit_price != null,
-  ));
-  const blocked = dirty || hasStaged;
-  const blocker = useBlocker({
-    shouldBlockFn: () => blocked,
-    enableBeforeUnload: () => blocked,
-    withResolver: true,
-  });
-
-  useEffect(() => {
-    onBlockedChange(blocked);
-  }, [blocked, onBlockedChange]);
-
-  const transitions: Record<string, string[]> = {
-    draft: ['pending', 'cancelled'],
-    pending: ['cancelled'],
-    confirmed: ['processing', 'shipped', 'delivered', 'cancelled'],
-    processing: ['shipped', 'delivered', 'cancelled'],
-    shipped: ['delivered'],
-    delivered: [],
-    cancelled: [],
-  };
-  const statuses = transitions[order?.status ?? 'pending'] ?? [];
-  const projectedTotal = (items ?? []).reduce((sum, item) => {
-    const draft = drafts[item.id];
-    const quantity = Number(draft?.quantity ?? item.quantity);
-    const unitPrice = Number(draft?.unitPrice ?? item.unit_price_snapshot);
-    return sum + (Number.isFinite(quantity) && Number.isFinite(unitPrice) ? quantity * unitPrice : 0);
-  }, 0);
-
-  function payload() {
-    return (items ?? []).map((item) => ({
-      item_id: item.id,
-      quantity: Number(drafts[item.id]?.quantity ?? item.proposed_quantity ?? item.approved_quantity ?? item.quantity),
-      unit_price: Number(drafts[item.id]?.unitPrice ?? item.proposed_unit_price ?? item.approved_unit_price ?? item.unit_price_snapshot),
-      price_reason: (drafts[item.id]?.reason ?? item.proposed_price_reason ?? item.price_override_reason ?? '').trim() || null,
-    }));
-  }
-
-  async function changeStatus(status: string) {
-    if (blocked) {
-      setReviewMessage('لا يمكن مغادرة مراجعة الطلب أو تغيير حالته قبل اعتماد الكميات والأسعار أو إلغاء المسودة.');
-      return;
-    }
-    setBusy(true);
-    try {
-      await updateOrderStatus(orderId, status);
-      await Promise.all([refetch(), refetchOrders()]);
-      onNotice('تم تحديث حالة الطلب إلى: ' + status);
-    } catch (cause) {
-      onNotice(cause instanceof Error ? cause.message : 'تعذر تحديث حالة الطلب');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function updateDraft(itemId: string, patch: Partial<OrderReviewDraft>) {
-    setDrafts((previous) => ({ ...previous, [itemId]: { ...previous[itemId], ...patch } }));
-    setDirty(true);
-    onBlockedChange(true);
-    setReviewMessage('توجد تعديلات لم تُحفظ بعد. اعتمدها أو ألغها قبل مغادرة القسم.');
-  }
-
-  function enterNext(event: React.KeyboardEvent<HTMLInputElement>, index: number) {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    const next = items?.[index + 1];
-    if (next) quantityInputs.current[next.id]?.focus();
-    else setReviewMessage('وصلت إلى آخر بند. احفظ المسودة ثم نفّذ اعتماد الكميات لتأكيد الطلب.');
-  }
-
-  async function stageReview() {
-    if (!items?.length || busy) return;
-    const lines = payload();
-    if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 10000 ||
-      !Number.isFinite(line.unit_price) || line.unit_price < 0 ||
-      Math.abs(line.quantity * 1000 - Math.round(line.quantity * 1000)) > 0.000001)) {
-      setReviewMessage('تحقق من أن كل كمية بين 0.001 و10,000 وأن الأسعار أرقام غير سالبة.');
-      return;
-    }
-    if (lines.some((line) => {
-      const current = items.find((item) => item.id === line.item_id);
-      return current && line.unit_price !== Number(current.unit_price_snapshot) && !line.price_reason;
-    })) {
-      setReviewMessage('سبب تعديل السعر مطلوب لكل بند تغير سعره. تعديل طلب واحد لا يغيّر سعر الكتالوج.');
-      return;
-    }
-    setBusy(true);
-    setReviewMessage('');
-    try {
-      const result = await reviewOrderLines(orderId, lines, 'stage', customerNote);
-      await Promise.all([refetch(), refetchOrders()]);
-      setDirty(false);
-      onBlockedChange(Boolean(result.quantity_review_required));
-      setReviewMessage(result.quantity_review_required
-        ? 'حُفظت مسودة التعديلات في الخادم. ما تزال غير معتمدة؛ لا يمكن تأكيد الطلب أو مغادرة هذه المراجعة.'
-        : 'حُفظت المسودة؛ راجع جميع البنود ثم أكد الطلب عند الجاهزية.');
-      onNotice('تم حفظ مسودة مراجعة الطلب دون تعديل المخزون أو إصدار فاتورة.');
-    } catch (cause) {
-      setReviewMessage(cause instanceof Error ? cause.message : 'تعذر حفظ مسودة المراجعة');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function approveReview() {
-    if (!items?.length || busy) return;
-    const lines = payload();
-    if (lines.some((line) => !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 10000 ||
-      !Number.isFinite(line.unit_price) || line.unit_price < 0)) {
-      setReviewMessage('تحقق من صحة جميع الكميات والأسعار قبل الاعتماد.');
-      return;
-    }
-    if (lines.some((line) => {
-      const current = items.find((item) => item.id === line.item_id);
-      return current && line.unit_price !== Number(current.unit_price_snapshot) && !line.price_reason;
-    })) {
-      setReviewMessage('أضف سببًا لكل تعديل سعر قبل الاعتماد.');
-      return;
-    }
-    setBusy(true);
-    setReviewMessage('');
-    try {
-      // Submit the complete visible grid to one database transaction. When no prior draft exists,
-      // the server stages this exact grid and approves it inside the same transaction; on any stock,
-      // credit or invoice failure, the complete approval is rolled back.
-      const result = await reviewOrderLines(orderId, lines, 'approve', customerNote);
-      await Promise.all([refetch(), refetchOrders()]);
-      setDirty(false);
-      onBlockedChange(false);
-      setReviewMessage(result.adjusted
-        ? 'اعتمدت التعديلات، تأكد الطلب، أُنشئت الفاتورة من الخادم، وسُجل طلب السداد للعميل.'
-        : 'اعتمدت الكميات وأُكد الطلب. أُنشئت الفاتورة وطلب السداد من الخادم.');
-      onNotice('تم اعتماد الطلب ذريًا. حالة طلب السداد: ' + (result.payment_request_status ?? 'requested'));
-    } catch (cause) {
-      await Promise.all([refetch(), refetchOrders()]);
-      setReviewMessage(cause instanceof Error ? cause.message : 'تعذر اعتماد الطلب؛ بقي الطلب دون تأكيد إذا رفض الخادم العملية.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function discardReview() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      if (hasStaged && editable) await reviewOrderLines(orderId, [], 'discard');
-      if (items) {
-        const next: Record<string, OrderReviewDraft> = {};
-        for (const item of items) next[item.id] = {
-          quantity: String(item.approved_quantity ?? item.quantity),
-          unitPrice: String(item.approved_unit_price ?? item.unit_price_snapshot),
-          reason: item.price_override_reason ?? '',
-        };
-        setDrafts(next);
-      }
-      setDirty(false);
-      await Promise.all([refetch(), refetchOrders()]);
-      onBlockedChange(false);
-      setReviewMessage('أُلغيت المسودة غير المعتمدة. لم يتغير المخزون ولم تصدر فاتورة من هذه المسودة.');
-    } catch (cause) {
-      setReviewMessage(cause instanceof Error ? cause.message : 'تعذر إلغاء المسودة');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function goBack() {
-    if (blocked) {
-      setReviewMessage('أكمل الاعتماد أو ألغ المسودة قبل مغادرة مراجعة الطلب.');
-      return;
-    }
-    onBack();
-  }
-
-  return <AdminPage eyebrow="المبيعات والعملاء" title={'الطلب #' + (order?.order_number ?? '')}
-    description="راجع البنود والكميات والأسعار، ثم احفظ المسودة واعتمدها في معاملة واحدة قبل تأكيد الطلب."
-    icon={Package} note="" toolbar={<Button variant="secondary" onClick={goBack} disabled={blocked || busy}><ChevronLeft size={16} /> رجوع</Button>}>
-    {order && <div className="order-detail-grid">
-      <div className="order-info-panel">
-        <div className="order-info-row"><span>العميل</span><strong>{order.customer?.business_name ?? '—'}</strong></div>
-        <div className="order-info-row"><span>التاريخ</span><strong>{formatDateShort(order.created_at)}</strong></div>
-        <div className="order-info-row"><span>الإجمالي المقترح</span><strong>{formatCurrency(projectedTotal)}</strong></div>
-        <div className="order-info-row"><span>عدد البنود</span><strong>{formatNumber(order.total_items)}</strong></div>
-        <div className="order-info-row"><span>الحالة الحالية</span><span className={'badge ' + (order.status === 'confirmed' ? 'success' : 'info')}>{order.status}</span></div>
-        <div className="order-info-row"><span>طلب السداد</span><strong>{order.payment_request_status === 'requested' ? 'مطلوب من العميل' : order.payment_request_status ?? 'غير مطلوب'}</strong></div>
-      </div>
-      <div className="order-status-panel">
-        <h3>تغيير الحالة</h3>
-        <p>تأكيد الطلب يصدر الفاتورة ويطلب السداد. استخدم الاعتماد أدناه حتى تمر الكميات والأسعار عبر مسار المراجعة المحكوم.</p>
-        <div className="order-status-btns">{statuses.map((status) =>
-          <button key={status} disabled={busy || blocked} className={order.status === status ? 'active' : ''} onClick={() => void changeStatus(status)}>
-            {({ pending: 'بانتظار المراجعة', processing: 'قيد التجهيز', shipped: 'تم الشحن', delivered: 'تم التسليم', cancelled: 'إلغاء الطلب' } as Record<string, string>)[status] ?? status}
-          </button>,
-        )}</div>
-      </div>
-    </div>}
-
-    {editable && <section className="panel table-panel" style={{ marginTop: 16 }}>
-      <div className="panel-head"><div><h2>مراجعة بنود الطلب</h2><p>Enter ينتقل إلى كمية السطر التالي. اللون الأزرق الفاتح يميز الحقول القابلة للتعديل. أي تغيير يبقى غير معتمد حتى تنفيذ الاعتماد.</p></div>
-        <span className={'badge ' + (blocked ? 'warning' : 'success')}>{blocked ? 'مراجعة غير معتمدة' : 'جاهز للمراجعة'}</span>
-      </div>
-      {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !items?.length ? <Empty text="لا توجد بنود يمكن مراجعتها." /> :
-        <TableWrap><table><thead><tr><th>المنتج / SKU</th><th>الكمية المطلوبة</th><th>الكمية المقترحة/المعتمدة</th><th>السعر للوحدة</th><th>سبب تعديل السعر</th><th>الإجمالي المقترح</th></tr></thead><tbody>
-          {items.map((item, index) => {
-            const draft = drafts[item.id] ?? { quantity: String(item.quantity), unitPrice: String(item.unit_price_snapshot), reason: '' };
-            const quantity = Number(draft.quantity);
-            const price = Number(draft.unitPrice);
-            const valid = Number.isFinite(quantity) && quantity > 0 && quantity <= 10000 && Number.isFinite(price) && price >= 0;
-            return <tr key={item.id}>
-              <td><strong>{item.product_name_snapshot}</strong><small style={{ display: 'block' }}><code>{item.item_code}</code> · {item.unit_snapshot ?? ''}</small></td>
-              <td>{formatNumber(Number(item.requested_quantity ?? item.quantity))}</td>
-              <td><input
-                ref={(element) => { quantityInputs.current[item.id] = element; }}
-                aria-label={'الكمية المقترحة ' + item.product_name_snapshot}
-                type="number" min="0.001" max="10000" step="0.001"
-                value={draft.quantity}
-                disabled={busy}
-                onChange={(event) => updateDraft(item.id, { quantity: event.target.value })}
-                onKeyDown={(event) => enterNext(event, index)}
-                style={{ width: 130, padding: '8px 10px', border: '1px solid #b8d7f3', borderRadius: 8, background: '#eef7ff', color: '#193b56' }}
-              /></td>
-              <td><input
-                aria-label={'السعر المقترح ' + item.product_name_snapshot}
-                type="number" min="0" max="999999999999" step="0.01"
-                value={draft.unitPrice}
-                disabled={busy}
-                onChange={(event) => updateDraft(item.id, { unitPrice: event.target.value })}
-                style={{ width: 130, padding: '8px 10px', border: '1px solid #b8d7f3', borderRadius: 8, background: '#eef7ff', color: '#193b56' }}
-              /></td>
-              <td><input
-                aria-label={'سبب تعديل السعر ' + item.product_name_snapshot}
-                value={draft.reason}
-                disabled={busy}
-                maxLength={500}
-                onChange={(event) => updateDraft(item.id, { reason: event.target.value })}
-                placeholder="مطلوب إذا تغير السعر"
-                style={{ width: 180, padding: '8px 10px', border: '1px solid #d9e5eb', borderRadius: 8, background: '#fff' }}
-              /></td>
-              <td>{valid ? formatCurrency(quantity * price) : '—'}</td>
-            </tr>;
-          })}
-        </tbody></table></TableWrap>}
-      <label className="form-field" style={{ marginTop: 12 }}><span>ملاحظة للعميل (اختيارية)</span><textarea value={customerNote} onChange={(event) => { setCustomerNote(event.target.value); setDirty(true); onBlockedChange(true); }} maxLength={1000} rows={2} placeholder="توضيح أي تغيير في الأصناف أو الكميات" /></label>
-      {reviewMessage && <div className={blocked ? 'form-error' : 'privacy-note'} role={blocked ? 'alert' : 'status'}>{reviewMessage}</div>}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
-        <Button variant="secondary" disabled={busy || loading || !items?.length} onClick={() => void stageReview()}>{busy ? 'جارٍ الحفظ...' : 'حفظ المسودة دون اعتماد'}</Button>
-        <Button disabled={busy || loading || !items?.length} onClick={() => void approveReview()}>{busy ? 'جارٍ الاعتماد...' : 'اعتماد الكميات وتأكيد الطلب'}</Button>
-        {(blocked || dirty) && <Button variant="outline" disabled={busy} onClick={() => void discardReview()}>إلغاء المسودة</Button>}
-      </div>
-      {blocked && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800, marginTop: 12 }}>لا يمكن مغادرة هذا القسم أو تغيير حالة الطلب قبل اعتماد الكميات/الأسعار المقترحة أو إلغاء المسودة.</p>}
-    </section>}
-
-    {!editable && items && <section className="panel table-panel" style={{ marginTop: 16 }}>
-      <div className="panel-head"><div><h2>البنود المعتمدة</h2><p>الأسعار للعرض الداخلي للموظفين المخولين فقط.</p></div></div>
-      {loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>الكمية المعتمدة</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>{items.map((item: OrderItem) => <tr key={item.id}>
-        <td><strong>{item.product_name_snapshot}</strong></td><td><code>{item.item_code}</code></td><td>{formatNumber(Number(item.approved_quantity ?? item.quantity))} {item.unit_snapshot ?? ''}</td><td>{formatCurrency(Number(item.approved_unit_price ?? item.unit_price_snapshot))}</td><td>{formatCurrency(Number(item.line_total))}</td>
-      </tr>)}</tbody></table></TableWrap>}
-      {order.quantity_review_required && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800 }}>توجد مراجعة معلقة. يجب إكمالها قبل متابعة الطلب.</p>}
-      {order.customer_adjustment_note && <p>{order.customer_adjustment_note}</p>}
-    </section>}
-    {blocker.status === 'blocked' && <div className="modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="order-review-navigation-title">
-      <section className="modal" style={{ maxWidth: 460 }} dir="rtl">
-        <div className="modal-head"><h2 id="order-review-navigation-title">لا يمكن مغادرة مراجعة الطلب</h2></div>
-        <p style={{ lineHeight: 1.8 }}>توجد كميات أو أسعار أو ملاحظات غير معتمدة. اعتمد التعديلات أو ألغِ المسودة قبل الانتقال إلى صفحة أخرى. سيبقى الطلب مفتوحًا حتى إكمال المراجعة.</p>
-        <div className="modal-actions"><button type="button" className="btn primary" onClick={() => blocker.reset()}>العودة إلى المراجعة</button></div>
-      </section>
-    </div>}
+  async function changeStatus(status: string) { try { await updateOrderStatus(orderId, status); refetch(); onNotice(`تم تحديث حالة الطلب إلى: ${status}`); } catch (e) { onNotice(e instanceof Error ? e.message : 'خطأ'); } }
+  const statuses = ['pending', 'confirmed', 'processing', 'delivered'];
+  return <AdminPage eyebrow="المبيعات والعملاء" title={`الطلب #${order?.order_number ?? ''}`} description="تفاصيل الطلب وبنوده وحالة التجهيز" icon={Package} note="" toolbar={<Button variant="secondary" onClick={onBack}><ChevronLeft size={16} /> رجوع</Button>}>
+    {order && <div className="order-detail-grid"><div className="order-info-panel"><div className="order-info-row"><span>العميل</span><strong>{order.customer?.business_name ?? '—'}</strong></div><div className="order-info-row"><span>التاريخ</span><strong>{formatDateShort(order.created_at)}</strong></div><div className="order-info-row"><span>الإجمالي</span><strong>{formatCurrency(order.total_amount)}</strong></div><div className="order-info-row"><span>عدد البنود</span><strong>{formatNumber(order.total_items)}</strong></div><div className="order-info-row"><span>الحالة الحالية</span><span className={`badge ${order.status === 'delivered' ? 'success' : 'info'}`}>{order.status}</span></div></div><div className="order-status-panel"><h3>تغيير الحالة</h3><div className="order-status-btns">{statuses.map((s) => <button key={s} className={order.status === s ? 'active' : ''} onClick={() => changeStatus(s)}>{s}</button>)}</div></div></div>}
+    <section className="panel table-panel" style={{ marginTop: 16 }}><div className="table-head"><h2>بنود الطلب</h2></div>{loading ? <Loading /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>{items?.map((it: OrderItem) => <tr key={it.id}><td><strong>{it.product_name_snapshot}</strong></td><td><code>{it.item_code}</code></td><td>{formatNumber(it.quantity)} {it.unit_snapshot ?? ''}</td><td>{formatCurrency(it.unit_price_snapshot)}</td><td>{formatCurrency(it.line_total)}</td></tr>)}</tbody></table></TableWrap>}</section>
   </AdminPage>;
 }
 
@@ -367,10 +77,8 @@ export function Devices({ onNotice }: { onNotice: (m: string) => void }) {
 }
 
 export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
-  const { user } = useAuth();
-  const canManageRoles = Boolean(user?.roles.includes('admin'));
   const { data: settings, loading, refetch } = useFetch(fetchSettings);
-  const [tab, setTab] = useState<'general' | 'storefront' | 'appearance' | 'access'>('general');
+  const [tab, setTab] = useState<'general' | 'storefront' | 'appearance'>('general');
   const [saving, setSaving] = useState(false);
   const map = useMemo(() => { const m: Record<string, unknown> = {}; settings?.forEach((s: AdminSetting) => m[s.key] = s.value); return m; }, [settings]);
 
@@ -378,159 +86,12 @@ export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
 
   return <AdminPage eyebrow="النظام" title="الإعدادات العامة" description="تحكم كامل في إعدادات المتجر والمظهر" icon={Settings} note="" toolbar={<Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button>}>
     {loading ? <Loading /> : <>
-      <div className="settings-tabs"><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>عام</button><button className={tab === 'storefront' ? 'active' : ''} onClick={() => setTab('storefront')}>المتجر</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>المظهر</button>{canManageRoles && <button className={tab === 'access' ? 'active' : ''} onClick={() => setTab('access')}>المستخدمون والصلاحيات</button>}</div>
+      <div className="settings-tabs"><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>عام</button><button className={tab === 'storefront' ? 'active' : ''} onClick={() => setTab('storefront')}>المتجر</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>المظهر</button></div>
       {tab === 'general' && <SettingsPanel title="معلومات المتجر"><SettingInput label="اسم المتجر" value={(map.store_name as string) ?? ''} onSave={(v) => save('store_name', v, 'general')} saving={saving} /><SettingInput label="الوصف المختصر" value={(map.store_tagline as string) ?? ''} onSave={(v) => save('store_tagline', v, 'general')} saving={saving} /><SettingInput label="الهاتف" value={(map.store_phone as string) ?? ''} onSave={(v) => save('store_phone', v, 'general')} saving={saving} /><SettingInput label="البريد" value={(map.store_email as string) ?? ''} onSave={(v) => save('store_email', v, 'general')} saving={saving} /><SettingInput label="العنوان" value={(map.store_address as string) ?? ''} onSave={(v) => save('store_address', v, 'general')} saving={saving} /></SettingsPanel>}
       {tab === 'storefront' && <SettingsPanel title="إعدادات المتجر"><SettingInput label="عنوان البانر" value={(map.hero_title as string) ?? ''} onSave={(v) => save('hero_title', v, 'storefront')} saving={saving} /><SettingInput label="نص البانر الفرعي" value={(map.hero_subtitle as string) ?? ''} onSave={(v) => save('hero_subtitle', v, 'storefront')} saving={saving} /><SettingToggle label="شريط العرض المتحرك" value={(map.ticker_enabled as boolean) ?? true} onSave={(v) => save('ticker_enabled', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار المنتجات النافدة" value={(map.show_out_of_stock as boolean) ?? true} onSave={(v) => save('show_out_of_stock', v, 'storefront')} saving={saving} /></SettingsPanel>}
       {tab === 'appearance' && <SettingsPanel title="ألوان النظام"><SettingColor label="اللون الأساسي" value={(map.theme_primary as string) ?? '#087f8d'} onSave={(v) => save('theme_primary', v, 'appearance')} saving={saving} /><SettingColor label="لون التمييز" value={(map.theme_accent as string) ?? '#0eaa97'} onSave={(v) => save('theme_accent', v, 'appearance')} saving={saving} /></SettingsPanel>}
-      {tab === 'access' && canManageRoles && user && <OrganizationRoleManagement currentProfileId={user.profileId} onNotice={onNotice} />}
     </>}
   </AdminPage>;
-}
-
-
-type ManagedOrganizationProfile = {
-  profile_id: string;
-  full_name: string;
-  email: string | null;
-  is_active: boolean;
-  roles: string[];
-};
-
-const ROLE_OPTIONS = [
-  { value: 'admin', label: 'مدير النظام', detail: 'الإدارة الكاملة وإدارة الصلاحيات.' },
-  { value: 'manager', label: 'مدير', detail: 'تشغيل الأقسام وصلاحيات المالية المعتمدة.' },
-  { value: 'staff', label: 'موظف تشغيل', detail: 'الطلبات والمهام التشغيلية دون صلاحيات المحاسبة.' },
-  { value: 'accountant', label: 'محاسب', detail: 'الفواتير والتحصيل فقط، دون أقسام التشغيل.' },
-  { value: 'customer', label: 'عميل', detail: 'واجهة المتجر والحساب التجاري.' },
-] as const;
-
-function OrganizationRoleManagement({ currentProfileId, onNotice }: { currentProfileId: string; onNotice: (m: string) => void }) {
-  const [rows, setRows] = useState<ManagedOrganizationProfile[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, string[]>>({});
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [savingProfileId, setSavingProfileId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await supabase.rpc('list_organization_user_roles');
-      if (result.error) {
-        setError('تعذر تحميل حسابات المؤسسة وصلاحياتها. تحقق من نشر ترحيل إدارة الأدوار.');
-        return;
-      }
-      const loaded = (Array.isArray(result.data) ? result.data : []) as ManagedOrganizationProfile[];
-      setRows(loaded);
-      setDrafts(Object.fromEntries(loaded.map((profile) => [profile.profile_id, [...(profile.roles ?? [])]])));
-    } catch {
-      setError('تعذر الاتصال بالخادم لتحميل حسابات المؤسسة.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const visible = rows.filter((profile) =>
-    !query.trim() || (profile.full_name + ' ' + (profile.email ?? '')).toLocaleLowerCase('ar').includes(query.trim().toLocaleLowerCase('ar')),
-  );
-
-  function toggleRole(profileId: string, role: string, checked: boolean) {
-    setDrafts((previous) => {
-      const current = previous[profileId] ?? [];
-      // Customer is a standalone identity; it cannot be combined with staff/admin roles.
-      const next = role === 'customer'
-        ? (checked ? ['customer'] : [])
-        : checked
-          ? [...current.filter((value) => value !== 'customer' && value !== role), role]
-          : current.filter((value) => value !== role);
-      return { ...previous, [profileId]: next };
-    });
-    setError('');
-  }
-
-  async function save(profile: ManagedOrganizationProfile) {
-    const selected = [...(drafts[profile.profile_id] ?? [])].sort();
-    if (!selected.length) {
-      setError('يجب إبقاء دور واحد على الأقل لكل حساب نشط.');
-      return;
-    }
-    if (profile.profile_id === currentProfileId) {
-      setError('لا يمكنك تعديل أدوار حسابك الحالي من هذه الشاشة. استخدم حساب مدير آخر لتغييرها.');
-      return;
-    }
-    setSavingProfileId(profile.profile_id);
-    setError('');
-    try {
-      const result = await supabase.rpc('set_organization_user_roles', {
-        p_profile_id: profile.profile_id,
-        p_roles: selected,
-      });
-      if (result.error) {
-        const message = result.error.message;
-        setError(message.includes('last active administrator')
-          ? 'لا يمكن إزالة آخر مدير نظام نشط في المؤسسة.'
-          : message.includes('outside the current organization')
-            ? 'لا يمكن إدارة حساب خارج مؤسستك.'
-            : message.includes('customer role cannot be combined')
-              ? 'لا يمكن جمع دور العميل مع أدوار الإدارة أو التشغيل.'
-              : 'تعذر حفظ الأدوار. تحقق من صلاحيتك وأن الحساب ما زال نشطًا.');
-        return;
-      }
-      onNotice('تم حفظ أدوار ' + profile.full_name + ' وتسجيل التغيير في سجل التدقيق.');
-      await load();
-    } catch {
-      setError('تعذر الاتصال بالخادم لحفظ الأدوار. أعد التحميل للتحقق من الحالة الحالية.');
-    } finally {
-      setSavingProfileId(null);
-    }
-  }
-
-  const roleLabel = (role: string) => ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
-  const changed = (profile: ManagedOrganizationProfile) =>
-    JSON.stringify([...(profile.roles ?? [])].sort()) !== JSON.stringify([...(drafts[profile.profile_id] ?? [])].sort());
-
-  return <SettingsPanel title="المستخدمون والأدوار">
-    <div style={{ padding: 18 }}>
-      <p style={{ marginTop: 0, color: '#71868a', lineHeight: 1.8 }}>
-        إدارة الأدوار متاحة لمدير النظام فقط. تُحفظ عبر أوامر خادمية مقيّدة بالمؤسسة، ويسجل كل تغيير في سجل التدقيق.
-        دور المحاسب مخصص للفواتير والتحصيل ولا يمنح صلاحيات تشغيل الطلبات أو المخزون. لا يمكن تعديل دور حسابك الحالي من هذه الشاشة.
-      </p>
-      <label style={{ display: 'block', marginBottom: 14 }}>
-        <span style={{ display: 'block', fontWeight: 800, marginBottom: 6 }}>بحث بالاسم أو البريد</span>
-        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="اسم المستخدم أو البريد الإلكتروني" style={{ width: '100%', maxWidth: 440, padding: '10px 12px', border: '1px solid #d5e7e9', borderRadius: 9 }} />
-      </label>
-      {error && <div className="error-box" role="alert" style={{ display: 'block' }}>{error}<Button variant="outline" onClick={() => void load()}>إعادة التحميل</Button></div>}
-      {loading ? <Loading /> : !visible.length ? <Empty text="لا توجد حسابات نشطة في هذه المؤسسة." /> : <div style={{ display: 'grid', gap: 12 }}>
-        {visible.map((profile) => {
-          const selected = drafts[profile.profile_id] ?? [];
-          const isSelf = profile.profile_id === currentProfileId;
-          const busy = savingProfileId === profile.profile_id;
-          return <article key={profile.profile_id} style={{ border: '1px solid #dcebed', borderRadius: 14, padding: 14, background: '#fff' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div><strong style={{ display: 'block', color: '#234b55' }}>{profile.full_name}</strong><span style={{ color: '#789297', fontSize: 12 }}>{profile.email ?? 'بريد غير مسجل'}</span></div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{profile.roles.map((role) => <span key={role} className="badge info">{roleLabel(role)}</span>)}</div>
-            </div>
-            <fieldset disabled={isSelf || busy} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, border: 0, padding: '12px 0 4px', margin: 0 }}>
-              {ROLE_OPTIONS.map((option) => <label key={option.value} title={option.detail} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#385d65', fontSize: 12 }}>
-                <input type="checkbox" checked={selected.includes(option.value)} onChange={(event) => toggleRole(profile.profile_id, option.value, event.target.checked)} />
-                {option.label}
-              </label>)}
-            </fieldset>
-            {isSelf && <small style={{ display: 'block', color: '#9a6a1c', marginBottom: 8 }}>حسابك الحالي محمي من التعديل المباشر.</small>}
-            {!isSelf && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-              <small style={{ color: '#71868a' }}>{selected.length} دور محدد</small>
-              <Button onClick={() => void save(profile)} disabled={busy || savingProfileId !== null || !changed(profile)}>
-                <Save size={14} /> {busy ? 'جارٍ الحفظ...' : 'حفظ الأدوار'}
-              </Button>
-            </div>}
-          </article>;
-        })}
-      </div>}
-    </div>
-  </SettingsPanel>;
 }
 
 function SettingsPanel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="panel settings-panel"><div className="panel-head"><div><h2>{title}</h2></div></div><div className="settings-body">{children}</div></section>; }

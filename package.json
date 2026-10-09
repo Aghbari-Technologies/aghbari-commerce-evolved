@@ -11,8 +11,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "test:db": "node scripts/test-database-migrations.mjs"
+    "test:watch": "vitest"
   },
   "overrides": {
     "rolldown": "1.2.1"
