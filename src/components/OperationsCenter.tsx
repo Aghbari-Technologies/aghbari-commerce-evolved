@@ -1,15 +1,23 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   Activity, AlertTriangle, BarChart3, Check, Database, FileDown, FileText,
   Gauge, History, Package, Pause, Play, RefreshCw, ShieldCheck,
   Upload, XCircle, Zap,
 } from 'lucide-react';
 import {
-  createImportJob, fetchImportJobs, fetchImportRows, fetchProducts,
-  insertImportRows, updateImportJob,
+  createImportJob, createImportUploadSession, fetchCentralSynonyms, fetchImportJobs, fetchImportProfiles,
+  fetchImportRows, fetchOnyxSnapshots, fetchOnyxSnapshotRows, fetchProducts, findImportDuplicate,
+  finalizeImportJob, insertImportRows, recordImportUploadChunk, runInventoryReconciliation,
+  fetchInventoryReconciliationRuns, fetchInventoryReconciliationItems, saveCentralSynonym, updateImportJob,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatNumber } from '@/lib/format';
+import {
+  DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_CELL_CHARS, MAX_IMPORT_COLUMNS,
+  MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS, PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES,
+  StreamingCsvParser, chooseImportStatus, hashFileSha256, normalizeHeader as normalizeImportHeader,
+  validateCsvRow, type ParsedImportRow, type QualityResult,
+} from '@/lib/unified-import';
 import type { ImportJobRow, ProductWithInventory } from '@/lib/types';
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from '@/components/AdminPages';
 
@@ -28,51 +36,10 @@ const stages: Array<{ id: PipelineStage; label: string }> = [
   { id: 'analytics', label: 'التحليل الحسابي' },
 ];
 
-const synonymMap: Record<string, string> = {
-  'الصنف': 'item_code', 'رمز الصنف': 'item_code', 'الكود': 'item_code', sku: 'item_code', code: 'item_code',
-  'اسم الصنف': 'product_name', 'المنتج': 'product_name', 'اسم المنتج': 'product_name', name: 'product_name',
-  'الكمية': 'quantity', 'الرصيد': 'quantity', 'المخزون': 'quantity', qty: 'quantity', quantity: 'quantity',
-  'العميل': 'customer_code', 'كود العميل': 'customer_code', customer: 'customer_code',
-  'الإيراد': 'revenue', 'المبيعات': 'revenue', sales: 'revenue', revenue: 'revenue',
-  'التاريخ': 'date', date: 'date',
-};
+const synonymMap: Record<string, string> = { ...DEFAULT_SYNONYMS };
 
 function normalizeHeader(value: string): string {
-  const cleaned = value.trim().toLowerCase().replace(/[ـ_-]+/g, ' ').replace(/\s+/g, ' ');
-  return synonymMap[cleaned] ?? cleaned.replace(/\s/g, '_');
-}
-
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = '';
-  let quoted = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    const next = text[i + 1];
-    if (char === '"' && quoted && next === '"') { cell += '"'; i += 1; continue; }
-    if (char === '"') { quoted = !quoted; continue; }
-    if (char === ',' && !quoted) { row.push(cell); cell = ''; continue; }
-    if ((char === '\n' || char === '\r') && !quoted) {
-      if (char === '\r' && next === '\n') i += 1;
-      row.push(cell); cell = '';
-      if (row.some((part) => part.trim())) rows.push(row);
-      row = [];
-      continue;
-    }
-    cell += char;
-  }
-  row.push(cell);
-  if (row.some((part) => part.trim())) rows.push(row);
-  return rows;
-}
-
-function qualityScore(rows: ParsedRow[]): number {
-  if (!rows.length) return 0;
-  const valid = rows.filter((row) => row.status === 'valid').length / rows.length;
-  const unique = new Set(rows.map((row) => String(row.data.item_code ?? '')).filter(Boolean)).size / Math.max(rows.length, 1);
-  const complete = rows.filter((row) => row.data.item_code && row.data.product_name).length / rows.length;
-  return Math.round((valid * 40) + (unique * 25) + (complete * 35));
+  return normalizeImportHeader(value, synonymMap);
 }
 
 function qualityLabel(score: number): string {
@@ -81,6 +48,7 @@ function qualityLabel(score: number): string {
   if (score >= 50) return 'تحذير';
   return 'مرفوض';
 }
+
 
 export function OperationsCenter({ onNotice }: { onNotice: (message: string) => void }) {
   const [tab, setTab] = useState<OperationTab>('imports');
