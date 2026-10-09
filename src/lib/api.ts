@@ -171,6 +171,37 @@ export async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
   return data as OrderItem[];
 }
 
+export type OrderReviewLineInput = {
+  item_id: string;
+  quantity: number;
+  unit_price: number;
+  price_reason?: string | null;
+};
+
+export async function reviewOrderLines(
+  orderId: string,
+  lines: OrderReviewLineInput[],
+  action: 'stage' | 'approve' | 'discard',
+  customerNote?: string,
+): Promise<{
+  order_id: string; action?: string; status?: string; total_amount?: number;
+  total_items?: number; quantity_review_required: boolean; adjusted?: boolean;
+  changed_lines?: number; payment_request_status?: string;
+}> {
+  const { data, error } = await supabase.rpc('review_order_lines', {
+    p_order_id: orderId,
+    p_lines: lines,
+    p_action: action,
+    p_customer_note: customerNote?.trim() || null,
+  });
+  if (error) throw error;
+  return data as {
+    order_id: string; action?: string; status?: string; total_amount?: number;
+    total_items?: number; quantity_review_required: boolean; adjusted?: boolean;
+    changed_lines?: number; payment_request_status?: string;
+  };
+}
+
 export async function updateOrderStatus(id: string, status: string): Promise<void> {
   // The database transition trigger validates the state change and writes status history atomically.
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
