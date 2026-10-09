@@ -346,6 +346,34 @@ async function main() {
   assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
   assert.equal(Number(statement.payments[0].amount), 100000);
 
+  // A second customer in the same organization must never receive the first customer's statement.
+  await db.unsafe("reset role");
+  await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
+  const otherStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
+  assert.deepEqual(otherStatementResult[0].result.invoices, [], "customer two must not see customer one's invoice");
+  assert.deepEqual(otherStatementResult[0].result.payments, [], "customer two must not see customer one's payments");
+  const otherVisibleInvoices = await db.unsafe(
+    "select id,invoice_number from public.customer_invoices where id=$1",
+    [invoice.id],
+  );
+  assert.equal(otherVisibleInvoices.length, 0, "invoice row policy must isolate customer-two reads");
+
+  // Disabled profiles must lose even the explicit statement RPC path.
+  await db.unsafe("reset role");
+  await db.unsafe("update public.profiles set is_active=false where id=$1", [profileId]);
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "inactive customer statement access",
+    () => db.unsafe("select public.get_customer_account_statement()"),
+    /authenticated active customer required/i,
+  );
+  await db.unsafe("reset role");
+  await db.unsafe("update public.profiles set is_active=true where id=$1", [profileId]);
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+
   const safeInvoiceRows = await db.unsafe(
     "select id,invoice_number,order_id,status,issued_at,currency from public.customer_invoices where id=$1",
     [invoice.id],
