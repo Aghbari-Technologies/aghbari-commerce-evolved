@@ -7,6 +7,7 @@ type AuthContextType = {
   user: AuthUser | null;
   loading: boolean;
   ready: boolean;
+  configurationError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ needsConfirmation: boolean }>;
   resetPassword: (email: string) => Promise<void>;
@@ -14,7 +15,7 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
-const STAFF_ROLES = ['admin', 'manager', 'staff'];
+const STAFF_ROLES = ['admin', 'manager', 'staff', 'accountant'];
 
 function translateAuthError(message: string): string {
   const m = message.toLowerCase();
@@ -40,18 +41,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try { setUser(await loadProfile()); } catch { setUser(null); } finally { setReady(true); }
   }, []);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') setTimeout(() => { void refresh(); }, 0);
-      if (event === 'SIGNED_OUT') setUser(null);
-    });
-    void refresh();
-    return () => sub.subscription.unsubscribe();
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'USER_UPDATED') setTimeout(() => { void refresh(); }, 0);
+        if (event === 'SIGNED_OUT') setUser(null);
+      });
+      unsubscribe = () => sub.subscription.unsubscribe();
+      setConfigurationError(null);
+      void refresh();
+    } catch (cause) {
+      // Do not let failed Lovable Cloud/Supabase bootstrapping escape the root React tree.
+      // The application remains navigable, while the root banner identifies the configuration blocker.
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      const missingConfig = /Missing Supabase environment variable|SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|Connect Supabase in Lovable Cloud/i.test(detail);
+      setConfigurationError(
+        missingConfig
+          ? 'اتصال قاعدة البيانات غير مهيأ. اربط Supabase من إعدادات Lovable Cloud وتأكد من متغيرات SUPABASE_URL وSUPABASE_PUBLISHABLE_KEY.'
+          : 'تعذر تهيئة جلسة الحساب. أعد المحاولة، وإذا استمر العطل فتحقق من إعدادات اتصال قاعدة البيانات.',
+      );
+      setUser(null);
+      setReady(true);
+      console.error('[AuthProvider] Supabase initialization failed:', cause);
+    }
+    return () => unsubscribe?.();
   }, [refresh]);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -83,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => { await supabase.auth.signOut(); setUser(null); }, []);
 
-  return <AuthContext.Provider value={{ user, loading, ready, signIn, signUp, resetPassword, signOut }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, ready, configurationError, signIn, signUp, resetPassword, signOut }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

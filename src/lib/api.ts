@@ -1,7 +1,7 @@
 import { supabase, ORG_ID, WAREHOUSE_ID } from './supabase';
 import type {
   Product, Category, Customer, Supplier, Order, OrderItem,
-  InventoryBalance, PricingRule, Promotion, AiAlert, AiTask, Notification,
+  InventoryBalance, PricingRule, CreatePricingRuleInput, Promotion, AiAlert, AiTask, Notification,
   ProductWithInventory, OrderWithCustomer, AdminSetting, ImportJob, ImportJobRow,
 } from './types';
 
@@ -142,83 +142,105 @@ export async function createSupplier(s: Partial<Supplier>): Promise<Supplier> {
 
 // ─── Orders ───
 export async function fetchOrders(): Promise<OrderWithCustomer[]> {
-  const { data: orders, error } = await supabase
-    .from('orders')
-    .select('*')
-    .eq('organization_id', ORG_ID)
-    .order('created_at', { ascending: false });
+  // The staff-only SECURITY DEFINER RPC derives the tenant from the signed-in profile.
+  // The client can no longer SELECT financial order columns directly.
+  const { data: orders, error } = await supabase.rpc('fetch_staff_orders');
   if (error) throw error;
 
-  const { data: customers } = await supabase
+  const { data: customers, error: customersError } = await supabase
     .from('customers')
     .select('*')
     .eq('organization_id', ORG_ID);
+  if (customersError) throw customersError;
   const custMap = new Map<string, Customer>();
   customers?.forEach((c: Customer) => custMap.set(c.id, c));
 
-  return (orders as Order[]).map((o) => ({
+  return ((orders ?? []) as Order[]).map((o) => ({
     ...o,
     customer: custMap.get(o.customer_id),
   }));
 }
 
 export async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
-  const { data, error } = await supabase
-    .from('order_items')
-    .select('*')
-    .eq('order_id', orderId);
+  // Financial item columns are intentionally not selectable by authenticated users.
+  // The RPC checks staff status, active profile and tenant ownership before returning the full row.
+  const { data, error } = await supabase.rpc('fetch_staff_order_items', {
+    p_order_id: orderId,
+  });
   if (error) throw error;
-  return data as OrderItem[];
+  return (data ?? []) as OrderItem[];
+}
+
+export type OrderReviewLineInput = {
+  item_id: string;
+  quantity: number;
+  unit_price: number;
+  price_reason?: string | null;
+};
+
+export async function reviewOrderLines(
+  orderId: string,
+  lines: OrderReviewLineInput[],
+  action: 'stage' | 'approve' | 'discard',
+  customerNote?: string,
+): Promise<{
+  order_id: string; action?: string; status?: string; total_amount?: number;
+  total_items?: number; quantity_review_required: boolean; adjusted?: boolean;
+  changed_lines?: number; payment_request_status?: string;
+}> {
+  const { data, error } = await supabase.rpc('review_order_lines', {
+    p_order_id: orderId,
+    p_lines: lines,
+    p_action: action,
+    p_customer_note: customerNote?.trim() || null,
+  });
+  if (error) throw error;
+  return data as {
+    order_id: string; action?: string; status?: string; total_amount?: number;
+    total_items?: number; quantity_review_required: boolean; adjusted?: boolean;
+    changed_lines?: number; payment_request_status?: string;
+  };
 }
 
 export async function updateOrderStatus(id: string, status: string): Promise<void> {
+  // The database transition trigger validates the state change and writes status history atomically.
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
   if (error) throw error;
-  await supabase.from('order_status_history').insert({
-    order_id: id,
-    to_status: status,
-    notes: `Status changed to ${status}`,
-  });
 }
 
 export async function createOrder(order: {
   customer_id: string;
-  items: { product_id: string; item_code: string; product_name: string; unit: string; quantity: number; unit_price: number }[];
+  items: {
+    product_id: string;
+    quantity: number;
+    // Backward-compatible descriptor fields are accepted but deliberately ignored by the server.
+    item_code?: string;
+    product_name?: string;
+    unit?: string;
+    unit_price?: number;
+  }[];
   notes?: string;
+  // Generate once per user intent and reuse across retries; never silently mint a new key on retry.
+  idempotency_key: string;
+  payment_terms?: 'cash_on_delivery' | 'credit';
 }): Promise<Order> {
-  const totalAmount = order.items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-  const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
-
-  const { data: newOrder, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      organization_id: ORG_ID,
-      customer_id: order.customer_id,
-      order_number: orderNumber,
-      status: 'pending',
-      total_amount: totalAmount,
-      total_items: order.items.length,
-      notes: order.notes ?? null,
-    })
-    .select()
-    .single();
-  if (orderError) throw orderError;
-
-  const orderItems = order.items.map((item) => ({
-    order_id: newOrder.id,
-    product_id: item.product_id,
-    item_code: item.item_code,
-    product_name_snapshot: item.product_name,
-    unit_snapshot: item.unit,
-    quantity: item.quantity,
-    unit_price_snapshot: item.unit_price,
-    line_total: item.unit_price * item.quantity,
-  }));
-
-  const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-  if (itemsError) throw itemsError;
-
-  return newOrder;
+  if (!order.items.length) throw new Error('يجب إضافة صنف واحد على الأقل إلى الطلب.');
+  const idempotencyKey = order.idempotency_key;
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey)) {
+    throw new Error('مفتاح منع التكرار مطلوب (16–128 حرفاً) ويجب إعادة استخدامه عند إعادة المحاولة.');
+  }
+  const { data, error } = await supabase.rpc('create_staff_order', {
+    p_customer_id: order.customer_id,
+    p_items: order.items.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+    })),
+    p_notes: order.notes ?? null,
+    p_idempotency_key: idempotencyKey,
+    p_payment_terms: order.payment_terms ?? 'cash_on_delivery',
+  });
+  if (error) throw error;
+  return data as Order;
 }
 
 // ─── Pricing rules ───
@@ -232,9 +254,179 @@ export async function fetchPricingRules(): Promise<PricingRule[]> {
   return data as PricingRule[];
 }
 
-export async function togglePricingRule(id: string, isActive: boolean): Promise<void> {
-  const { error } = await supabase.from('pricing_rules').update({ is_active: isActive }).eq('id', id);
+const SUPPORTED_PRICING_SCOPES = new Set(['default', 'all', 'product', 'category']);
+
+type PricingRuleDatabaseFields = {
+  name: string;
+  scope_type: CreatePricingRuleInput['scope_type'];
+  scope_value: string | null;
+  base_type: CreatePricingRuleInput['base_source'];
+  base_source: CreatePricingRuleInput['base_source'];
+  adjustment_type: string;
+  calculation_method: CreatePricingRuleInput['calculation_method'];
+  adjustment_value: number;
+  target_tier: CreatePricingRuleInput['target_tier'];
+  min_quantity: number;
+  min_price: number | null;
+  max_price: number | null;
+  priority: number;
+  effective_from: string | null;
+  effective_until: string | null;
+};
+
+function buildPricingRuleDatabaseFields(input: CreatePricingRuleInput): PricingRuleDatabaseFields {
+  if (!input.name.trim() || input.name.trim().length > 120) throw new Error('اسم القاعدة مطلوب ولا يتجاوز 120 حرفًا.');
+  if (!SUPPORTED_PRICING_SCOPES.has(input.scope_type)) throw new Error('نطاق القاعدة غير مدعوم في محرك التسعير.');
+  if ((input.scope_type === 'product' || input.scope_type === 'category') && !input.scope_value) {
+    throw new Error('حدد المنتج أو التصنيف الذي ستطبّق عليه القاعدة.');
+  }
+  if (!Number.isFinite(input.adjustment_value) || !Number.isFinite(input.min_quantity) || input.min_quantity <= 0 || input.min_quantity > 10000) {
+    throw new Error('قيمة التسعير أو حد الكمية غير صالح.');
+  }
+  if (input.calculation_method === 'margin_percentage' && (input.adjustment_value < 0 || input.adjustment_value >= 100)) {
+    throw new Error('هامش الربح يجب أن يكون من 0% إلى أقل من 100%.');
+  }
+  if (input.calculation_method === 'fixed_price' && input.adjustment_value < 0) {
+    throw new Error('السعر الثابت لا يمكن أن يكون سالبًا.');
+  }
+  if ((input.min_price != null && (!Number.isFinite(input.min_price) || input.min_price < 0)) ||
+      (input.max_price != null && (!Number.isFinite(input.max_price) || input.max_price < 0)) ||
+      (input.min_price != null && input.max_price != null && input.min_price > input.max_price)) {
+    throw new Error('تحقق من الحد الأدنى والأقصى للسعر.');
+  }
+  if (!Number.isInteger(input.priority) || input.priority < 1 || input.priority > 100000) {
+    throw new Error('الأولوية يجب أن تكون عددًا صحيحًا بين 1 و100000.');
+  }
+  if (input.effective_from && input.effective_until && new Date(input.effective_from) > new Date(input.effective_until)) {
+    throw new Error('تاريخ بدء القاعدة يجب أن يسبق تاريخ انتهائها.');
+  }
+  if ((input.effective_from && !Number.isFinite(new Date(input.effective_from).getTime())) ||
+      (input.effective_until && !Number.isFinite(new Date(input.effective_until).getTime()))) {
+    throw new Error('وقت بدء القاعدة أو انتهائها غير صالح.');
+  }
+
+  const legacyAdjustmentType: Record<CreatePricingRuleInput['calculation_method'], string> = {
+    add_percentage: 'percentage',
+    margin_percentage: 'margin',
+    fixed_price: 'fixed',
+    add_subtract_amount: 'amount',
+  };
+  return {
+    name: input.name.trim(),
+    scope_type: input.scope_type,
+    scope_value: input.scope_value,
+    base_type: input.base_source,
+    base_source: input.base_source,
+    adjustment_type: legacyAdjustmentType[input.calculation_method],
+    calculation_method: input.calculation_method,
+    adjustment_value: input.adjustment_value,
+    target_tier: input.target_tier,
+    min_quantity: input.min_quantity,
+    min_price: input.min_price,
+    max_price: input.max_price,
+    priority: input.priority,
+    effective_from: input.effective_from,
+    effective_until: input.effective_until,
+  };
+}
+
+export async function createPricingRule(input: CreatePricingRuleInput): Promise<void> {
+  const fields = buildPricingRuleDatabaseFields(input);
+  const { error } = await supabase.from('pricing_rules').insert({
+    organization_id: ORG_ID,
+    ...fields,
+  });
+  if (error) throw new Error('تعذر إنشاء قاعدة التسعير: ' + error.message);
+}
+
+export async function updatePricingRule(id: string, input: CreatePricingRuleInput): Promise<void> {
+  const fields = buildPricingRuleDatabaseFields(input);
+  const { data: current, error: readError } = await supabase
+    .from('pricing_rules')
+    .select('id,manually_locked,requires_approval,approved_at')
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!current) throw new Error('قاعدة التسعير غير موجودة ضمن المؤسسة الحالية.');
+  if (current.manually_locked) throw new Error('هذه القاعدة مقفلة يدويًا ولا يمكن تعديلها.');
+  if (current.requires_approval) {
+    throw new Error('هذه القاعدة خاضعة للموافقة؛ لا يمكن تعديلها من دون مسار اعتماد معتمد.');
+  }
+
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .update(fields)
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .eq('manually_locked', false)
+    .eq('requires_approval', false)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error('تعذر تحديث قاعدة التسعير: ' + error.message);
+  if (!data) throw new Error('لم تُحدّث القاعدة؛ قد تكون مقفلة أو أصبحت خاضعة للموافقة.');
+}
+
+export async function togglePricingRule(id: string, isActive: boolean): Promise<{ requires_approval: boolean; approved_at: string | null; is_active: boolean }> {
+  const { data: rule, error: readError } = await supabase
+    .from('pricing_rules')
+    .select('id,scope_type,manually_locked')
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!rule) throw new Error('قاعدة التسعير غير موجودة ضمن المؤسسة الحالية.');
+  if (rule.manually_locked) throw new Error('هذه القاعدة مقفلة يدويًا ولا يمكن تعديل حالتها.');
+  if (isActive && !SUPPORTED_PRICING_SCOPES.has(rule.scope_type)) {
+    throw new Error('لا يمكن تفعيل هذه القاعدة القديمة؛ نطاقها غير مدعوم في محرك التسعير الحالي. أوقفها أو أنشئ قاعدة جديدة.');
+  }
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .update({ is_active: isActive })
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .eq('manually_locked', false)
+    .select('id,requires_approval,approved_at,is_active')
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error('لم تتغير القاعدة؛ قد تكون مقفلة أو لم تعد موجودة.');
+  return data;
+}
+
+export async function deletePricingRule(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('pricing_rules')
+    .delete()
+    .eq('organization_id', ORG_ID)
+    .eq('id', id)
+    .eq('manually_locked', false)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('تعذر حذف القاعدة؛ تأكد أنها غير مقفلة وأنها تتبع المؤسسة الحالية.');
+}
+
+export type CustomerTierPricePreview = {
+  customer_id: string; customer_name: string; product_id: string; product_name: string;
+  item_code: string; tier: string; quantity: number; unit_price: number; line_total: number; currency: string;
+};
+
+export async function previewCustomerTierPrice(input: { customer_id: string; product_id: string; quantity: number }): Promise<CustomerTierPricePreview> {
+  if (!input.customer_id || !input.product_id || !Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 10000) {
+    throw new Error('اختر العميل والصنف وأدخل كمية صحيحة بين 1 و10000.');
+  }
+  const { data, error } = await supabase.rpc('preview_customer_tier_price', {
+    p_customer_id: input.customer_id, p_product_id: input.product_id, p_quantity: input.quantity,
+  });
+  if (error) throw new Error('تعذر معاينة سعر العميل: ' + error.message);
+  return data as CustomerTierPricePreview;
+}
+
+export async function approvePricingRule(id: string, approvalNote: string): Promise<void> {
+  const note = approvalNote.trim();
+  if (!id || note.length < 3 || note.length > 1000) throw new Error('سبب الاعتماد مطلوب ولا يتجاوز 1000 حرف.');
+  const { error } = await supabase.rpc('approve_pricing_rule', { p_rule_id: id, p_approval_note: note });
+  if (error) throw new Error('تعذر اعتماد قاعدة التسعير: ' + error.message);
 }
 
 // ─── Promotions ───
@@ -347,42 +539,188 @@ export async function createImportJob(input: {
   fileHash: string;
   fileSize: number;
   jobType: string;
-  totalRows: number;
+  totalRows?: number;
+  profileId?: string | null;
+  periodKey?: string | null;
+  sourceSystem?: string;
 }): Promise<ImportJob> {
-  const { data, error } = await supabase.from('import_jobs').insert({
-    organization_id: ORG_ID,
-    file_name: input.fileName,
-    file_hash: input.fileHash,
-    file_size: input.fileSize,
-    job_type: input.jobType,
-    total_rows: input.totalRows,
-    status: 'staging',
-    processed_rows: 0,
-    success_rows: 0,
-    failed_rows: 0,
-  }).select().single();
+  // Tenant identity is derived by the database from auth.uid(); no organization_id comes from the browser.
+  const { data, error } = await supabase.rpc('create_import_job', {
+    p_file_name: input.fileName,
+    p_file_hash: input.fileHash,
+    p_file_size: input.fileSize,
+    p_job_type: input.jobType,
+    p_profile_id: input.profileId ?? null,
+    p_period_key: input.periodKey ?? null,
+    p_source_system: input.sourceSystem ?? 'manual',
+  });
   if (error) throw error;
   return data as ImportJob;
 }
 
+export async function createImportUploadSession(jobId: string) {
+  const { data, error } = await supabase.rpc('create_import_upload_session', { p_job_id: jobId });
+  if (error) throw error;
+  return data as {
+    id: string; import_job_id: string; organization_id: string;
+    profile_id: string | null; profile_version: number | null; period_key: string | null;
+    chunk_size_bytes: number; total_chunks: number; verified_chunks: number;
+    status: string; file_hash: string; file_size: number;
+  };
+}
+
+export async function fetchImportUploadChunks(sessionId: string): Promise<Array<{
+  chunk_number: number; byte_offset: number; byte_size: number; chunk_hash: string;
+}>> {
+  const { data, error } = await supabase
+    .from('import_upload_chunks')
+    .select('chunk_number,byte_offset,byte_size,chunk_hash')
+    .eq('session_id', sessionId)
+    .order('chunk_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Array<{ chunk_number: number; byte_offset: number; byte_size: number; chunk_hash: string }>;
+}
+
+export async function cancelImportUploadSession(sessionId: string): Promise<void> {
+  const { error } = await supabase.from('import_upload_sessions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', sessionId);
+  if (error) throw error;
+}
+
+export async function recordImportUploadChunk(input: {
+  sessionId: string; chunkNumber: number; byteOffset: number; byteSize: number; chunkHash: string;
+}) {
+  const { data, error } = await supabase.rpc('record_import_upload_chunk', {
+    p_session_id: input.sessionId,
+    p_chunk_number: input.chunkNumber,
+    p_byte_offset: input.byteOffset,
+    p_byte_size: input.byteSize,
+    p_chunk_hash: input.chunkHash,
+  });
+  if (error) throw error;
+  return data as { session_id: string; verified_chunks: number; total_chunks: number; complete: boolean };
+}
+
+export async function findImportDuplicate(fileHash: string, profileId: string | null, periodKey: string | null) {
+  const { data, error } = await supabase.rpc('find_import_duplicate', {
+    p_file_hash: fileHash, p_profile_id: profileId, p_period_key: periodKey,
+  });
+  if (error) throw error;
+  return data as { duplicate: boolean; jobs: ImportJob[]; snapshots: unknown[] };
+}
+
+export async function fetchInventoryReconciliationRuns() {
+  const { data, error } = await supabase.from('inventory_reconciliation_runs').select('*').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchInventoryReconciliationItems(runId: string) {
+  const { data, error } = await supabase.from('inventory_reconciliation_items').select('*').eq('run_id', runId).order('item_code').limit(100000);
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchCentralSynonyms() {
+  const { data, error } = await supabase.from('central_synonym_dictionary').select('*').order('normalized_header').limit(2000);
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCentralSynonym(input: {
+  sourceHeader: string; normalizedHeader?: string; canonicalField: string; profileId?: string | null; locale?: string;
+}) {
+  // Tenant identity and normalized key are derived server-side; the browser cannot supply organization_id.
+  const { data, error } = await supabase.rpc('create_central_synonym', {
+    p_source_header: input.sourceHeader.trim(),
+    p_canonical_field: input.canonicalField.trim(),
+    p_profile_id: input.profileId ?? null,
+    p_locale: input.locale ?? 'ar',
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function finalizeImportJob(jobId: string, duplicateAction: 'ignore' | 'replace' | 'merge' | 'new_version' = 'new_version'): Promise<{
+  job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
+  snapshot_id: string | null; review_required: boolean;
+}> {
+  const { data, error } = await supabase.rpc('finalize_import_job', { p_job_id: jobId, p_duplicate_action: duplicateAction });
+  if (error) throw error;
+  return data as {
+    job_id: string; status: string; data_quality_score: number; quality: Record<string, unknown>;
+    snapshot_id: string | null; review_required: boolean;
+  };
+}
+
+export async function fetchImportProfiles() {
+  const { data, error } = await supabase.from('import_profiles').select('*').order('profile_name').order('version', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchOnyxSnapshots() {
+  const { data, error } = await supabase.from('onyx_snapshots').select('*').eq('status', 'ready').order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data;
+}
+
+export type OnyxSnapshotAnalytics = {
+  snapshot: {
+    id: string; version: number; file_name: string | null; file_hash: string; report_type: string;
+    created_at: string; data_quality_score: number; quality_breakdown: Record<string, number>;
+  };
+  metrics: {
+    row_count: number; unique_keys: number; valid_rows: number; rejected_rows: number; warning_rows: number;
+    quantity_total: number; revenue_total: number; sales_total: number; customer_count: number;
+    supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
+  };
+  status_distribution: Array<{ status: string; count: number }>;
+  top_items: Array<{ item_code: string; name: string | null; quantity: number; revenue: number }>;
+  top_customers: Array<{ customer_code: string; revenue: number; quantity: number }>;
+  forecast_status: string;
+  forecast_reason: string;
+};
+
+export async function fetchOnyxSnapshotAnalytics(snapshotId: string): Promise<OnyxSnapshotAnalytics> {
+  const { data, error } = await supabase.rpc('get_onyx_snapshot_analytics', { p_snapshot_id: snapshotId });
+  if (error) throw error;
+  return data as OnyxSnapshotAnalytics;
+}
+
+export async function fetchOnyxSnapshotRows(snapshotId: string) {
+  const { data, error } = await supabase.from('onyx_snapshot_rows').select('*').eq('snapshot_id', snapshotId).order('row_number').limit(100);
+  if (error) throw error;
+  return data;
+}
+
+export async function runInventoryReconciliation(snapshotId: string) {
+  const { data, error } = await supabase.rpc('run_inventory_reconciliation', { p_snapshot_id: snapshotId });
+  if (error) throw error;
+  return data as {
+    run_id: string; snapshot_id: string; source_row_count: number; matched_count: number;
+    changed_count: number; new_count: number; invalid_count: number;
+  };
+}
+
 export async function insertImportRows(jobId: string, rows: Array<{ rowNumber: number; data: Record<string, unknown>; status: string; errors?: string[] }>): Promise<void> {
-  const { error } = await supabase.from('import_job_rows').insert(rows.map((row) => ({
+  const { error } = await supabase.from('import_job_rows').upsert(rows.map((row) => ({
     import_job_id: jobId,
     row_number: row.rowNumber,
     data: row.data,
     status: row.status,
     errors: row.errors ?? null,
-  })));
+  })), { onConflict: 'import_job_id,row_number' });
   if (error) throw error;
 }
 
 export async function updateImportJob(id: string, updates: Partial<ImportJob>): Promise<void> {
-  const { error } = await supabase.from('import_jobs').update(updates).eq('id', id).eq('organization_id', ORG_ID);
+  const { error } = await supabase.from('import_jobs').update(updates).eq('id', id);
   if (error) throw error;
 }
 
 export async function fetchImportJobs(): Promise<ImportJob[]> {
-  const { data, error } = await supabase.from('import_jobs').select('*').eq('organization_id', ORG_ID).order('created_at', { ascending: false }).limit(30);
+  // Tenant-scoped RLS filters rows from the authenticated profile, not a browser-provided org ID.
+  const { data, error } = await supabase.from('import_jobs').select('*').order('created_at', { ascending: false }).limit(30);
   if (error) throw error;
   return data as ImportJob[];
 }
@@ -398,7 +736,7 @@ export async function fetchDashboardStats() {
   const [products, customers, orders, alerts, lowStock] = await Promise.all([
     supabase.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('status', 'active'),
     supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID),
-    supabase.from('orders').select('id, status, total_amount', { count: 'exact' }).eq('organization_id', ORG_ID),
+    supabase.rpc('fetch_staff_orders'),
     supabase.from('ai_alerts').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('is_resolved', false),
     supabase.from('inventory_balances').select('quantity_on_hand, reorder_point, product_id').eq('warehouse_id', WAREHOUSE_ID),
   ]);
@@ -407,14 +745,15 @@ export async function fetchDashboardStats() {
     (inv: { quantity_on_hand: number; reorder_point: number }) => inv.quantity_on_hand <= inv.reorder_point
   ).length;
 
-  const ordersData = orders.data || [];
-  const totalSales = ordersData.reduce((sum: number, o: { total_amount: number }) => sum + (o.total_amount || 0), 0);
-  const processingCount = ordersData.filter((o: { status: string }) => o.status === 'processing' || o.status === 'pending').length;
+  if (orders.error) throw orders.error;
+  const ordersData = (orders.data || []) as Array<{ id: string; status: string; total_amount: number }>;
+  const totalSales = ordersData.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const processingCount = ordersData.filter((o) => o.status === 'processing' || o.status === 'pending').length;
 
   return {
     productCount: products.count || 0,
     customerCount: customers.count || 0,
-    orderCount: orders.count || 0,
+    orderCount: ordersData.length,
     totalSales,
     processingCount,
     alertCount: alerts.count || 0,
