@@ -10,6 +10,7 @@ import { Login } from '@/components/Login';
 export const STATUS_LABELS: Record<string, string> = {
   draft: 'مسودة', pending: 'بانتظار المراجعة', confirmed: 'مؤكد', processing: 'قيد التجهيز',
   shipped: 'تم الشحن', delivered: 'تم التسليم', cancelled: 'ملغي',
+  needs_customer_amendment: 'بانتظار تعديل العميل', returned_for_adjustment: 'أُعيد للتعديل', awaiting_customer_payment: 'بانتظار إبلاغ السداد',
 };
 
 const wrap: React.CSSProperties = { maxWidth: 1100, margin: '0 auto', padding: '32px 20px 60px' };
