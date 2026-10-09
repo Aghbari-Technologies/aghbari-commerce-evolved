@@ -602,7 +602,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.issue_invoice_for_confirmed_order() FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.issue_invoice_for_confirmed_order() FROM PUBLIC,anon,authenticated;
 
 REVOKE ALL ON FUNCTION public.refresh_customer_invoice_payment_status() FROM PUBLIC,anon,authenticated;
 
@@ -628,7 +628,7 @@ BEGIN
   END IF;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.apply_customer_payment_balance_delta() FROM PUBLIC,anon;
+REVOKE ALL ON FUNCTION public.apply_customer_payment_balance_delta() FROM PUBLIC,anon,authenticated;
 
 DROP TRIGGER IF EXISTS customer_payments_account_balance_delta ON public.customer_payments;
 CREATE TRIGGER customer_payments_account_balance_delta
