@@ -336,6 +336,76 @@ async function main() {
   assert.equal(Number(reviewedInvoice[0].total_amount), 36000);
   process.stdout.write("PASS order-review approval, stale/unapproved confirmation guard, one-order price override, invoice and payment-request lifecycle\\n");
 
+  const importCreated = await db.unsafe(
+    "select public.create_import_job($1,$2,$3,$4,null,$5,$6) as result",
+    ["CI Onyx stock.csv", "a".repeat(64), 500, "onyx_stock", "2026-01", "ci"],
+  );
+  const importJob = importCreated[0].result;
+  assert.equal(importJob.organization_id, organizationId, "import tenant must be derived from authenticated staff");
+  assert.ok(importJob.profile_id, "import should attach a versioned profile");
+  assert.equal(importJob.raw_file_retained, false, "raw files must not be retained");
+
+  const importRows = [
+    { item_code: "000125", product_name: "Rice", quantity: "5", revenue: "150", date: "2026-01-01" },
+    { item_code: "000126", product_name: "Sugar", quantity: "10", revenue: "450", date: "2026-01-02" },
+  ];
+  await db.unsafe(
+    "insert into public.import_job_rows(import_job_id,row_number,status,data,errors) values($1,1,'valid',$2::jsonb,'[]'::jsonb),($1,2,'valid',$3::jsonb,'[]'::jsonb)",
+    [importJob.id, db.json(importRows[0]), db.json(importRows[1])],
+  );
+
+  const importProfile = await db.unsafe(
+    "select public.create_central_synonym($1,$2,$3,$4) as result",
+    ["رمز الصنف CI", "item_code", importJob.profile_id, "ar"],
+  );
+  assert.equal(importProfile[0].result.canonical_field, "item_code", "central synonym should persist via tenant-bound RPC");
+
+  const importSession = await db.unsafe("select public.create_import_upload_session($1::uuid) as result", [importJob.id]);
+  assert.equal(importSession[0].result.total_chunks, 1, "a small source file should create one upload manifest chunk");
+  const chunkHash = "c".repeat(64);
+  const recordedChunk = await db.unsafe(
+    "select public.record_import_upload_chunk($1::uuid,$2,$3,$4,$5) as result",
+    [importSession[0].result.id, 0, 0, 500, chunkHash],
+  );
+  assert.equal(recordedChunk[0].result.complete, true, "all verified chunk metadata should complete the upload manifest");
+  const repeatedChunk = await db.unsafe(
+    "select public.record_import_upload_chunk($1::uuid,$2,$3,$4,$5) as result",
+    [importSession[0].result.id, 0, 0, 500, chunkHash],
+  );
+  assert.equal(repeatedChunk[0].result.verified_chunks, 1, "identical chunk retry must not duplicate manifest rows");
+  await expectFailure(
+    "upload chunk with mismatching digest under same sequence number",
+    () => db.unsafe(
+      "select public.record_import_upload_chunk($1::uuid,$2,$3,$4,$5)",
+      [importSession[0].result.id, 0, 0, 500, "d".repeat(64)],
+    ),
+    /تعارض|chunk|شريحة/i,
+  );
+
+  const duplicateProbe = await db.unsafe(
+    "select public.find_import_duplicate($1,$2::uuid,$3) as result",
+    ["a".repeat(64), importJob.profile_id, "2026-01"],
+  );
+  assert.equal(duplicateProbe[0].result.duplicate, true, "same tenant/profile/hash/period must be reported as a duplicate");
+
+  const finalizedImport = await db.unsafe(
+    "select public.finalize_import_job($1::uuid,$2) as result",
+    [importJob.id, "new_version"],
+  );
+  assert.equal(finalizedImport[0].result.status, "completed", "high-quality structured import should be accepted");
+  assert.equal(Number(finalizedImport[0].result.data_quality_score), 100);
+  assert.ok(finalizedImport[0].result.snapshot_id, "accepted import should create an immutable Onyx snapshot");
+  const onyxAnalytics = await db.unsafe(
+    "select public.get_onyx_snapshot_analytics($1::uuid) as result",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  assert.equal(Number(onyxAnalytics[0].result.metrics.row_count), 2, "server analytics should read the complete snapshot");
+  assert.equal(Number(onyxAnalytics[0].result.metrics.unique_keys), 2);
+  assert.equal(Number(onyxAnalytics[0].result.metrics.quantity_total), 15, "quantity KPI must include every snapshot row");
+  assert.equal(Number(onyxAnalytics[0].result.metrics.revenue_total), 600, "revenue KPI must include every snapshot row");
+  assert.equal(onyxAnalytics[0].result.forecast_status, "Forecast Unavailable: Insufficient Historical Data");
+  process.stdout.write("PASS import profile, tenant-scoped synonyms, resumable chunk manifest, duplicate detection, DQS finalization and full-snapshot Onyx analytics\n");
+
   process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle.\n");
 }
 
