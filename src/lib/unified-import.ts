@@ -641,6 +641,7 @@ function formatXlsxNumber(value: string, styleIndex: number, styles: XlsxStyles,
 
 function resolveXlsxSheetPath(target: string): string {
   const path = target.replace(/\\/g, '/');
+  if (path.startsWith('xl/worksheets/')) return path;
   if (path.startsWith('/')) {
     const absolute = path.replace(/^\/+/, '');
     if (!absolute.startsWith('xl/worksheets/')) throw new Error('مسار ورقة XLSX خارج مجلد المصنف غير مسموح.');
@@ -852,7 +853,7 @@ export async function parseXlsxFirstWorksheet(
       }
       values[column] = value;
     }
-    await onRow(values.map((value) => value ?? ''));
+    await onRow(Array.from({ length: values.length }, (_value, index) => values[index] ?? ''));
   }
   if (rowCount === 0) throw new Error('ورقة XLSX الأولى فارغة أو لا تحتوي على صفوف جدولية.');
   return { rowCount, worksheetName: sheet.name };
