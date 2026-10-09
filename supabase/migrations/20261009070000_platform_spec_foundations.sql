@@ -436,7 +436,7 @@ CREATE OR REPLACE FUNCTION public.calculate_active_pricing_rule_price(
   p_product_id uuid, p_organization_id uuid, p_tier text, p_quantity numeric DEFAULT 1
 )
 RETURNS numeric(15,2)
-LANGUAGE plpgsql STABLE SET search_path = ''
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = ''
 AS $$
 DECLARE
   v_product public.products%ROWTYPE;
@@ -506,10 +506,16 @@ REVOKE ALL ON FUNCTION public.refresh_product_tier_prices(uuid,uuid) FROM PUBLIC
 
 CREATE OR REPLACE FUNCTION public.refresh_product_price_columns_from_product()
 RETURNS trigger LANGUAGE plpgsql SET search_path = ''
-AS $$
+AS $
 BEGIN
-  NEW.retail_price := coalesce(NEW.retail_price,NEW.base_price);
-  NEW.wholesale_price := coalesce(NEW.wholesale_price,NEW.base_price);
+  IF TG_OP='INSERT' THEN
+    -- Existing clients create products with the base price only; both derived tiers start there.
+    NEW.retail_price := NEW.base_price;
+    NEW.wholesale_price := NEW.base_price;
+  ELSE
+    NEW.retail_price := coalesce(NEW.retail_price,NEW.base_price);
+    NEW.wholesale_price := coalesce(NEW.wholesale_price,NEW.base_price);
+  END IF;
   NEW.search_name_norm := lower(translate(regexp_replace(coalesce(NEW.name,''),'[ًٌٍَُِّْـٰ]','','g'),'أإآٱىة','اااايه'));
   NEW.normalization_version := 1;
   RETURN NEW;
@@ -570,9 +576,8 @@ BEGIN
    WHERE p.id=p_product_id AND p.organization_id=p_organization_id AND p.status='active';
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='product unavailable in this organization'; END IF;
 
-  v_rule_price := public.calculate_active_pricing_rule_price(p_product_id,p_organization_id,v_tier,p_quantity);
-  IF v_rule_price IS NOT NULL THEN RETURN v_rule_price; END IF;
-
+  -- Preserve explicit legacy quantity breaks; the new rule engine supplies the tier price
+  -- only when there is no configured row for the requested tier/quantity.
   SELECT pp.price INTO v_price
     FROM public.product_prices pp
    WHERE pp.product_id=p_product_id AND pp.tier=v_tier
@@ -585,7 +590,10 @@ BEGIN
        AND pp.is_active AND pp.min_quantity<=p_quantity
      ORDER BY pp.min_quantity DESC LIMIT 1;
   END IF;
-  IF NOT FOUND THEN v_price:=v_base_price; END IF;
+  IF NOT FOUND THEN
+    v_rule_price := public.calculate_active_pricing_rule_price(p_product_id,p_organization_id,v_tier,p_quantity);
+    v_price := coalesce(v_rule_price,v_base_price);
+  END IF;
   IF v_price IS NULL OR v_price<0 OR v_price::text IN ('NaN','Infinity','-Infinity') THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid configured product price';
   END IF;
@@ -870,7 +878,7 @@ BEGIN
   IF coalesce(p_worker,'')='' OR p_limit<1 OR p_limit>100 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid worker or batch size';
   END IF;
-  IF NOT (auth.role()='service_role' OR current_user='service_role' OR current_user='postgres') THEN
+  IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' AND current_user<>'postgres' THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='background job claiming requires a trusted worker';
   END IF;
   RETURN QUERY
@@ -889,6 +897,9 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.claim_background_jobs(text,text,integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_background_jobs(text,text,integer) TO service_role;
+
+-- Initialize derived tier columns consistently for the current catalog; no active matching rule means base price.
+SELECT public.refresh_product_tier_prices(o.id,NULL) FROM public.organizations o;
 
 -- Deterministic Arabic search indexes/versioning for existing operational catalog.
 CREATE INDEX IF NOT EXISTS products_name_lower_prefix_idx
