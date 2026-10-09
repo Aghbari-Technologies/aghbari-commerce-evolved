@@ -124,6 +124,12 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           sourceSystem: "manual",
         });
       }
+      if (selectedProfile && job.profile_id && selectedProfile !== job.profile_id) {
+        throw new Error("الملف التعريفي المختار لا يطابق الملف التعريفي المقيد بدفعة الاستيراد.");
+      }
+      // The server may create the default profile while creating the job; bind processing to
+      // that persisted profile, not to a possibly stale/empty React query cache.
+      selectedProfile = job.profile_id ?? selectedProfile ?? activeProfileId;
 
       const extension = file.name.split(".").pop()?.toLocaleLowerCase("en") ?? "";
       if (extension !== "csv") {
@@ -148,14 +154,19 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
-      const profile = (profiles ?? []).find((p: ImportProfile) => p.id === selectedProfile) as ImportProfile | undefined;
+      const currentProfiles = await fetchImportProfiles();
+      const currentSynonyms = await fetchCentralSynonyms();
+      const profile = (currentProfiles ?? []).find((p: ImportProfile) => p.id === selectedProfile) as ImportProfile | undefined;
+      if (selectedProfile && !profile) {
+        throw new Error("تعذر تحميل إصدار الملف التعريفي المقيد بالدفعة؛ لن تتم معالجة صفوف بإعدادات غير مؤكدة.");
+      }
       const transformations = profile?.transformation_rules ?? [];
       const validations = profile?.validation_rules ?? [];
       // Fail fast on malformed declarative profiles before any rows are staged.
       validateImportProfileRules(transformations, validations);
       const profileSynonyms: Record<string, string> = { ...DEFAULT_SYNONYMS };
       const normalizeSynonymSource = (value: string) => value.trim().toLocaleLowerCase("ar").replace(/[ـ_-]+/g, " ").replace(/\s+/g, " ");
-      for (const row of storedSynonyms ?? []) {
+      for (const row of currentSynonyms ?? []) {
         if (row.profile_id && row.profile_id !== selectedProfile) continue;
         const source = normalizeSynonymSource(String(row.source_header ?? ""));
         const target = String(row.canonical_field ?? "").trim();
