@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, BarChart3, Check, Database, FileText,
   Gauge, History, Package, RefreshCw, ShieldCheck, Upload, Zap,
+  Plus,
 } from 'lucide-react';
 import {
   fetchCentralSynonyms, fetchImportProfiles, fetchOnyxSnapshotAnalytics, fetchOnyxSnapshots, fetchOnyxSnapshotRows,

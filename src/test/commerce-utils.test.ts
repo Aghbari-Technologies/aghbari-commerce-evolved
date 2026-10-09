@@ -185,9 +185,9 @@ describe('commerce completion utilities', () => {
   it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {
     const parser = new StreamingCsvParser();
     const rows: string[][] = [];
-    await parser.push('item_code,name\r\n000125,"Rice,', (row) => rows.push(row));
-    await parser.push(' ""Premium"" rice"\r\n000126,Sugar\r', (row) => rows.push(row));
-    await parser.push('\n', (row) => rows.push(row), true);
+    await parser.push('item_code,name\r\n000125,"Rice,', (row) => { rows.push(row); });
+    await parser.push(' ""Premium"" rice"\r\n000126,Sugar\r', (row) => { rows.push(row); });
+    await parser.push('\n', (row) => { rows.push(row); }, true);
     expect(rows).toEqual([
       ['item_code','name'],
       ['000125','Rice, "Premium" rice'],

@@ -426,7 +426,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       const result = await finalizeImportJob(job.id, action);
       setStage("analytics");
       setProgress(96);
-      setQualityPreview(quality?.result() ?? null);
+      setQualityPreview((quality as DataQualityAccumulator | null)?.result() ?? null);
       setProgress(100);
       setStage("complete");
       if (result.status === "manual_review") {
