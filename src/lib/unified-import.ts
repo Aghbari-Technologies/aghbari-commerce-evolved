@@ -167,6 +167,7 @@ export class StreamingCsvParser {
   private currentRow: string[] = [];
   private currentCell = '';
   private quoted = false;
+  private currentCellExceeded = false;
   private rowCount = 0;
 
   async push(chunk: string, onRow: (values: string[]) => void | Promise<void>, final = false): Promise<void> {
@@ -186,14 +187,16 @@ export class StreamingCsvParser {
         continue;
       }
       if (char === ',' && !this.quoted) {
-        this.currentRow.push(this.currentCell);
+        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
         this.currentCell = '';
+        this.currentCellExceeded = false;
         continue;
       }
       if ((char === '\n' || char === '\r') && !this.quoted) {
         if (char === '\r' && next === '\n') cursor += 1;
-        this.currentRow.push(this.currentCell);
+        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
         this.currentCell = '';
+        this.currentCellExceeded = false;
         const values = this.currentRow;
         this.currentRow = [];
         if (values.some((part) => part.trim() !== '')) {
@@ -203,10 +206,13 @@ export class StreamingCsvParser {
         }
         continue;
       }
-      this.currentCell += char;
-      if (this.currentCell.length > MAX_IMPORT_CELL_CHARS) {
-        // Keep parsing state stable but refuse the row instead of truncating user data.
-        throw new Error(`خلية تتجاوز الحد الأقصى ${MAX_IMPORT_CELL_CHARS} حرفاً؛ لم يتم اقتطاع البيانات`);
+      if (!this.currentCellExceeded) {
+        this.currentCell += char;
+        if (this.currentCell.length > MAX_IMPORT_CELL_CHARS) {
+          // Bound memory, mark the row invalid, and continue parsing without silently truncating accepted data.
+          this.currentCell = '';
+          this.currentCellExceeded = true;
+        }
       }
     }
     this.pending = this.pending.slice(cursor);
@@ -215,8 +221,9 @@ export class StreamingCsvParser {
       if (this.currentCell.length || this.currentRow.length || this.pending.length) {
         this.currentCell += this.pending;
         this.pending = '';
-        this.currentRow.push(this.currentCell);
+        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
         this.currentCell = '';
+        this.currentCellExceeded = false;
         const values = this.currentRow;
         this.currentRow = [];
         if (values.some((part) => part.trim() !== '')) {
