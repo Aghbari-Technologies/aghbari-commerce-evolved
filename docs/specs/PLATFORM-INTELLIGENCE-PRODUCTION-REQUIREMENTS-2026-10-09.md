@@ -103,7 +103,7 @@ This file records every source requirement area so implementation is reviewable.
 - Ledger records request/model/input/output tokens/cost/duration/time. Daily/monthly/per-request quotas enforced; 100% budget denies LLM and uses rules fallback.
 
 ### Implementation status
-- **PARTIAL:** deterministic Arabic assistant queries stored orders, invoices and catalog; no external LLM and no invented values.
+- **PARTIAL:** deterministic Arabic assistant queries stored orders, invoices and catalog; no external LLM and no invented values. Customer assistant order-status queries now omit monetary fields, and invoice help retrieves only invoice identifiers/status/dates; account balances stay on the separate account-statement surface. A regression test protects these response summaries from leaking extra monetary properties. **Still NOT PROVEN:** runtime authorization/RLS, prompt-injection defenses, model routing, quota enforcement, and any model-backed forecasts or action execution.
 - **ADDED / CI VERIFICATION PENDING:** usage ledger/budget and recommendation-card schema.
 - **NOT PROVEN:** sanitizer and prompt-injection suite, model routing/privacy enforcement, quota enforcement in real gateway, actions, forecasts or model-backed insights. This work configures no AI service key.
 
@@ -161,3 +161,4 @@ Definition of Done:
 - 2026-10-09: source-derived phase and acceptance map recorded. This is a control document, not a completion assertion.
 - 2026-10-09: additive platform migration adds import/profile metadata, server-side quality scoring and snapshot creation, isolated Onyx rows, comparison-only reconciliation, queue/AI-governance schemas, tenant policies, and pricing/order-review foundations. Live rollout is blocked pending exact project identity.
 - 2026-10-09: incremental SHA-256, streaming CSV parsing, limits, leading-zero-safe normalization, DQS accumulator and acceptance-threshold helpers added. CI/runtime must be checked against the exact final commit.
+- 2026-10-09: customer assistant privacy hardening avoids fetching order/invoice monetary columns in the customer assistant paths; targeted regression coverage added. Build and unit CI proof pending for this patch; authenticated browser/runtime proof remains separate.

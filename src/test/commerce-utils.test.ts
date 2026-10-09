@@ -1,6 +1,6 @@
 import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, validateCsvRow, validateImportProfileRules } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
 describe('commerce completion utilities', () => {
   it('calculates totals only from persisted invoice and payment records', () => {
@@ -129,6 +129,33 @@ describe('commerce completion utilities', () => {
       .toThrow('نمط التحقق غير آمن');
     expect(() => validateImportProfileRules([], [{ field: 'quantity', rule: 'enum', values: Array(101).fill('x') }]))
       .toThrow('قاعدة enum');
+  });
+
+  it('keeps customer assistant order and invoice summaries free of monetary fields', () => {
+    const order = {
+      order_number: 'AG-1042',
+      status: 'pending',
+      created_at: '2026-10-09T10:30:00Z',
+      total_amount: '987654.32',
+    };
+    const orderText = summarizeCustomerOrderStatuses([order], (date) => date.slice(0, 10));
+    expect(orderText).toContain('AG-1042 — بانتظار المراجعة — 2026-10-09');
+    expect(orderText).not.toContain('987654.32');
+    expect(orderText).not.toMatch(/إجمالي|ريال|ر\.ي/);
+
+    const invoice = {
+      invoice_number: 'INV-73',
+      status: 'unpaid',
+      issued_at: '2026-10-08T08:00:00Z',
+      total_amount: '123456.78',
+      subtotal: '120000',
+    };
+    const invoiceText = summarizeCustomerInvoiceStatuses([invoice], (date) => date.slice(0, 10));
+    expect(invoiceText).toContain('INV-73 — مستحقة — 2026-10-08');
+    expect(invoiceText).toContain('كشف الحساب');
+    expect(invoiceText).not.toContain('123456.78');
+    expect(invoiceText).not.toContain('120000');
+    expect(invoiceText).not.toMatch(/إجمالي الفواتير|المتبقي المستحق|ريال|ر\.ي/);
   });
 
   it('classifies common Arabic questions to evidence-backed actions', () => {
