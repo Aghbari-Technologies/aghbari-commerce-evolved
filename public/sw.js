@@ -29,8 +29,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request).then((response) => {
         if (response.ok) {
-          const clone = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put('/', clone));
+          const routeResponse = response.clone();
+          const homeResponse = response.clone();
+          void caches.open(CACHE_NAME).then(async (cache) => {
+            await cache.put(request, routeResponse);
+            await cache.put('/', homeResponse);
+          });
         }
         return response;
       }).catch(async () => (await caches.match(request)) || (await caches.match('/')) || Response.error()),
