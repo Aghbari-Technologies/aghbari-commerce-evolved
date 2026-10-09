@@ -62,10 +62,6 @@ const adminPaths: Record<View, string> = {
 function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const { user, ready, signOut } = useAuth();
   const navigate = useNavigate();
-  const setMode = (_m: 'storefront') => {
-    if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل مغادرة مراجعة الطلب.'); return; }
-    void navigate({ to: '/' });
-  };
   const [view, setView] = useState<View>(initialView);
   const [mobileNav, setMobileNav] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -73,6 +69,10 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
   const [navigationBlocked, setNavigationBlocked] = useState(false);
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(null), 2800); };
+  const setMode = (_m: 'storefront') => {
+    if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل مغادرة مراجعة الطلب.'); return; }
+    void navigate({ to: '/' });
+  };
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
