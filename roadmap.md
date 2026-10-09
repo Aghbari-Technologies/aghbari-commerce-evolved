@@ -15,6 +15,7 @@ Status: implementation is on `fix/commerce-completion-20261009`; the draft PR is
 - [x] Arabic data-backed commerce assistant for order status, catalogue lookup, invoice summary, and offline guidance. It does not invent database values and does not call an external LLM.
 - [x] Limited offline catalogue caching, persisted cart drafts, PWA manifest/service worker, and an explicit warning that current stock/prices must be revalidated online.
 - [x] Direct customer paths for the added workspaces and direct `/admin/*` paths for admin sections.
+- [x] Rebuilt the checked-in TanStack route tree to register all 29 route files and aligned the escaped `admin_.*` file-route IDs. Added route-matching smoke coverage for the customer workspaces, every admin section, and order detail.
 - [x] Finance/quote RPC hardening, tenant-scoped RLS policies for new tables, and safe first-signup role assignment.
 - [x] Checkout RPC now includes server-side customer-tier pricing, a persistent idempotency key bound to the exact request payload, explicit cash-on-delivery/credit terms, tenant-safe product validation, and credit checks.
 - [x] Checkout displays the server-calculated price preview by account tier and quantity before enabling order submission; order creation rechecks prices on the server.
@@ -36,6 +37,12 @@ Status: implementation is on `fix/commerce-completion-20261009`; the draft PR is
 - [ ] Model-backed Lovable AI integration and generated business insights. The current assistant is deliberately deterministic and database-backed.
 - [ ] Full offline field-sales queue and conflict-safe synchronization after reconnect. Current support is cached catalogue + cart draft only; it does not place orders offline.
 - [ ] Merge the PR to `main` only after the matching database migrations can be applied and database/browser checks pass. The Lovable project currently syncs `main`; changes on this fix branch are not visible in the existing Lovable preview/live URL until the active Lovable branch is switched to this branch or the PR is merged. Do not switch/merge to mask the unresolved backend mismatch.
+
+## Routing incident closed in source — live preview still to verify
+
+- On 2026-10-09, the checked-in `src/routeTree.gen.ts` was stale: it registered only the original 7 routes while the repository contained 29 route files. This caused paths added to the storefront to fail navigation in an environment that used the checked-in tree before regeneration.
+- Route-tree registration and `admin_.*` file-route IDs have been corrected on `fix/commerce-completion-20261009`. The expanded routing smoke tests, lint, and production build passed on commit `fcf66fecabbd2e9a46f576270a4ddd579805c605`.
+- The user's Lovable preview was not accessible from an unauthenticated external probe (it redirected to Lovable sign-in), so authenticated browser navigation on the actual preview is not yet proven. Confirm once Lovable completes updating the selected branch.
 
 ## Evidence rules
 
