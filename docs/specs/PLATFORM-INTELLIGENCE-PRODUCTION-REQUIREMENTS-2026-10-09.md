@@ -210,3 +210,5 @@ Definition of Done:
 - Final tracker sweep: all CI statuses now distinguish tested code/schema from unproven production, authenticated browser, AI-runtime, worker-recovery and performance gates.
 
 - 2026-10-09: role-management UI is added under Settings for admins, backed by admin-only tenant-scoped list/set RPCs. Generic staff and accountants cannot read profile/role directories or mutate profile/auth binding and role rows directly; role changes are audited, self-role edits are blocked, and customer role cannot be combined with staff roles. Exact-SHA CI/browser acceptance is pending; no production database was touched.
+
+- 2026-10-09: pricing governance follow-up adds a server-enforced approval state, separate submitter/approver identities, audited rationale, a shared-resolver customer/quantity price preview, and manager-only rule deletion. Exact-head CI pending; no production database changed.

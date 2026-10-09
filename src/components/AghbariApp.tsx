@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Activity, AlertTriangle, BarChart3, Bell, Bot, Box, Check, ChevronLeft,
+  Activity, AlertTriangle, BarChart3, Bell, Bot, Box, Calculator, Check, ChevronLeft,
   CircleDollarSign, Database, FileText, LayoutDashboard, LogOut, Menu, Package,
   Pencil, Plus, RefreshCw, Search, Settings, ShoppingCart, SlidersHorizontal,
   Smartphone, Store, Tag, Trash2, TrendingUp, Users, Zap,
@@ -10,7 +10,9 @@ import {
   fetchCategories, fetchCustomers, fetchDashboardStats, fetchOrders, fetchPricingRules,
   fetchProducts, fetchPromotions, togglePricingRule, togglePromotion,
   updateCustomerStatus, updatePricingRule, updateProduct,
+  approvePricingRule, previewCustomerTierPrice,
 } from '@/lib/api';
+import type { CustomerTierPricePreview } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber } from '@/lib/format';
 import type { Category, CreatePricingRuleInput, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
@@ -276,9 +278,12 @@ function pricingTargetLabel(rule: PricingRule): string {
 }
 
 function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
+  const { user } = useAuth();
+  const canApprovePricing = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
   const { data, loading, error, refetch } = useFetch(fetchPricingRules);
   const [showCreate, setShowCreate] = useState(false);
   const [editingRule, setEditingRule] = useState<PricingRule | null>(null);
+  const [approvalRule, setApprovalRule] = useState<PricingRule | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function toggle(rule: PricingRule) {
@@ -290,9 +295,11 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
     }
     setBusyId(rule.id);
     try {
-      await togglePricingRule(rule.id, next);
+      const saved = await togglePricingRule(rule.id, next);
       await refetch();
-      onNotice(next ? 'تم تفعيل القاعدة وإعادة حساب أسعار الشرائح' : 'تم إيقاف القاعدة وإعادة حساب أسعار الشرائح');
+      onNotice(saved.requires_approval && !saved.approved_at
+        ? 'تم حفظ التغيير، والقاعدة بانتظار اعتماد المدير قبل تطبيق السعر.'
+        : next ? 'تم تفعيل القاعدة وإعادة حساب أسعار الشرائح' : 'تم إيقاف القاعدة وإعادة حساب أسعار الشرائح');
     } catch (cause) {
       onNotice(cause instanceof Error ? cause.message : 'تعذر تحديث قاعدة التسعير');
     } finally {
@@ -301,6 +308,7 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
   }
 
   async function remove(rule: PricingRule) {
+    if (!canApprovePricing) { onNotice('حذف قواعد التسعير متاح لمدير النظام أو المدير فقط.'); return; }
     if (rule.manually_locked || !window.confirm('حذف قاعدة «' + rule.name + '»؟ سيعيد محرك التسعير حساب الجملة والتجزئة من القواعد المتبقية، ويعود للسعر الأساسي عند عدم وجود قاعدة مطبقة.')) return;
     setBusyId(rule.id);
     try {
@@ -324,6 +332,7 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
         <article className="report-metric"><AlertTriangle size={22} /><span>قواعد موقوفة / تتطلب مراجعة</span><strong>{formatNumber(data?.filter((rule) => !rule.is_active || (rule.requires_approval && !rule.approved_at) || !PRICING_SCOPES.has(rule.scope_type)).length ?? 0)}</strong></article>
       </div>
     </section>
+    <PricingPreviewPanel />
     {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !data?.length ? <Empty text="لا توجد قواعد تسعير. أضف أول قاعدة لتحديد أسعار الشرائح." /> : <div className="rule-grid">
       {data.map((rule) => {
         const unsupported = !PRICING_SCOPES.has(rule.scope_type);
@@ -344,19 +353,92 @@ function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
           {(rule.min_price != null || rule.max_price != null) && <p>حد السعر: {rule.min_price == null ? '—' : formatCurrency(Number(rule.min_price))} – {rule.max_price == null ? '—' : formatCurrency(Number(rule.max_price))}</p>}
           {(rule.effective_from || rule.effective_until) && <p>الفترة: {rule.effective_from ? formatDateShort(rule.effective_from) : 'من البداية'} – {rule.effective_until ? formatDateShort(rule.effective_until) : 'بلا نهاية'}</p>}
           {awaitingApproval && <p role="status" style={{ color: '#9a5b13', fontWeight: 800 }}>بانتظار الموافقة — لن تدخل القاعدة في الاحتساب قبل اعتمادها.</p>}
+          {awaitingApproval && rule.submitted_by && <p style={{ color: '#71868a', fontSize: 12 }}>يجب أن يعتمد القاعدة مدير مختلف عن مقدمها.</p>}
           {rule.requires_approval && <p role="status" style={{ color: '#9a5b13' }}>هذه القاعدة خاضعة للموافقة؛ التعديل المباشر معطل حتى لا يتجاوز حوكمة الاعتماد.</p>}
+          {awaitingApproval && canApprovePricing && !locked && <Button onClick={() => setApprovalRule(rule)} disabled={busyId === rule.id}>مراجعة واعتماد القاعدة</Button>}
           {unsupported && <p role="alert" style={{ color: '#9a5b13' }}>هذه قاعدة قديمة بنطاق غير مدعوم في المحرك الحالي. لن يُسمح بتفعيلها مجددًا.</p>}
           {locked && <p role="status">قاعدة مقفلة يدويًا؛ التعديل والحذف معطلان.</p>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
             <Button variant="outline" disabled={locked || unsupported || Boolean(rule.requires_approval) || busyId === rule.id} onClick={() => setEditingRule(rule)}><Pencil size={15} /> تعديل القاعدة</Button>
-            <Button variant="danger" disabled={locked || busyId === rule.id} onClick={() => void remove(rule)}><Trash2 size={15} /> حذف القاعدة</Button>
+            <Button variant="danger" disabled={!canApprovePricing || locked || busyId === rule.id} onClick={() => void remove(rule)}><Trash2 size={15} /> حذف القاعدة</Button>
           </div>
         </article>;
       })}
     </div>}
-    {showCreate && <PricingRuleModal key="create" onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
-    {editingRule && <PricingRuleModal key={editingRule.id} rule={editingRule} onClose={() => setEditingRule(null)} onSaved={async () => { await refetch(); setEditingRule(null); onNotice('تم تحديث القاعدة وإعادة احتساب الأسعار وفق التغييرات'); }} />}
+    {showCreate && <PricingRuleModal key="create" onClose={() => setShowCreate(false)} onSaved={async () => { await refetch(); setShowCreate(false); onNotice('تم حفظ القاعدة؛ وقد تبقى بانتظار اعتماد المدير قبل تطبيق السعر.'); }} />}
+    {editingRule && <PricingRuleModal key={editingRule.id} rule={editingRule} onClose={() => setEditingRule(null)} onSaved={async () => { await refetch(); setEditingRule(null); onNotice('تم حفظ التعديلات؛ وقد تحتاج القاعدة إلى اعتماد المدير قبل تطبيقها.'); }} />}
+    {approvalRule && <PricingApprovalModal key={approvalRule.id} rule={approvalRule} onClose={() => setApprovalRule(null)} onSaved={async () => { await refetch(); setApprovalRule(null); onNotice('تم اعتماد قاعدة التسعير وحُفظ سبب الاعتماد في سجل التدقيق.'); }} />}
   </>;
+}
+
+
+function PricingPreviewPanel() {
+  const { data: customers, loading: customersLoading, error: customersError } = useFetch(fetchCustomers);
+  const { data: products, loading: productsLoading, error: productsError } = useFetch(fetchProducts);
+  const [customerId, setCustomerId] = useState('');
+  const [productId, setProductId] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [preview, setPreview] = useState<CustomerTierPricePreview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const qty = Number(quantity);
+    if (!customerId || !productId || !Number.isInteger(qty) || qty < 1 || qty > 10000) {
+      setError('اختر العميل والمنتج وأدخل كمية صحيحة بين 1 و10000.'); return;
+    }
+    setBusy(true); setError(''); setPreview(null);
+    try { setPreview(await previewCustomerTierPrice({ customer_id: customerId, product_id: productId, quantity: qty })); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'تعذر حساب سعر العميل.'); }
+    finally { setBusy(false); }
+  }
+  return <section className="panel" style={{ marginBottom: 16 }}>
+    <div className="panel-head"><div><h2>معاينة سعر العميل</h2><p>تستخدم المعاينة محرك التسعير الخادمي نفسه المستخدم عند الطلب؛ القواعد غير المعتمدة لا تدخل في الحساب.</p></div></div>
+    {customersError && <ErrorBox message={customersError} />}
+    {productsError && <ErrorBox message={productsError} />}
+    <form onSubmit={submit} className="form-grid" style={{ alignItems: 'end' }}>
+      <Field label="العميل"><select value={customerId} onChange={e => { setCustomerId(e.target.value); setPreview(null); }} required disabled={customersLoading}>
+        <option value="">{customersLoading ? 'جار تحميل العملاء…' : 'اختر العميل'}</option>
+        {(customers ?? []).map(c => <option key={c.id} value={c.id}>{c.business_name} · {c.customer_code}</option>)}
+      </select></Field>
+      <Field label="المنتج"><select value={productId} onChange={e => { setProductId(e.target.value); setPreview(null); }} required disabled={productsLoading}>
+        <option value="">{productsLoading ? 'جار تحميل المنتجات…' : 'اختر المنتج'}</option>
+        {(products ?? []).filter(p => p.status === 'active').map(p => <option key={p.id} value={p.id}>{p.name} · {p.item_code}</option>)}
+      </select></Field>
+      <Field label="الكمية المطلوبة"><input type="number" min="1" max="10000" step="1" value={quantity} onChange={e => { setQuantity(e.target.value); setPreview(null); }} required /></Field>
+      <div><Button disabled={busy || customersLoading || productsLoading || !customerId || !productId}><Calculator size={16} />{busy ? 'جارٍ حساب السعر…' : 'معاينة السعر المعتمد'}</Button></div>
+    </form>
+    {error && <div className="form-error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
+    {preview && <div className="report-grid" style={{ marginTop: 14 }}>
+      <article className="report-metric"><Users size={20} /><span>العميل / الشريحة الفعلية</span><strong>{preview.customer_name}</strong><small>{preview.tier === 'wholesale' ? 'الجملة' : 'التجزئة'}</small></article>
+      <article className="report-metric"><Box size={20} /><span>سعر الوحدة</span><strong>{formatCurrency(Number(preview.unit_price))}</strong><small>{preview.item_code}</small></article>
+      <article className="report-metric"><ShoppingCart size={20} /><span>إجمالي الكمية</span><strong>{formatCurrency(Number(preview.line_total))}</strong><small>{formatNumber(Number(preview.quantity))} {preview.currency}</small></article>
+    </div>}
+    {preview && <p style={{ marginTop: 10, color: '#71868a', fontSize: 12 }}>المنتج: {preview.product_name} · السعر محسوب من قاعدة البيانات وفق الشريحة والكمية وحالة اعتماد العميل.</p>}
+  </section>;
+}
+
+function PricingApprovalModal({ rule, onClose, onSaved }: { rule: PricingRule; onClose: () => void; onSaved: () => Promise<void> | void }) {
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    if (note.trim().length < 3) { setError('اكتب سبب الاعتماد حتى يُحفظ القرار في سجل التدقيق.'); return; }
+    setSaving(true); setError('');
+    try { await approvePricingRule(rule.id, note); await onSaved(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'تعذر اعتماد قاعدة التسعير.'); }
+    finally { setSaving(false); }
+  }
+  return <Modal title="مراجعة واعتماد قاعدة التسعير" onClose={onClose}>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+      <p>القاعدة: <strong>{rule.name}</strong>. بعد الاعتماد يستطيع المحرك تطبيقها وفق الشريحة والكمية والنطاق والفترة المحددة.</p>
+      <Field label="سبب الاعتماد / ملاحظات المراجع"><textarea value={note} onChange={e => setNote(e.target.value)} maxLength={1000} minLength={3} required rows={4} placeholder="مثال: تمت مراجعة هامش الربح وحدود السعر ونطاق التطبيق." /></Field>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <div className="modal-actions"><button type="button" className="btn outline" onClick={onClose} disabled={saving}>إلغاء</button><Button disabled={saving || note.trim().length < 3}>{saving ? 'جارٍ اعتماد القاعدة…' : 'تأكيد الاعتماد'}</Button></div>
+    </form>
+  </Modal>;
 }
 
 function pricingRuleMethodForForm(rule?: PricingRule): CreatePricingRuleInput['calculation_method'] {

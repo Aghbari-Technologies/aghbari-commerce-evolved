@@ -120,6 +120,8 @@ export type PricingRule = {
   effective_until?: string | null;
   approved_at?: string | null;
   approved_by?: string | null;
+  approval_note?: string | null;
+  submitted_by?: string | null;
   version?: number;
   is_active: boolean;
   priority: number;
