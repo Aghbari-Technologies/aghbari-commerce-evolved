@@ -6,7 +6,7 @@ import {
   Smartphone, Store, Tag, Trash2, TrendingUp, Users, Zap,
 } from 'lucide-react';
 import {
-  createCategory, createCustomer, createProduct, deleteProduct, fetchAiAlerts,
+  createCategory, createCustomer, createProduct, createPricingRule, deletePricingRule, deleteProduct, fetchAiAlerts,
   fetchCategories, fetchCustomers, fetchDashboardStats, fetchOrders, fetchPricingRules,
   fetchProducts, fetchPromotions, togglePricingRule, togglePromotion,
   updateCustomerStatus, updateProduct,
@@ -217,7 +217,226 @@ function Orders({ onViewDetail }: { onViewDetail: (id: string) => void }) {
 }
 function orderLabel(status: string) { return ({ draft: 'مسودة', pending: 'جديد', confirmed: 'مؤكد', processing: 'قيد التجهيز', delivered: 'تم التسليم' }[status] ?? status); }
 
-function Pricing({ onNotice }: { onNotice: (m: string) => void }) { const { data, loading, error, refetch } = useFetch(fetchPricingRules); async function toggle(rule: PricingRule) { try { await togglePricingRule(rule.id, !rule.is_active); refetch(); onNotice(rule.is_active ? 'تم إيقاف القاعدة' : 'تم تفعيل القاعدة'); } catch (e) { onNotice(e instanceof Error ? e.message : 'تعذر تحديث القاعدة'); } } return <><Heading eyebrow="الأصناف والمخزون" title="التسعير والمخزون" description="قواعد موحدة لتسعير المنتجات ومتابعة التغطية" icon={SlidersHorizontal} /><div className="toolbar"><span className="toolbar-note">محرك التسعير يعمل وفق الأولوية</span><div className="toolbar-actions"><Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button><Button><Plus size={17} /> قاعدة جديدة</Button></div></div><div className="rule-grid">{loading ? <Loading /> : error ? <ErrorBox message={error} /> : data?.map((r) => <article className="rule-card" key={r.id}><div><span className="rule-number">{r.priority}</span><h2>{r.name}</h2></div><label className="switch"><input type="checkbox" checked={r.is_active} onChange={() => toggle(r)} /><span /></label><p>{r.adjustment_type === 'percentage' ? `تعديل بنسبة ${r.adjustment_value}%` : `تعديل بقيمة ${r.adjustment_value}`}</p></article>)}</div></>; }
+const PRICING_SCOPES = new Set(['default', 'all', 'product', 'category']);
+
+function pricingScopeLabel(rule: PricingRule): string {
+  if (rule.scope_type === 'default' || rule.scope_type === 'all') return 'كل الأصناف';
+  if (rule.scope_type === 'product') return 'منتج محدد';
+  if (rule.scope_type === 'category') return 'تصنيف محدد';
+  return 'نطاق قديم غير مدعوم';
+}
+
+function pricingMethodLabel(rule: PricingRule): string {
+  const method = rule.calculation_method ?? ({
+    percentage: 'add_percentage',
+    margin: 'margin_percentage',
+    fixed: 'fixed_price',
+    amount: 'add_subtract_amount',
+  } as Record<string, string>)[rule.adjustment_type] ?? '';
+  return ({
+    add_percentage: 'نسبة إضافة % على الأساس',
+    margin_percentage: 'هامش ربح % من سعر البيع',
+    fixed_price: 'سعر ثابت',
+    add_subtract_amount: 'إضافة / خصم مبلغ',
+  } as Record<string, string>)[method] ?? 'طريقة قديمة: ' + (rule.adjustment_type || 'غير محددة');
+}
+
+function pricingTargetLabel(rule: PricingRule): string {
+  return ({ both: 'الجملة والتجزئة', wholesale: 'الجملة فقط', retail: 'التجزئة فقط' } as Record<string, string>)[rule.target_tier ?? 'both'] ?? 'شريحة غير معروفة';
+}
+
+function Pricing({ onNotice }: { onNotice: (m: string) => void }) {
+  const { data, loading, error, refetch } = useFetch(fetchPricingRules);
+  const [showCreate, setShowCreate] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function toggle(rule: PricingRule) {
+    if (rule.manually_locked) return;
+    const next = !rule.is_active;
+    if (next && !PRICING_SCOPES.has(rule.scope_type)) {
+      onNotice('لا يمكن تفعيل القاعدة: نطاقها قديم وغير مدعوم. أوقفها أو أنشئ قاعدة جديدة.');
+      return;
+    }
+    setBusyId(rule.id);
+    try {
+      await togglePricingRule(rule.id, next);
+      await refetch();
+      onNotice(next ? 'تم تفعيل القاعدة وإعادة حساب أسعار الشرائح' : 'تم إيقاف القاعدة وإعادة حساب أسعار الشرائح');
+    } catch (cause) {
+      onNotice(cause instanceof Error ? cause.message : 'تعذر تحديث قاعدة التسعير');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(rule: PricingRule) {
+    if (rule.manually_locked || !window.confirm('حذف قاعدة «' + rule.name + '»؟ سيعيد محرك التسعير حساب الجملة والتجزئة من القواعد المتبقية، ويعود للسعر الأساسي عند عدم وجود قاعدة مطبقة.')) return;
+    setBusyId(rule.id);
+    try {
+      await deletePricingRule(rule.id);
+      await refetch();
+      onNotice('حُذفت القاعدة وسُجّل الإجراء في سجل التدقيق');
+    } catch (cause) {
+      onNotice(cause instanceof Error ? cause.message : 'تعذر حذف قاعدة التسعير');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return <>
+    <Heading eyebrow="الأصناف والمخزون" title="التسعير والمخزون" description="إدارة قواعد التسعير حسب طريقة الاحتساب وشريحة العميل والأولوية" icon={SlidersHorizontal} />
+    <section className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head"><div><h2>محرك التسعير</h2><p>تُطبّق القاعدة الأعلى أولوية ضمن النطاق والشريحة والكمية والفترة المحددة. الحساب وإعادة تسعير الشرائح يجريان داخل قاعدة البيانات.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><Button variant="secondary" onClick={() => void refetch()}><RefreshCw size={16} /> تحديث</Button><Button onClick={() => setShowCreate(true)}><Plus size={17} /> قاعدة جديدة</Button></div></div>
+      <div className="report-grid" style={{ marginTop: 12 }}>
+        <article className="report-metric"><SlidersHorizontal size={22} /><span>القواعد المسجلة</span><strong>{formatNumber(data?.length ?? 0)}</strong></article>
+        <article className="report-metric"><Check size={22} /><span>قواعد نشطة</span><strong>{formatNumber(data?.filter((rule) => rule.is_active).length ?? 0)}</strong></article>
+        <article className="report-metric"><AlertTriangle size={22} /><span>قواعد موقوفة / تتطلب مراجعة</span><strong>{formatNumber(data?.filter((rule) => !rule.is_active || (rule.requires_approval && !rule.approved_at) || !PRICING_SCOPES.has(rule.scope_type)).length ?? 0)}</strong></article>
+      </div>
+    </section>
+    {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !data?.length ? <Empty text="لا توجد قواعد تسعير. أضف أول قاعدة لتحديد أسعار الشرائح." /> : <div className="rule-grid">
+      {data.map((rule) => {
+        const unsupported = !PRICING_SCOPES.has(rule.scope_type);
+        const awaitingApproval = Boolean(rule.requires_approval && !rule.approved_at);
+        const locked = Boolean(rule.manually_locked);
+        const target = rule.target_tier ?? 'both';
+        const method = rule.calculation_method;
+        return <article className="rule-card" key={rule.id}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div><span className="rule-number">أولوية {rule.priority}</span><h2>{rule.name}</h2></div>
+            <label className="switch" title={locked ? 'القاعدة مقفلة يدويًا' : unsupported && !rule.is_active ? 'لا يمكن تفعيل نطاق قديم غير مدعوم' : rule.is_active ? 'إيقاف القاعدة' : 'تفعيل القاعدة'}>
+              <input type="checkbox" checked={rule.is_active} disabled={locked || busyId === rule.id || (unsupported && !rule.is_active) || awaitingApproval} onChange={() => void toggle(rule)} />
+              <span />
+            </label>
+          </div>
+          <p><strong>{pricingMethodLabel(rule)}</strong></p>
+          <p>{pricingTargetLabel(rule)} · الأساس: {rule.base_source === 'cost_price' || rule.base_type === 'cost_price' ? 'التكلفة' : 'السعر الأساسي'}</p>
+          <p>النطاق: {pricingScopeLabel(rule)}{rule.scope_value ? ' · ' + rule.scope_value : ''}</p>
+          <p>من كمية {formatNumber(Number(rule.min_quantity ?? 1))} · قيمة الاحتساب {formatNumber(Number(rule.adjustment_value))}</p>
+          {(rule.min_price != null || rule.max_price != null) && <p>حد السعر: {rule.min_price == null ? '—' : formatCurrency(Number(rule.min_price))} – {rule.max_price == null ? '—' : formatCurrency(Number(rule.max_price))}</p>}
+          {(rule.effective_from || rule.effective_until) && <p>الفترة: {rule.effective_from ? formatDateShort(rule.effective_from) : 'من البداية'} – {rule.effective_until ? formatDateShort(rule.effective_until) : 'بلا نهاية'}</p>}
+          {awaitingApproval && <p role="status" style={{ color: '#9a5b13', fontWeight: 800 }}>بانتظار الموافقة — لن تدخل القاعدة في الاحتساب قبل اعتمادها.</p>}
+          {unsupported && <p role="alert" style={{ color: '#9a5b13' }}>هذه قاعدة قديمة بنطاق غير مدعوم في المحرك الحالي. لن يُسمح بتفعيلها مجددًا.</p>}
+          {locked && <p role="status">قاعدة مقفلة يدويًا؛ التعديل والحذف معطلان.</p>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+            <Button variant="danger" disabled={locked || busyId === rule.id} onClick={() => void remove(rule)}><Trash2 size={15} /> حذف القاعدة</Button>
+          </div>
+        </article>;
+      })}
+    </div>}
+    {showCreate && <PricingRuleModal onClose={() => setShowCreate(false)} onSaved={async () => { setShowCreate(false); await refetch(); onNotice('تم إنشاء قاعدة التسعير وإعادة حساب أسعار الجملة والتجزئة'); }} />}
+  </>;
+}
+
+function PricingRuleModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> | void }) {
+  const { data: products, loading: productsLoading } = useFetch(fetchProducts);
+  const { data: categories, loading: categoriesLoading } = useFetch(fetchCategories);
+  const [name, setName] = useState('');
+  const [scopeType, setScopeType] = useState<'default' | 'all' | 'product' | 'category'>('default');
+  const [scopeValue, setScopeValue] = useState('');
+  const [targetTier, setTargetTier] = useState<'both' | 'wholesale' | 'retail'>('both');
+  const [method, setMethod] = useState<'add_percentage' | 'margin_percentage' | 'fixed_price' | 'add_subtract_amount'>('add_percentage');
+  const [baseSource, setBaseSource] = useState<'base_price' | 'cost_price'>('base_price');
+  const [adjustmentValue, setAdjustmentValue] = useState('10');
+  const [minQuantity, setMinQuantity] = useState('1');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [priority, setPriority] = useState('100');
+  const [effectiveFrom, setEffectiveFrom] = useState('');
+  const [effectiveUntil, setEffectiveUntil] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const amount = Number(adjustmentValue);
+    const quantity = Number(minQuantity);
+    const rank = Number(priority);
+    if (!name.trim() || !Number.isFinite(amount) || !Number.isFinite(quantity) || quantity <= 0 || quantity > 10000 ||
+        !Number.isInteger(rank) || rank < 1 || rank > 100000) {
+      setError('أكمل الاسم وقيمة الاحتساب والكمية والأولوية بأرقام صالحة.');
+      return;
+    }
+    if (method === 'margin_percentage' && (amount < 0 || amount >= 100)) {
+      setError('هامش الربح يجب أن يكون من 0% إلى أقل من 100%.');
+      return;
+    }
+    if (method === 'fixed_price' && amount < 0) {
+      setError('السعر الثابت لا يمكن أن يكون سالبًا.');
+      return;
+    }
+    const from = effectiveFrom ? new Date(effectiveFrom) : null;
+    const until = effectiveUntil ? new Date(effectiveUntil) : null;
+    if ((from && !Number.isFinite(from.getTime())) || (until && !Number.isFinite(until.getTime())) || (from && until && from > until)) {
+      setError('تحقق من تاريخي بداية ونهاية القاعدة.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const toIso = (date: string) => date ? new Date(date).toISOString() : null;
+      await createPricingRule({
+        name: name.trim(),
+        scope_type: scopeType,
+        scope_value: scopeType === 'product' || scopeType === 'category' ? scopeValue : null,
+        target_tier: targetTier,
+        calculation_method: method,
+        base_source: baseSource,
+        adjustment_value: amount,
+        min_quantity: quantity,
+        min_price: minPrice.trim() ? Number(minPrice) : null,
+        max_price: maxPrice.trim() ? Number(maxPrice) : null,
+        priority: rank,
+        effective_from: toIso(effectiveFrom),
+        effective_until: toIso(effectiveUntil),
+      });
+      await onSaved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'تعذر إنشاء قاعدة التسعير.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <Modal title="إنشاء قاعدة تسعير" onClose={onClose}>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+      <Field label="اسم القاعدة"><input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required placeholder="مثال: جملة بكمية كبيرة" /></Field>
+      <div className="form-grid">
+        <Field label="نطاق التطبيق"><select value={scopeType} onChange={(event) => { setScopeType(event.target.value as typeof scopeType); setScopeValue(''); }}><option value="default">كل الأصناف (افتراضي)</option><option value="all">كل الأصناف (عام)</option><option value="product">منتج محدد</option><option value="category">تصنيف محدد</option></select></Field>
+        <Field label="الشريحة المستهدفة"><select value={targetTier} onChange={(event) => setTargetTier(event.target.value as typeof targetTier)}><option value="both">الجملة والتجزئة</option><option value="wholesale">الجملة</option><option value="retail">التجزئة</option></select></Field>
+      </div>
+      {(scopeType === 'product' || scopeType === 'category') && <Field label={scopeType === 'product' ? 'المنتج' : 'التصنيف'}>
+        <select value={scopeValue} onChange={(event) => setScopeValue(event.target.value)} required disabled={scopeType === 'product' ? productsLoading : categoriesLoading}>
+          <option value="">{scopeType === 'product' ? (productsLoading ? 'جار تحميل المنتجات…' : 'اختر المنتج') : (categoriesLoading ? 'جار تحميل التصنيفات…' : 'اختر التصنيف')}</option>
+          {scopeType === 'product' ? (products ?? []).map((product) => <option key={product.id} value={product.id}>{product.name} · {product.item_code}</option>) : (categories ?? []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+        </select>
+      </Field>}
+      <div className="form-grid">
+        <Field label="طريقة الاحتساب"><select value={method} onChange={(event) => setMethod(event.target.value as typeof method)}><option value="add_percentage">نسبة إضافة % على الأساس</option><option value="margin_percentage">هامش ربح % من سعر البيع</option><option value="fixed_price">سعر ثابت</option><option value="add_subtract_amount">إضافة/خصم مبلغ (السالب للخصم)</option></select></Field>
+        <Field label="أساس الحساب"><select value={baseSource} onChange={(event) => setBaseSource(event.target.value as typeof baseSource)}><option value="base_price">السعر الأساسي</option><option value="cost_price">التكلفة</option></select></Field>
+      </div>
+      <div className="form-grid">
+        <Field label={method === 'add_percentage' || method === 'margin_percentage' ? 'النسبة المئوية' : method === 'fixed_price' ? 'السعر الثابت' : 'قيمة الإضافة/الخصم'}><input type="number" step="0.01" value={adjustmentValue} onChange={(event) => setAdjustmentValue(event.target.value)} required /></Field>
+        <Field label="تبدأ من كمية"><input type="number" min="0.001" max="10000" step="0.001" value={minQuantity} onChange={(event) => setMinQuantity(event.target.value)} required /></Field>
+      </div>
+      <div className="form-grid">
+        <Field label="أقل سعر (اختياري)"><input type="number" min="0" step="0.01" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} /></Field>
+        <Field label="أعلى سعر (اختياري)"><input type="number" min="0" step="0.01" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} /></Field>
+      </div>
+      <div className="form-grid">
+        <Field label="الأولوية (الرقم الأصغر أولًا)"><input type="number" min="1" max="100000" step="1" value={priority} onChange={(event) => setPriority(event.target.value)} required /></Field>
+        <div />
+      </div>
+      <div className="form-grid">
+        <Field label="وقت بدء القاعدة (اختياري)"><input type="datetime-local" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></Field>
+        <Field label="وقت انتهاء القاعدة (اختياري)"><input type="datetime-local" value={effectiveUntil} onChange={(event) => setEffectiveUntil(event.target.value)} /></Field>
+      </div>
+      <p style={{ color: '#71868a', fontSize: 12, lineHeight: 1.7 }}>الحفظ لا يغيّر قائمة الأسعار يدويًا؛ قاعدة البيانات تحسب الجملة والتجزئة وتكتب سجل التدقيق. لا تُطبّق القاعدة إلا ضمن النطاق والشريحة والكمية والفترة المختارة.</p>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <div className="modal-actions"><Button variant="outline" onClick={onClose} disabled={saving}>إلغاء</Button><Button disabled={saving || ((scopeType === 'product' && productsLoading) || (scopeType === 'category' && categoriesLoading))}>{saving ? 'جارٍ الحفظ...' : 'حفظ قاعدة التسعير'}</Button></div>
+    </form>
+  </Modal>;
+}
 
 function Offers({ onNotice }: { onNotice: (m: string) => void }) { const { data, loading, error, refetch } = useFetch(fetchPromotions); async function toggle(p: Promotion) { try { await togglePromotion(p.id, !p.is_active); refetch(); onNotice(p.is_active ? 'تم إيقاف العرض' : 'تم تفعيل العرض'); } catch (e) { onNotice(e instanceof Error ? e.message : 'تعذر تحديث العرض'); } } return <><Heading eyebrow="الأصناف والمخزون" title="العروض وشريط اليوم" description="إدارة العروض التي تظهر للعملاء وتحريك المبيعات" icon={Tag} /><div className="toolbar"><span className="toolbar-note">{data?.filter((p) => p.is_active).length ?? 0} عروض نشطة</span><div className="toolbar-actions"><Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button><Button><Plus size={17} /> عرض جديد</Button></div></div><div className="offer-grid">{loading ? <Loading /> : error ? <ErrorBox message={error} /> : data?.map((p) => <article className="offer-card" key={p.id}><div className="offer-top"><span className="discount">{p.discount_value}%</span><label className="switch"><input type="checkbox" checked={p.is_active} onChange={() => toggle(p)} /><span /></label></div><h2>{p.title}</h2><p>{p.description ?? 'عرض ترويجي لعملاء الأغبري'}</p><div className="offer-date"><span>من {p.start_date}</span><span>إلى {p.end_date}</span></div></article>)}</div></>; }
 
