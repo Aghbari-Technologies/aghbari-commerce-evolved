@@ -73,17 +73,71 @@ function ImportEngine({ onNotice }: { onNotice: (message: string) => void }) {
 }
 
 function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: jobs, loading: jobsLoading } = useFetch(fetchImportJobs);
-  const latest = jobs?.find((job) => job.status === 'completed');
-  const { data: rows, loading: rowsLoading } = useFetch(() => latest ? fetchImportRows(latest.id) : Promise.resolve([] as ImportJobRow[]), [latest?.id]);
+  const { data: snapshots, loading, error, refetch } = useFetch(fetchOnyxSnapshots);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
+  const selectedId = selectedSnapshotId || snapshots?.[0]?.id || '';
+  const selected = snapshots?.find((snapshot) => snapshot.id === selectedId);
+  const { data: rows, loading: rowsLoading, refetch: refetchRows } = useFetch(
+    () => selectedId ? fetchOnyxSnapshotRows(selectedId) : Promise.resolve([]),
+    [selectedId],
+  );
+  const [reconciling, setReconciling] = useState(false);
   const analytics = useMemo(() => {
     const validRows = rows ?? [];
     const quantities = validRows.map((row) => Number(row.data?.quantity ?? 0)).filter((value) => Number.isFinite(value));
     const revenue = validRows.reduce((sum, row) => sum + Number(row.data?.revenue ?? 0), 0);
-    const uniqueItems = new Set(validRows.map((row) => String(row.data?.item_code ?? '')).filter(Boolean)).size;
-    return { rows: validRows.length, uniqueItems, quantity: quantities.reduce((sum, value) => sum + value, 0), revenue };
+    const uniqueItems = new Set(validRows.map((row) => String(row.canonical_key ?? row.data?.item_code ?? '')).filter(Boolean)).size;
+    return {
+      rows: validRows.length,
+      uniqueItems,
+      quantity: quantities.reduce((sum, value) => sum + value, 0),
+      revenue,
+    };
   }, [rows]);
-  return <div className="onyx-dashboard"><div className="onyx-banner"><div><span>بيئة تحليلية معزولة</span><h2>أونكس برو — لوحة التحليل العمودي</h2><p>تعمل حصراً على الدفعات المستوردة ولا تتداخل مع قاعدة التشغيل الحية.</p></div><ShieldCheck size={42} /></div>{latest && <div className="onyx-source"><History size={16} /> المصدر: <strong>{latest.file_name}</strong><span>Snapshot #{latest.id.slice(0, 8)}</span></div>}{jobsLoading || rowsLoading ? <Loading /> : !latest ? <Empty text="استورد دفعة مكتملة لبدء التحليل" /> : <><section className="onyx-kpis"><Metric icon={Database} label="السجلات" value={formatNumber(analytics.rows)} /><Metric icon={Package} label="الأصناف الفريدة" value={formatNumber(analytics.uniqueItems)} /><Metric icon={Gauge} label="إجمالي الكمية" value={formatNumber(analytics.quantity)} /><Metric icon={BarChart3} label="الإيراد المحسوب" value={formatNumber(analytics.revenue)} /></section><section className="onyx-section"><div className="onyx-section-head"><div><span>التحليل الحسابي المباشر</span><h3>ملخص الاتجاهات التشغيلية</h3></div><Button variant="secondary" onClick={() => onNotice('تم تحديث التحليل من اللقطة الحالية')}><RefreshCw size={15} /> تحديث التحليل</Button></div><div className="onyx-insight-grid"><Insight icon={Zap} title="جودة المصدر" body={`الدفعة ${qualityLabel(latest.data_quality_score ?? 0)} بجودة ${latest.data_quality_score ?? 0}/100، والأرقام محسوبة برمجياً من السجلات المنظمة.`} /><Insight icon={ShieldCheck} title="العزل التشغيلي" body="لا يتم تعديل المنتجات أو العملاء أو المخزون الحي من هذه الشاشة." /><Insight icon={Activity} title="الخطوة التالية" body={analytics.uniqueItems ? 'يمكنك الانتقال إلى مطابقة المخزون لمقارنة رصيد التقرير مع الرصيد المباشر.' : 'لا توجد بيانات كافية لإنتاج توصيات.'} /></div></section><section className="onyx-section"><div className="onyx-section-head"><div><span>التوصيات</span><h3>بطاقات قابلة للتنفيذ</h3></div></div><div className="action-card"><div className="action-card-icon"><AlertTriangle size={20} /></div><div><strong>{analytics.quantity === 0 ? 'Forecast Unavailable: Insufficient Historical Data' : 'مراجعة الأصناف ذات الرصيد غير المتسق'}</strong><p>المصدر: {latest.file_name} — Snapshot ID: {latest.id.slice(0, 8)} — Confidence Score: {latest.data_quality_score ?? 0}%</p></div><Button onClick={() => onNotice('تم فتح وحدة مطابقة المخزون')}>مطابقة الآن</Button></div></section></>}</div>;
+
+  async function reconcileNow() {
+    if (!selectedId || reconciling) return;
+    setReconciling(true);
+    try {
+      const result = await runInventoryReconciliation(selectedId);
+      onNotice('اكتملت المطابقة: ' + result.matched_count + ' متطابق، ' + result.changed_count + ' مختلف، ' + result.new_count + ' جديد، ' + result.invalid_count + ' غير صالح.');
+    } catch (cause) {
+      onNotice(cause instanceof Error ? cause.message : 'تعذر تنفيذ المطابقة');
+    } finally {
+      setReconciling(false);
+    }
+  }
+
+  return <div className="onyx-dashboard">
+    <div className="onyx-banner"><div><span>بيئة تحليلية معزولة</span><h2>أونكس برو — لقطات مستوردة مستقلة</h2><p>تعتمد التحليلات هنا على Snapshot ثابت من الاستيراد؛ لا تعدّل هذه الشاشة المنتجات أو المخزون التشغيلي.</p></div><ShieldCheck size={42} /></div>
+    <section className="panel" style={{ margin: '14px 0' }}>
+      <div className="panel-head"><div><h2>مصدر التحليل</h2><p>اختر لقطة معتمدة. لا تُحلّل دفعات staging أو قيد المراجعة.</p></div><Button variant="outline" onClick={() => { refetch(); refetchRows(); }}><RefreshCw size={15} /> تحديث</Button></div>
+      {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !snapshots?.length ? <Empty text="لا توجد لقطات Onyx معتمدة. أكمل استيرادًا بجودة مقبولة أولًا." /> :
+        <label className="form-field"><span>Snapshot</span><select value={selectedId} onChange={(event) => setSelectedSnapshotId(event.target.value)}>{snapshots.map((snapshot) => <option key={snapshot.id} value={snapshot.id}>{snapshot.source_file_name ?? 'ملف مستورد'} — v{snapshot.snapshot_version} — {new Date(snapshot.created_at).toLocaleString('ar')}</option>)}</select></label>}
+    </section>
+    {selected && !loading && <>
+      <div className="onyx-source"><History size={16} /> المصدر: <strong>{selected.source_file_name ?? '—'}</strong><span>Snapshot #{selected.id.slice(0, 8)} • Version {selected.snapshot_version}</span><span>جودة المصدر {selected.data_quality_score}/100</span></div>
+      {rowsLoading ? <Loading /> : <section className="onyx-kpis">
+        <Metric icon={Database} label="السجلات في اللقطة" value={formatNumber(analytics.rows)} />
+        <Metric icon={Package} label="مفاتيح فريدة" value={formatNumber(analytics.uniqueItems)} />
+        <Metric icon={Gauge} label="إجمالي الكمية" value={formatNumber(analytics.quantity)} />
+        <Metric icon={BarChart3} label="الإيراد المحسوب" value={formatNumber(analytics.revenue)} />
+      </section>}
+      <section className="onyx-section">
+        <div className="onyx-section-head"><div><span>تحليل حتمي</span><h3>مصدر البيانات وجودتها</h3></div></div>
+        <div className="onyx-insight-grid">
+          <Insight icon={ShieldCheck} title="العزل التشغيلي" body="هذه الصفحة تقرأ onyx_snapshot_rows ولا تكتب إلى المنتجات أو العملاء أو المخزون المباشر." />
+          <Insight icon={Zap} title="جودة المصدر" body={'Snapshot ' + selected.id.slice(0, 8) + ' — DQS ' + selected.data_quality_score + '/100. الأرقام محسوبة برمجيًا من الصفوف المنظمة.'} />
+          <Insight icon={Activity} title="التنبؤ" body="Forecast Unavailable: Insufficient Historical Data. لقطة واحدة لا تكفي لإسناد تنبؤ زمني موثوق." />
+        </div>
+      </section>
+      <section className="onyx-section">
+        <div className="onyx-section-head"><div><span>مطابقة المخزون</span><h3>قارن هذا Snapshot مع المخزون المباشر</h3></div></div>
+        <div className="action-card"><div className="action-card-icon"><AlertTriangle size={20} /></div><div><strong>مطابقة قراءة فقط</strong><p>يُنشأ سجل تدقيق دائم للفروقات. لا يتغير المخزون المباشر من هذه الخطوة.</p></div><Button disabled={reconciling || rowsLoading} onClick={() => void reconcileNow()}>{reconciling ? 'جارٍ تنفيذ المطابقة...' : 'مطابقة الآن'}</Button></div>
+      </section>
+      {rows?.length ? <section className="onyx-section panel"><div className="panel-head"><div><h3>عينة من صفوف اللقطة الثابتة</h3><p>عرض أول 50 صفًا فقط في الواجهة؛ بيانات المصدر محفوظة منفصلة.</p></div></div><TableWrap><table><thead><tr><th>رقم الصف</th><th>المفتاح القياسي</th><th>الحالة</th><th>بيانات الصف</th></tr></thead><tbody>{rows.slice(0,50).map((row) => <tr key={row.id}><td>{row.row_number}</td><td><code>{row.canonical_key ?? '—'}</code></td><td>{row.status}</td><td><code>{JSON.stringify(row.data).slice(0,220)}</code></td></tr>)}</tbody></table></TableWrap></section> : null}
+    </>}
+  </div>;
 }
 
 function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => void }) {
