@@ -10,7 +10,7 @@ import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/compon
 import {
   DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
   PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
-  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
+  applyImportProfileRules, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
 import type { ImportJob, ImportProfile } from "@/lib/types";
@@ -192,12 +192,12 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         mergeStrategy: profile?.merge_strategy ?? "manual_review",
         isFullDataset: profile?.is_full_dataset ?? false,
         dateRules: profile?.date_rules ?? {},
-        synonyms: Object.entries(profileSynonyms).sort(([a], [b]) => a.localeCompare(b)),
+        synonyms: Object.entries(profileSynonyms).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
         transformations,
         validations,
       };
       processingConfigFingerprint = new IncrementalSha256()
-        .update(new TextEncoder().encode(JSON.stringify(processingConfig)))
+        .update(new TextEncoder().encode(stableJsonStringify(processingConfig)))
         .digestHex();
 
       setStage("reading");
