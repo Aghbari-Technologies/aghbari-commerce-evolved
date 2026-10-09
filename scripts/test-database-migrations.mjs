@@ -274,6 +274,68 @@ async function main() {
   );
   assert.equal(saleMovements[0].count, 1, "delivery must not consume the same stock twice");
 
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const reviewOrderResult = await db.unsafe(
+    "select public.place_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
+    [db.json([{ product_id: productId, quantity: 2 }]), "CI review workflow", "CI Company One", "CI Customer One",
+      "7771111111", "credit", "ci-review-order-000001"],
+  );
+  const reviewOrder = reviewOrderResult[0].result;
+  const reviewItemRows = await db.unsafe(
+    "select id,quantity,unit_price_snapshot from public.order_items where order_id=$1",
+    [reviewOrder.id],
+  );
+  assert.equal(reviewItemRows.length, 1, "review smoke order should have one line");
+  const reviewLines = [{
+    item_id: reviewItemRows[0].id,
+    quantity: 1,
+    unit_price: 36000,
+    price_reason: "CI one-order override; not a catalog price change",
+  }];
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const stagedReview = await db.unsafe(
+    "select public.review_order_lines($1::uuid,$2::jsonb,$3,$4) as result",
+    [reviewOrder.id, db.json(reviewLines), "stage", "CI order review"],
+  );
+  assert.equal(stagedReview[0].result.quantity_review_required, true, "changed quantities must be marked unapproved");
+  await expectFailure(
+    "direct confirmation with unapproved order proposals",
+    () => db.unsafe("update public.orders set status='confirmed' where id=$1", [reviewOrder.id]),
+    /اعتماد كل الكميات والأسعار|unapproved|approval/i,
+  );
+  const approvedReview = await db.unsafe(
+    "select public.review_order_lines($1::uuid,$2::jsonb,$3,$4) as result",
+    [reviewOrder.id, db.json(reviewLines), "approve", "CI order review"],
+  );
+  assert.equal(approvedReview[0].result.status, "confirmed", "approved review must confirm the order");
+  assert.equal(Number(approvedReview[0].result.total_amount), 36000, "order total must be recalculated from approved price and quantity");
+  const reviewedState = await db.unsafe(
+    "select status,total_amount,quantity_review_required,payment_request_status,customer_payment_requested_at from public.orders where id=$1",
+    [reviewOrder.id],
+  );
+  assert.equal(reviewedState[0].status, "confirmed");
+  assert.equal(Number(reviewedState[0].total_amount), 36000);
+  assert.equal(reviewedState[0].quantity_review_required, false);
+  assert.equal(reviewedState[0].payment_request_status, "requested");
+  assert.ok(reviewedState[0].customer_payment_requested_at, "customer payment request should be recorded at confirmation");
+  const reviewedLines = await db.unsafe(
+    "select quantity,requested_quantity,approved_quantity,unit_price_snapshot,approved_unit_price,price_override_reason from public.order_items where order_id=$1",
+    [reviewOrder.id],
+  );
+  assert.equal(Number(reviewedLines[0].requested_quantity), 2, "original requested quantity must remain auditable");
+  assert.equal(Number(reviewedLines[0].approved_quantity), 1);
+  assert.equal(Number(reviewedLines[0].quantity), 1);
+  assert.equal(Number(reviewedLines[0].approved_unit_price), 36000);
+  assert.match(reviewedLines[0].price_override_reason, /CI one-order override/);
+  const reviewedInvoice = await db.unsafe("select total_amount from public.customer_invoices where order_id=$1", [reviewOrder.id]);
+  assert.equal(reviewedInvoice.length, 1, "approval should issue exactly one invoice");
+  assert.equal(Number(reviewedInvoice[0].total_amount), 36000);
+  process.stdout.write("PASS order-review approval, stale/unapproved confirmation guard, one-order price override, invoice and payment-request lifecycle\\n");
+
   process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle.\n");
 }
 
