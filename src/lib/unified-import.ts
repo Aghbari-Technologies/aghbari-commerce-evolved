@@ -785,10 +785,17 @@ export async function parseXlsxFirstWorksheet(
     const dataEnd = dataStart + entry.compressedSize;
     if (dataStart < entry.localHeaderOffset + 30 || dataEnd > file.size) throw new Error('حدود بيانات مكون XLSX غير صالحة.');
     const member = file.slice(dataStart, dataEnd);
-    let stream: ReadableStream<Uint8Array>;
     if (entry.compressionMethod === 0) {
-      stream = xlsxBlobStream(member);
-    } else {
+      const plainBytes = new Uint8Array(await readXlsxBlobArrayBuffer(member));
+      if (plainBytes.byteLength !== entry.uncompressedSize ||
+          expandedBytes + plainBytes.byteLength > expandedLimit) {
+        throw new Error('حجم مكون XLSX المخزن لا يطابق الفهرس أو يتجاوز الحد الآمن.');
+      }
+      expandedBytes += plainBytes.byteLength;
+      return new TextDecoder('utf-8', { fatal: false }).decode(plainBytes);
+    }
+    let stream: ReadableStream<Uint8Array>;
+    {
       if (typeof DecompressionStream === 'undefined') throw new Error('المتصفح لا يدعم فك ضغط XLSX؛ استخدم CSV أو اطلب تحويل الملف.');
       try {
         stream = xlsxBlobStream(member).pipeThrough(new DecompressionStream('deflate-raw' as CompressionFormat)) as ReadableStream<Uint8Array>;
