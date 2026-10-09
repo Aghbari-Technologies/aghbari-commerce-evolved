@@ -84,6 +84,9 @@ export type OrderItem = {
   price_override_reason?: string | null;
   adjusted_by?: string | null;
   adjusted_at?: string | null;
+  proposed_quantity?: number | null;
+  proposed_unit_price?: number | null;
+  proposed_price_reason?: string | null;
 };
 
 export type InventoryBalance = {
