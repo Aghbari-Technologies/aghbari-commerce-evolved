@@ -76,9 +76,10 @@ This file records every source requirement area so implementation is reviewable.
 
 ### Implementation status
 - **PARTIAL / PREVIOUSLY TESTED IN ISOLATED DB:** transactional checkout, server price resolver, quantity breaks, idempotency, credit checks, stock reserve/release/consume, legal state transitions, invoice and payment RPCs.
+- **ADDED (order-creation UI):** removed the base-price column from the customer quick-order matrix because it is an order-building surface; catalogue/product detail price display and the separately authorized account statement remain distinct surfaces.
 - **ADDED / CI VERIFICATION PENDING:** requested/approved quantity and price-override metadata, adjustment notice/payment-request lifecycle fields.
 - **ADDED / CI VERIFICATION PENDING:** the order-review editor now reports dirty/staged state to the admin shell immediately; sidebar links, quick-command navigation, storefront switching, sign-out and back controls refuse to leave; TanStack Router `useBlocker` also blocks route transitions and browser before-unload while review is unapproved, with a return-to-review dialog. This is code-level protection; authenticated browser/E2E proof remains open.
-- **NOT PROVEN:** full browser edit-and-approve acceptance recording, server-authorized price override and invoice snapshot consistency under production RLS, customer stepper/adjustment notices across all routes, hiding prices on every customer order view, final payment request in production, server-generated PDF.
+- **NOT PROVEN:** authenticated browser sweep over every customer order/invoice route and intercepted API response; full edit-and-approve recording; server-authorized price override and invoice snapshot consistency under production RLS; payment-request runtime behavior; server-generated PDF.
 
 ## Phase 4 — Outbox, background queues, cache and Arabic search
 
@@ -183,3 +184,5 @@ Definition of Done:
 - 2026-10-09: XLSX first-visible-sheet parsing connected to the official Unified Import Engine; acceptance fixture covers shared strings, inline text, Arabic sheet names, and zero-masked numeric SKU preservation. XLS/PDF continue to use explicit manual-mapping fallback until trustworthy parsers are available.
 
 - 2026-10-09: added a shared Arabic catalog search matcher to storefront, customer quote and reorder screens, with bounded fuzzy name matching and strict exact/prefix identifier matching; dedicated regression tests added. Runtime/browser and performance targets remain separate proof gates.
+
+- 2026-10-09: removed base-price display from the customer quick-order matrix to align the order-building screen with customer order-price privacy; catalogue/product detail pricing remains a separate intentional catalog surface. Full browser and API-response privacy acceptance is still required.
