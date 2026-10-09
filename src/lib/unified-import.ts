@@ -203,7 +203,7 @@ export function validateImportProfileRules(transformations: unknown[], validatio
 
 function normalizeArabicValue(value: string): string {
   return value.toLocaleLowerCase('ar')
-    .replace(/[ًٌٍَُِّْـٰ]/g, '')
+    .replace(/[\u0640]/g, '').replace(/\p{M}+/gu, '')
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ة/g, 'ه')
