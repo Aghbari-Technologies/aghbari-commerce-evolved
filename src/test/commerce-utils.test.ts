@@ -1,4 +1,4 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, shouldPersistParsedImportRow, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
@@ -52,6 +52,13 @@ describe('commerce completion utilities', () => {
     digest.update(new TextEncoder().encode('b'));
     digest.update(new TextEncoder().encode('c'));
     expect(digest.digestHex()).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('serializes import fingerprint configuration deterministically across object key order', () => {
+    expect(stableJsonStringify({ b: 2, a: { y: true, x: 1 } }))
+      .toBe(stableJsonStringify({ a: { x: 1, y: true }, b: 2 }));
+    expect(stableJsonStringify({ transformations: [{ field: 'item_code', operation: 'trim' }] }))
+      .not.toBe(stableJsonStringify({ transformations: [{ field: 'item_code', operation: 'uppercase' }] }));
   });
 
   it('accepts only a contiguous, well-formed prefix of verified import chunks for resume', () => {
