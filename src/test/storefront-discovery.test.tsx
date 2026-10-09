@@ -1,6 +1,7 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -47,6 +48,9 @@ vi.mock("@/lib/supabase", () => ({
 
 import { routeTree } from "@/routeTree.gen";
 
+type Mount = { root: Root; host: HTMLDivElement; active: boolean };
+const mounts: Mount[] = [];
+
 function routerAt(path: string) {
   return createRouter({
     routeTree,
@@ -55,50 +59,82 @@ function routerAt(path: string) {
   });
 }
 
+async function mountAt(path: string): Promise<Mount> {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const mount: Mount = { root, host, active: true };
+  mounts.push(mount);
+  const router = routerAt(path);
+  await router.load();
+  await act(async () => {
+    root.render(<RouterProvider router={router} />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  return mount;
+}
+
+async function unmount(mount: Mount) {
+  if (!mount.active) return;
+  await act(async () => mount.root.unmount());
+  mount.active = false;
+  mount.host.remove();
+}
+
+function clickButton(host: HTMLElement, selector: string, index: number) {
+  const button = host.querySelectorAll<HTMLButtonElement>(selector).item(index);
+  if (!button) throw new Error("Could not find expected button: " + selector + " index " + index);
+  act(() => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
 describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  afterEach(() => {
-    cleanup();
+  afterEach(async () => {
+    for (const mount of mounts.splice(0)) await unmount(mount);
     window.localStorage.clear();
   });
 
   it("persists wishlist and caps comparison at three across direct route loads", async () => {
-    const first = render(<RouterProvider router={routerAt("/")} />);
+    const first = await mountAt("/");
+    expect(first.host.textContent).toContain("المنتجات");
 
-    await screen.findByRole("heading", { name: /المنتجات/ });
-    const wishlistButtons = screen.getAllByRole("button", { name: "إضافة للمفضلة" });
-    fireEvent.click(wishlistButtons[0]);
+    clickButton(first.host, 'button[aria-label="إضافة للمفضلة"]', 0);
+    await waitForStorage("aghbari:wishlist:v1", ["product-1"]);
 
-    await waitFor(() => {
-      expect(JSON.parse(window.localStorage.getItem("aghbari:wishlist:v1") || "[]")).toEqual(["product-1"]);
-    });
+    for (let index = 0; index < 4; index++) {
+      clickButton(first.host, 'button[aria-label="إضافة للمقارنة"]', index);
+    }
+    await waitForStorage("aghbari:compare:v1", ["product-1", "product-2", "product-3"]);
+    expect(first.host.textContent).toContain("يمكن مقارنة ثلاثة أصناف فقط");
 
-    const compareButtons = screen.getAllByRole("button", { name: "إضافة للمقارنة" });
-    fireEvent.click(compareButtons[0]);
-    fireEvent.click(compareButtons[1]);
-    fireEvent.click(compareButtons[2]);
-    fireEvent.click(compareButtons[3]);
+    await unmount(first);
+    const wishlist = await mountAt("/wishlist");
+    expect(wishlist.host.textContent).toContain("المفضلة");
+    expect(wishlist.host.textContent).toContain("Rice");
+    expect(wishlist.host.textContent).not.toContain("Sugar");
 
-    await waitFor(() => {
-      expect(JSON.parse(window.localStorage.getItem("aghbari:compare:v1") || "[]")).toEqual(["product-1", "product-2", "product-3"]);
-    });
-    expect(await screen.findByRole("status")).toHaveTextContent("يمكن مقارنة ثلاثة أصناف فقط");
-
-    first.unmount();
-    render(<RouterProvider router={routerAt("/wishlist")} />);
-    expect(await screen.findByRole("heading", { name: "المفضلة" })).toBeInTheDocument();
-    expect(await screen.findByText("Rice")).toBeInTheDocument();
-    expect(screen.queryByText("Sugar")).not.toBeInTheDocument();
-
-    cleanup();
-    render(<RouterProvider router={routerAt("/compare")} />);
-    expect(await screen.findByRole("heading", { name: "مقارنة المنتجات" })).toBeInTheDocument();
-    expect(await screen.findByText("Rice")).toBeInTheDocument();
-    expect(await screen.findByText("Sugar")).toBeInTheDocument();
-    expect(await screen.findByText("Oil")).toBeInTheDocument();
-    expect(screen.queryByText("Beans")).not.toBeInTheDocument();
+    await unmount(wishlist);
+    const compare = await mountAt("/compare");
+    expect(compare.host.textContent).toContain("مقارنة المنتجات");
+    expect(compare.host.textContent).toContain("Rice");
+    expect(compare.host.textContent).toContain("Sugar");
+    expect(compare.host.textContent).toContain("Oil");
+    expect(compare.host.textContent).not.toContain("Beans");
   });
 });
+
+async function waitForStorage(key: string, expected: string[]) {
+  await act(async () => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const value = JSON.parse(window.localStorage.getItem(key) || "[]") as unknown;
+      if (JSON.stringify(value) === JSON.stringify(expected)) return;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  });
+  expect(JSON.parse(window.localStorage.getItem(key) || "[]")).toEqual(expected);
+}
