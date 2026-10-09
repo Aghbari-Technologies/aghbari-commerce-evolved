@@ -244,6 +244,9 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
       });
       checkpointFingerprintPersisted = true;
       const verifiedChunks = new Set(verifiedChunkNumbers);
+      if (extension === "xlsx" && verifiedChunks.size > 0) {
+        throw new Error("هذه الدفعة لها شرائح XLSX مؤكدة جزئيًا. لا يمكن استئناف XLSX الجزئي بأمان في هذه النسخة؛ اختر «إنشاء نسخة جديدة» بعد مراجعة السجل.");
+      }
       if (verifiedChunks.size > 0) {
         setStatusMessage("استئناف آمن: سيعاد بناء حالة قراءة CSV محليًا، وتُتجاوز كتابة الشرائح المؤكدة، ويستمر الحفظ من أول شريحة غير مؤكدة.");
       }
@@ -301,35 +304,82 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         setStage("validating");
       };
 
-      const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
       let processedBytes = 0;
-      for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
-        while (pausedRef.current && !cancelRef.current) await delay(180);
-        if (cancelRef.current) break;
-        currentChunkNumber = chunkNumber;
-        const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
-        const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
-        const chunkHash = new IncrementalSha256().update(bytes).digestHex();
-        await parser.push(decoder.decode(bytes, { stream: byteOffset + bytes.length < file.size }), consumeRow, false);
-        await flushBatch();
-        if (verifiedChunks.has(chunkNumber)) {
-          const checkpoint = uploadManifest[chunkNumber];
-          if (!checkpoint || checkpoint.chunk_hash !== chunkHash) {
-            throw new Error("بصمة الشريحة " + (chunkNumber + 1) + " تختلف عن نقطة الاستئناف المحفوظة؛ لم يتم تجاوزها.");
+      let xlsxWorksheetName: string | null = null;
+      if (extension === "csv") {
+        const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+        for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
+          while (pausedRef.current && !cancelRef.current) await delay(180);
+          if (cancelRef.current) break;
+          currentChunkNumber = chunkNumber;
+          const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
+          const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+          const chunkHash = new IncrementalSha256().update(bytes).digestHex();
+          await parser.push(decoder.decode(bytes, { stream: byteOffset + bytes.length < file.size }), consumeRow, false);
+          await flushBatch();
+          if (verifiedChunks.has(chunkNumber)) {
+            const checkpoint = uploadManifest[chunkNumber];
+            if (!checkpoint || checkpoint.chunk_hash !== chunkHash) {
+              throw new Error("بصمة الشريحة " + (chunkNumber + 1) + " تختلف عن نقطة الاستئناف المحفوظة؛ لم يتم تجاوزها.");
+            }
+          } else {
+            await recordImportUploadChunk({
+              sessionId: uploadSession.id,
+              chunkNumber,
+              byteOffset,
+              byteSize: bytes.byteLength,
+              chunkHash,
+            });
           }
-        } else {
-          await recordImportUploadChunk({
-            sessionId: uploadSession.id,
-            chunkNumber,
-            byteOffset,
-            byteSize: bytes.byteLength,
-            chunkHash,
-          });
+          processedBytes += bytes.byteLength;
+          setProcessed(dataRows);
+          setStage("normalizing");
+          setProgress(Math.min(82, 10 + Math.round((processedBytes / Math.max(file.size, 1)) * 72)));
         }
-        processedBytes += bytes.byteLength;
-        setProcessed(dataRows);
-        setStage("normalizing");
-        setProgress(Math.min(82, 10 + Math.round((processedBytes / Math.max(file.size, 1)) * 72)));
+      } else {
+        // XLSX row provenance is inside compressed ZIP members, not raw-file byte chunks.
+        // A failed run with recorded byte checkpoints is therefore fail-closed above. Fresh or
+        // uncheckpointed runs parse once, persist idempotently, then record the raw-byte manifest.
+        setStage("reading");
+        setProgress(18);
+        let worksheetRows = 0;
+        const workbook = await parseXlsxFirstWorksheet(file, async (values) => {
+          while (pausedRef.current && !cancelRef.current) await delay(180);
+          if (cancelRef.current) return;
+          currentChunkNumber = -1;
+          await consumeRow(values);
+          worksheetRows += 1;
+          if (worksheetRows % 100 === 0) {
+            setProcessed(dataRows);
+            setProgress(Math.min(70, 18 + Math.round((worksheetRows / (MAX_IMPORT_ROWS + 1)) * 52)));
+          }
+        });
+        xlsxWorksheetName = workbook.worksheetName;
+        if (cancelRef.current) {
+          setProcessed(dataRows);
+        } else {
+          await flushBatch();
+          if (!headers) throw new Error("ورقة XLSX لا تحتوي على صف عناوين صالح.");
+          setStage("normalizing");
+          setProgress(72);
+          const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+          for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
+            while (pausedRef.current && !cancelRef.current) await delay(180);
+            if (cancelRef.current) break;
+            const byteOffset = chunkNumber * UPLOAD_CHUNK_BYTES;
+            const bytes = new Uint8Array(await file.slice(byteOffset, Math.min(file.size, byteOffset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+            const chunkHash = new IncrementalSha256().update(bytes).digestHex();
+            await recordImportUploadChunk({
+              sessionId: uploadSession.id,
+              chunkNumber,
+              byteOffset,
+              byteSize: bytes.byteLength,
+              chunkHash,
+            });
+            processedBytes += bytes.byteLength;
+            setProgress(Math.min(82, 72 + Math.round((processedBytes / Math.max(file.size, 1)) * 10)));
+          }
+        }
       }
 
       if (cancelRef.current) {
@@ -346,10 +396,14 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
         return;
       }
 
-      finalizingCsv = true;
-      await parser.push(decoder.decode(), consumeRow, true);
-      await flushBatch();
-      if (!headers) throw new Error("تعذر اكتشاف صف عناوين صالح في CSV.");
+      if (extension === "csv") {
+        finalizingCsv = true;
+        await parser.push(decoder.decode(), consumeRow, true);
+        await flushBatch();
+        if (!headers) throw new Error("تعذر اكتشاف صف عناوين صالح في CSV.");
+      } else if (!headers) {
+        throw new Error("ورقة XLSX لا تحتوي على صف عناوين صالح.");
+      }
       setStage("deduplicating");
       setProgress(86);
       await updateImportJob(job.id, {
@@ -362,7 +416,8 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           profile_version: profile?.version ?? null,
           processing_config_fingerprint: processingConfigFingerprint,
           period_key: selectedPeriod,
-          parser: "streaming-csv",
+          parser: extension === "csv" ? "streaming-csv" : "xlsx-first-visible-sheet",
+          worksheet_name: xlsxWorksheetName,
           processing_chunk_rows: PROCESSING_CHUNK_ROWS,
           upload_chunk_bytes: UPLOAD_CHUNK_BYTES,
         },
