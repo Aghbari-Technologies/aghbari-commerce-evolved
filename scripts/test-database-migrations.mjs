@@ -125,6 +125,16 @@ async function main() {
     "insert into public.organizations(id,name,currency) values($1,'Foreign organization','YER') on conflict(id) do nothing",
     [otherOrganizationId],
   );
+  const foreignProfileId = "f6666666-6666-4666-8666-666666666666";
+  const foreignAuthUserId = "66666666-6666-4666-8666-666666666666";
+  await db.unsafe(
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'Foreign CI Profile','foreign-ci-profile@example.test',true) on conflict(id) do nothing",
+    [foreignProfileId, foreignAuthUserId, otherOrganizationId],
+  );
+  await db.unsafe(
+    "insert into public.user_roles(profile_id,role) values($1,'customer') on conflict(profile_id,role) do nothing",
+    [foreignProfileId],
+  );
   await db.unsafe(
     `insert into public.products(id,organization_id,name,item_code,unit,base_price,status)
       values($1,$2,'Foreign product','CI-FOREIGN-01','unit',1,'active')
@@ -569,6 +579,30 @@ async function main() {
     () => db.unsafe("insert into public.customer_payments(organization_id,customer_id,invoice_id,amount,payment_method,created_by) values($1,$2,$3,1,'cash',$4)", [organizationId, invoice.customer_id, invoice.id, operationsStaffProfileId]),
     /permission denied/i,
   );
+  await expectFailure(
+    "ordinary staff cannot assign user roles directly",
+    () => db.unsafe("insert into public.user_roles(profile_id,role) values($1,'manager')", [secondProfileId]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot edit profile tenant/auth binding",
+    () => db.unsafe("update public.profiles set organization_id=$1,auth_user_id=$2 where id=$3", [otherOrganizationId, secondAuthUserId, secondProfileId]),
+    /permission denied/i,
+  );
+  const staffCannotReadOtherProfile = await db.unsafe("select id from public.profiles where id=$1", [secondProfileId]);
+  assert.equal(staffCannotReadOtherProfile.length, 0, "ordinary staff cannot enumerate customer profiles through PostgREST");
+  const staffCannotReadOtherRoles = await db.unsafe("select profile_id,role from public.user_roles where profile_id=$1", [secondProfileId]);
+  assert.equal(staffCannotReadOtherRoles.length, 0, "ordinary staff can read only their own role rows");
+  await expectFailure(
+    "ordinary staff cannot list organization role assignments",
+    () => db.unsafe("select public.list_organization_user_roles()"),
+    /admin role required/i,
+  );
+  await expectFailure(
+    "ordinary staff cannot change roles through the admin RPC",
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [secondProfileId, db.array(["accountant"], "text[]")]),
+    /admin role required/i,
+  );
 
   await db.unsafe("reset role");
   await setIdentity(accountantAuthUserId, "ci-accountant@example.test");
@@ -592,6 +626,44 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await db.unsafe("set role authenticated");
+  const listedUsers = await db.unsafe("select public.list_organization_user_roles() as result");
+  const listedRows = listedUsers[0].result;
+  assert.ok(listedRows.some((row) => row.profile_id === accountantProfileId && row.roles.includes("accountant")),
+    "admin may list accountant accounts within the organization");
+  assert.ok(!listedRows.some((row) => row.profile_id === foreignProfileId),
+    "admin user listing must not include another organization's profiles");
+  await expectFailure(
+    "administrator cannot change their own roles through role-management RPC",
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [staffProfileId, db.array(["staff"], "text[]")]),
+    /cannot change their own roles/i,
+  );
+  await expectFailure(
+    "administrator cannot assign a role outside the organization",
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [foreignProfileId, db.array(["accountant"], "text[]")]),
+    /outside the current organization/i,
+  );
+  await expectFailure(
+    "customer role cannot be combined with operational/accountant roles",
+    () => db.unsafe("select public.set_organization_user_roles($1::uuid,$2::text[])", [secondProfileId, db.array(["customer","accountant"], "text[]")]),
+    /customer role cannot be combined/i,
+  );
+  const assignedAccountant = await db.unsafe(
+    "select public.set_organization_user_roles($1::uuid,$2::text[]) as result",
+    [operationsStaffProfileId, db.array(["accountant"], "text[]")],
+  );
+  assert.deepEqual(assignedAccountant[0].result.roles.sort(), ["accountant"],
+    "admin can assign the accountant finance-only role");
+  const auditedRoleChange = await db.unsafe(
+    "select action from public.audit_logs where organization_id=$1 and actor_id=$2 and entity_type='profile' and entity_id=$3",
+    [organizationId, staffProfileId, operationsStaffProfileId],
+  );
+  assert.ok(auditedRoleChange.some((row) => row.action === "user.roles.changed"), "role assignment must be audited");
+  const restoredOperationsRole = await db.unsafe(
+    "select public.set_organization_user_roles($1::uuid,$2::text[]) as result",
+    [operationsStaffProfileId, db.array(["staff"], "text[]")],
+  );
+  assert.deepEqual(restoredOperationsRole[0].result.roles.sort(), ["staff"],
+    "admin can restore the operations role after the role assignment test");
   const authorizedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
   const staffInvoice = authorizedFinance[0].result.invoices.find((row) => row.id === invoice.id);
   const staffPayment = authorizedFinance[0].result.payments.find((row) => row.invoice_id === invoice.id);
