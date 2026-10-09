@@ -489,7 +489,7 @@ $$;
 REVOKE ALL ON FUNCTION public.calculate_active_pricing_rule_price(uuid,uuid,text,numeric) FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.refresh_product_tier_prices(p_organization_id uuid, p_product_id uuid DEFAULT NULL)
-RETURNS void LANGUAGE plpgsql SET search_path = ''
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 BEGIN
   UPDATE public.products p
@@ -527,7 +527,7 @@ CREATE TRIGGER products_price_columns_before_write
   FOR EACH ROW EXECUTE FUNCTION public.refresh_product_price_columns_from_product();
 
 CREATE OR REPLACE FUNCTION public.refresh_pricing_after_rule_change()
-RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 DECLARE v_org uuid;
 BEGIN
@@ -542,7 +542,7 @@ CREATE TRIGGER pricing_rules_refresh_product_prices
   FOR EACH ROW EXECUTE FUNCTION public.refresh_pricing_after_rule_change();
 
 CREATE OR REPLACE FUNCTION public.refresh_prices_after_product_change()
-RETURNS trigger LANGUAGE plpgsql SET search_path = ''
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 BEGIN
   PERFORM public.refresh_product_tier_prices(NEW.organization_id,NEW.id);
@@ -909,3 +909,61 @@ CREATE INDEX IF NOT EXISTS products_item_code_org_idx
 CREATE INDEX IF NOT EXISTS products_barcode_org_idx
   ON public.products(organization_id, barcode) WHERE barcode IS NOT NULL;
   
+
+
+-- Create an import job from the tenant resolved by the authenticated profile, never a client org ID.
+CREATE OR REPLACE FUNCTION public.create_import_job(
+  p_file_name text,
+  p_file_hash text,
+  p_file_size bigint,
+  p_job_type text,
+  p_profile_id uuid DEFAULT NULL,
+  p_period_key text DEFAULT NULL,
+  p_source_system text DEFAULT 'manual'
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_profile_id uuid := public.current_profile_id();
+  v_org uuid;
+  v_profile public.import_profiles%ROWTYPE;
+  v_job public.import_jobs%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_profile_id IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='إذن استيراد البيانات مطلوب';
+  END IF;
+  SELECT p.organization_id INTO v_org FROM public.profiles p
+   WHERE p.id=v_profile_id AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='المؤسسة المرتبطة بالحساب غير صالحة'; END IF;
+  IF coalesce(btrim(p_file_name),'')='' OR length(p_file_name)>255
+     OR p_file_size IS NULL OR p_file_size<1 OR p_file_size>104857600
+     OR coalesce(p_file_hash,'') !~ '^[0-9a-f]{64}$'
+     OR coalesce(btrim(p_job_type),'')='' OR length(p_job_type)>80 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='بيانات ملف الاستيراد غير صالحة';
+  END IF;
+  IF p_profile_id IS NOT NULL THEN
+    SELECT ip.* INTO v_profile FROM public.import_profiles ip
+     WHERE ip.id=p_profile_id AND ip.organization_id=v_org AND ip.status='active';
+    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='الملف التعريفي غير نشط أو لا يتبع المؤسسة'; END IF;
+  END IF;
+  INSERT INTO public.import_jobs(
+    organization_id,job_type,file_name,file_hash,file_size,status,total_rows,processed_rows,
+    success_rows,failed_rows,created_by,profile_id,profile_version,period_key,source_system,
+    retention_expires_at,raw_file_retained,purge_status
+  )
+  VALUES(
+    v_org,p_job_type,left(p_file_name,255),p_file_hash,p_file_size,'staging',0,0,0,0,v_profile_id,
+    p_profile_id,CASE WHEN p_profile_id IS NULL THEN NULL ELSE v_profile.version END,
+    nullif(left(coalesce(p_period_key,''),120),''),left(coalesce(nullif(p_source_system,''),'manual'),80),
+    now()+interval '30 days',false,'not_required'
+  )
+  RETURNING * INTO v_job;
+  RETURN to_jsonb(v_job);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.create_import_job(text,text,bigint,text,uuid,text,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_import_job(text,text,bigint,text,uuid,text,text) TO authenticated;
+
+-- The calculated tier columns must always fall back to the base price when no eligible rule exists.
+SELECT public.refresh_product_tier_prices(o.id,NULL) FROM public.organizations o;
