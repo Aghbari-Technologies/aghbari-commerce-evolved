@@ -485,8 +485,31 @@ export async function fetchOnyxSnapshots() {
   return data;
 }
 
+export type OnyxSnapshotAnalytics = {
+  snapshot: {
+    id: string; version: number; file_name: string | null; file_hash: string; report_type: string;
+    created_at: string; data_quality_score: number; quality_breakdown: Record<string, number>;
+  };
+  metrics: {
+    row_count: number; unique_keys: number; valid_rows: number; rejected_rows: number; warning_rows: number;
+    quantity_total: number; revenue_total: number; sales_total: number; customer_count: number;
+    supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
+  };
+  status_distribution: Array<{ status: string; count: number }>;
+  top_items: Array<{ item_code: string; name: string | null; quantity: number; revenue: number }>;
+  top_customers: Array<{ customer_code: string; revenue: number; quantity: number }>;
+  forecast_status: string;
+  forecast_reason: string;
+};
+
+export async function fetchOnyxSnapshotAnalytics(snapshotId: string): Promise<OnyxSnapshotAnalytics> {
+  const { data, error } = await supabase.rpc('get_onyx_snapshot_analytics', { p_snapshot_id: snapshotId });
+  if (error) throw error;
+  return data as OnyxSnapshotAnalytics;
+}
+
 export async function fetchOnyxSnapshotRows(snapshotId: string) {
-  const { data, error } = await supabase.from('onyx_snapshot_rows').select('*').eq('snapshot_id', snapshotId).order('row_number').limit(100000);
+  const { data, error } = await supabase.from('onyx_snapshot_rows').select('*').eq('snapshot_id', snapshotId).order('row_number').limit(100);
   if (error) throw error;
   return data;
 }
