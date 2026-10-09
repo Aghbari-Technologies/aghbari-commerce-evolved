@@ -103,6 +103,9 @@ DECLARE
   v_payload_hash text;
   v_existing_hash text;
   v_existing_terms text;
+  v_existing_order uuid;
+  v_existing_order_no text;
+  v_existing_total numeric(15,2);
   v_product_id uuid;
   v_quantity numeric(15,3);
   v_product public.products%ROWTYPE;
@@ -172,7 +175,7 @@ BEGIN
 
   -- If the same submission already committed, return the original server result.
   SELECT o.id,o.order_number,o.total_amount,o.idempotency_payload_hash,o.payment_terms
-    INTO v_order,v_order_no,v_total,v_existing_hash,v_existing_terms
+    INTO v_existing_order,v_existing_order_no,v_existing_total,v_existing_hash,v_existing_terms
     FROM public.orders o
    WHERE o.organization_id=v_org AND o.created_by=v_profile AND o.idempotency_key=v_key
    LIMIT 1;
@@ -181,7 +184,7 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='مفتاح منع التكرار استُخدم سابقًا لبيانات طلب مختلفة؛ راجع طلباتك قبل إنشاء طلب جديد';
     END IF;
     RETURN pg_catalog.jsonb_build_object(
-      'id',v_order,'order_number',v_order_no,'total_amount',v_total,
+      'id',v_existing_order,'order_number',v_existing_order_no,'total_amount',v_existing_total,
       'payment_terms',v_existing_terms,'idempotent_replay',true
     );
   END IF;
