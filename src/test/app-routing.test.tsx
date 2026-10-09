@@ -15,6 +15,11 @@ describe("App routing", () => {
   });
 
   it.each([
+    "/cart",
+    "/checkout",
+    "/compare",
+    "/product/route-smoke-test-product",
+    "/wishlist",
     "/assistant",
     "/barcode",
     "/invoices",

@@ -26,14 +26,19 @@ import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as AdminSuppliersRouteImport } from './routes/admin_.suppliers'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as BarcodeRouteImport } from './routes/barcode'
+import { Route as CartRouteImport } from './routes/cart'
+import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as CompareRouteImport } from './routes/compare'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OfflineRouteImport } from './routes/offline'
+import { Route as ProductIdRouteImport } from './routes/product.$id'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as QuotesRouteImport } from './routes/quotes'
 import { Route as ReorderRouteImport } from './routes/reorder'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as StatementRouteImport } from './routes/statement'
+import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as OrdersIndexRouteImport } from './routes/orders.index'
 import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 
@@ -132,6 +137,21 @@ const BarcodeRoute = BarcodeRouteImport.update({
   path: '/barcode',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CartRoute = CartRouteImport.update({
+  id: '/cart',
+  path: '/cart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutRoute = CheckoutRouteImport.update({
+  id: '/checkout',
+  path: '/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesRoute = InvoicesRouteImport.update({
   id: '/invoices',
   path: '/invoices',
@@ -152,6 +172,11 @@ const OrdersRoute = OrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProductIdRoute = ProductIdRouteImport.update({
+  id: '/product/$id',
+  path: '/product/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QuotesRoute = QuotesRouteImport.update({
   id: '/quotes',
   path: '/quotes',
@@ -165,6 +190,11 @@ const ReorderRoute = ReorderRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WishlistRoute = WishlistRouteImport.update({
+  id: '/wishlist',
+  path: '/wishlist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StatementRoute = StatementRouteImport.update({
@@ -203,7 +233,11 @@ export interface FileRoutesByFullPath {
   '/admin/suppliers': typeof AdminSuppliersRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
+  '/cart': typeof CartRoute
+  '/checkout': typeof CheckoutRoute
+  '/compare': typeof CompareRoute
   '/invoices': typeof InvoicesRoute
+  '/product/$id': typeof ProductIdRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/orders': typeof OrdersRouteWithChildren
@@ -211,6 +245,7 @@ export interface FileRoutesByFullPath {
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
+  '/wishlist': typeof WishlistRoute
   '/orders/$id': typeof OrdersIdRoute
   '/orders/': typeof OrdersIndexRoute
 }
@@ -301,7 +336,11 @@ export interface FileRouteTypes {
     | '/admin/suppliers'
     | '/assistant'
     | '/barcode'
+    | '/cart'
+    | '/checkout'
+    | '/compare'
     | '/invoices'
+    | '/product/$id'
     | '/login'
     | '/offline'
     | '/orders'
@@ -309,6 +348,7 @@ export interface FileRouteTypes {
     | '/reorder'
     | '/reset-password'
     | '/statement'
+    | '/wishlist'
     | '/orders/$id'
     | '/orders/'
   fileRoutesByTo: FileRoutesByTo
@@ -332,13 +372,18 @@ export interface FileRouteTypes {
     | '/admin/suppliers'
     | '/assistant'
     | '/barcode'
+    | '/cart'
+    | '/checkout'
+    | '/compare'
     | '/invoices'
+    | '/product/$id'
     | '/login'
     | '/offline'
     | '/quotes'
     | '/reorder'
     | '/reset-password'
     | '/statement'
+    | '/wishlist'
     | '/orders/$id'
     | '/orders'
   id:
@@ -362,7 +407,11 @@ export interface FileRouteTypes {
     | '/admin_/suppliers'
     | '/assistant'
     | '/barcode'
+    | '/cart'
+    | '/checkout'
+    | '/compare'
     | '/invoices'
+    | '/product/$id'
     | '/login'
     | '/offline'
     | '/orders'
@@ -370,6 +419,7 @@ export interface FileRouteTypes {
     | '/reorder'
     | '/reset-password'
     | '/statement'
+    | '/wishlist'
     | '/orders/'
     | '/orders/$id'
   fileRoutesById: FileRoutesById
@@ -510,6 +560,27 @@ declare module '@tanstack/react-router' {
     preLoaderRoute: typeof BarcodeRouteImport
     parentRoute: typeof rootRouteImport
   }
+  '/cart': {
+    id: '/cart'
+    path: '/cart'
+    fullPath: '/cart'
+    preLoaderRoute: typeof CartRouteImport
+    parentRoute: typeof rootRouteImport
+  }
+  '/checkout': {
+    id: '/checkout'
+    path: '/checkout'
+    fullPath: '/checkout'
+    preLoaderRoute: typeof CheckoutRouteImport
+    parentRoute: typeof rootRouteImport
+  }
+  '/compare': {
+    id: '/compare'
+    path: '/compare'
+    fullPath: '/compare'
+    preLoaderRoute: typeof CompareRouteImport
+    parentRoute: typeof rootRouteImport
+  }
   '/invoices': {
     id: '/invoices'
     path: '/invoices'
@@ -538,6 +609,13 @@ declare module '@tanstack/react-router' {
     preLoaderRoute: typeof OrdersRouteImport
     parentRoute: typeof rootRouteImport
   }
+  '/product/$id': {
+    id: '/product/$id'
+    path: '/product/$id'
+    fullPath: '/product/$id'
+    preLoaderRoute: typeof ProductIdRouteImport
+    parentRoute: typeof rootRouteImport
+  }
   '/quotes': {
     id: '/quotes'
     path: '/quotes'
@@ -564,6 +642,13 @@ declare module '@tanstack/react-router' {
     path: '/statement'
     fullPath: '/statement'
     preLoaderRoute: typeof StatementRouteImport
+    parentRoute: typeof rootRouteImport
+  }
+  '/wishlist': {
+    id: '/wishlist'
+    path: '/wishlist'
+    fullPath: '/wishlist'
+    preLoaderRoute: typeof WishlistRouteImport
     parentRoute: typeof rootRouteImport
   }
   '/orders/': {
@@ -614,7 +699,11 @@ export interface RootRouteChildren {
   AdminSuppliersRoute: typeof AdminSuppliersRoute
   AssistantRoute: typeof AssistantRoute
   BarcodeRoute: typeof BarcodeRoute
+  CartRoute: typeof CartRoute
+  CheckoutRoute: typeof CheckoutRoute
+  CompareRoute: typeof CompareRoute
   InvoicesRoute: typeof InvoicesRoute
+  ProductIdRoute: typeof ProductIdRoute
   LoginRoute: typeof LoginRoute
   OfflineRoute: typeof OfflineRoute
   OrdersRoute: typeof OrdersRouteWithChildren
@@ -622,6 +711,7 @@ export interface RootRouteChildren {
   ReorderRoute: typeof ReorderRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   StatementRoute: typeof StatementRoute
+  WishlistRoute: typeof WishlistRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
@@ -643,14 +733,19 @@ const rootRouteChildren: RootRouteChildren = {
   AdminSuppliersRoute: AdminSuppliersRoute,
   AssistantRoute: AssistantRoute,
   BarcodeRoute: BarcodeRoute,
+  CartRoute: CartRoute,
+  CheckoutRoute: CheckoutRoute,
+  CompareRoute: CompareRoute,
   InvoicesRoute: InvoicesRoute,
+  ProductIdRoute: ProductIdRoute,
   LoginRoute: LoginRoute,
   OfflineRoute: OfflineRoute,
   OrdersRoute: OrdersRouteWithChildren,
   QuotesRoute: QuotesRoute,
   ReorderRoute: ReorderRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  StatementRoute: StatementRoute
+  StatementRoute: StatementRoute,
+  WishlistRoute: WishlistRoute
 }
 
 export const routeTree = rootRouteImport
