@@ -172,13 +172,9 @@ export async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
 }
 
 export async function updateOrderStatus(id: string, status: string): Promise<void> {
+  // The database transition trigger validates the state change and writes status history atomically.
   const { error } = await supabase.from('orders').update({ status }).eq('id', id);
   if (error) throw error;
-  await supabase.from('order_status_history').insert({
-    order_id: id,
-    to_status: status,
-    notes: `Status changed to ${status}`,
-  });
 }
 
 export async function createOrder(order: {
