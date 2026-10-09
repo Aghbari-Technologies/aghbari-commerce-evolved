@@ -174,3 +174,5 @@ Definition of Done:
 - 2026-10-09: resumable import jobs now persist a processing-configuration fingerprint and refuse partial continuation if profile/synonyms/transformations/validation/mapping/merge policy changed. Legacy partial sessions without a fingerprint are fail-closed and require a new version rather than mixing rows.
 
 - 2026-10-09: import resume additionally verifies the session's persisted organization/profile/version/period identity against the active job and rejects cross-profile or cross-period continuation.
+
+- 2026-10-09: import configuration fingerprints use recursively key-sorted JSON and deterministic lexical synonym ordering; unit tests cover equivalent objects with different key insertion order and distinct transformation rules.
