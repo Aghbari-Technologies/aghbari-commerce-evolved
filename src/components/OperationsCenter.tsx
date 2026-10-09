@@ -20,6 +20,7 @@ import {
 } from '@/lib/unified-import';
 import type { ImportJobRow, ProductWithInventory } from '@/lib/types';
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from '@/components/AdminPages';
+import { UnifiedImportEngine } from '@/components/UnifiedImportEngine';
 
 type OperationTab = 'imports' | 'onyx' | 'reconcile' | 'dictionary';
 type PipelineStage = 'reading' | 'detecting' | 'mapping' | 'validating' | 'normalizing' | 'deduplicating' | 'merging' | 'analytics' | 'complete';
@@ -68,69 +69,7 @@ export function OperationsCenter({ onNotice }: { onNotice: (message: string) => 
 }
 
 function ImportEngine({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: jobs, loading, error, refetch } = useFetch(fetchImportJobs);
-  const [stage, setStage] = useState<PipelineStage | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [processed, setProcessed] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if (file.size > 100 * 1024 * 1024) { setErrorMessage('حجم الملف يتجاوز الحد المسموح 100MB'); return; }
-    setErrorMessage(''); setProgress(0); setProcessed(0); setStage('reading');
-    try {
-      const buffer = await file.arrayBuffer();
-      const digest = await crypto.subtle.digest('SHA-256', buffer);
-      const hash = Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
-      const existing = jobs?.find((job) => job.file_hash === hash);
-      if (existing) { setErrorMessage(`هذا الملف موجود مسبقاً ضمن الدفعة ${existing.file_name ?? ''}. يمكنك تجاهله أو إنشاء نسخة جديدة.`); setStage(null); return; }
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        const manualJob = await createImportJob({ fileName: file.name, fileHash: hash, fileSize: file.size, jobType: 'manual_mapping_required', totalRows: 0 });
-        await updateImportJob(manualJob.id, { status: 'manual_mapping_required', data_quality_score: 0, error_summary: { code: 'EXTRACTION_FAILED_NON_TABULAR_FORMAT', message: 'Manual Mapping Required' } });
-          setStage(null); refetch();
-        return;
-      }
-      const text = new TextDecoder().decode(buffer);
-      const raw = parseCsv(text);
-      if (!raw.length) throw new Error('الملف فارغ أو لا يحتوي صفوفاً قابلة للقراءة');
-      if (raw[0].length > 100 || raw.length - 1 > 100000) throw new Error('الملف يتجاوز حدود الأعمدة أو الصفوف المسموح بها');
-      const headers = raw[0].map(normalizeHeader);
-      const parsed = raw.slice(1).map((values, index): ParsedRow => {
-        const data: Record<string, unknown> = {};
-        headers.forEach((header, columnIndex) => { const value = (values[columnIndex] ?? '').trim(); data[header] = value.length > 4000 ? value.slice(0, 4000) : value; });
-        const errors: string[] = [];
-        if (!data.item_code) errors.push('رمز الصنف مطلوب');
-        if (data.quantity !== undefined && data.quantity !== '' && Number.isNaN(Number(data.quantity))) errors.push('الكمية يجب أن تكون رقماً');
-        return { rowNumber: index + 2, data, status: errors.length ? 'rejected' : 'valid', errors };
-      });
-      const score = qualityScore(parsed);
-      const job = await createImportJob({ fileName: file.name, fileHash: hash, fileSize: file.size, jobType: 'unified_csv', totalRows: parsed.length });
-      const chunkSize = 1000;
-      setStage('detecting'); await delay(180); setStage('mapping'); await delay(180); setStage('validating'); await delay(180);
-      setStage('normalizing');
-      for (let start = 0; start < parsed.length; start += chunkSize) {
-        while (paused) await delay(250);
-        const chunk = parsed.slice(start, start + chunkSize);
-        await insertImportRows(job.id, chunk);
-        const done = Math.min(start + chunk.length, parsed.length);
-        setProcessed(done); setProgress(Math.round((done / parsed.length) * 60));
-      }
-      setStage('deduplicating'); await delay(180); setStage('merging'); await delay(180); setStage('analytics');
-      const rejected = parsed.filter((row) => row.status === 'rejected').length;
-      const status = score < 50 ? 'rejected' : 'completed';
-      await updateImportJob(job.id, { status, processed_rows: parsed.length, success_rows: parsed.length - rejected, failed_rows: rejected, data_quality_score: score, error_summary: { quality_label: qualityLabel(score), normalized_columns: headers, no_raw_file_retained: true }, completed_at: new Date().toISOString() });
-      setProgress(100); setStage('complete'); refetch(); onNotice(status === 'completed' ? `اكتملت المعالجة بجودة ${score}/100` : 'تم رفض الدفعة بسبب انخفاض جودة البيانات');
-    } catch (error) { setStage(null); setErrorMessage(error instanceof Error ? error.message : 'تعذر معالجة الملف'); }
-  }
-
-  return <div className="import-layout">
-    <section className="panel import-upload-panel"><div className="import-upload-icon"><Upload size={26} /></div><h2>ارفع ملفاً للمعالجة الموحدة</h2><p>CSV مدعوم مباشرة. ملفات Excel وPDF تُحفظ كمسودة وتتطلب تعييناً يدوياً دون تخمين أو بيانات وهمية.</p><label className="import-dropzone"><input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={handleFile} /><FileDown size={22} /><strong>اختر الملف أو اسحبه هنا</strong><span>الحد الأقصى 100MB — لا يتم حفظ الملف الخام</span></label>{errorMessage && <div className="form-error"><XCircle size={15} /> {errorMessage}</div>}<div className="privacy-note"><ShieldCheck size={17} /><span>يُحفظ SHA-256 والبيانات المنظمة فقط، مع سجل تدقيق لكل مرحلة.</span></div></section>
-    <section className="panel pipeline-panel"><div className="panel-head"><div><h2>مسار المعالجة</h2><p>دفعات معالجة بذاكرة محدودة 1,000 سجل</p></div>{stage && stage !== 'complete' && <button className="pause-button" onClick={() => setPaused(!paused)}>{paused ? <Play size={16} /> : <Pause size={16} />}{paused ? 'استئناف' : 'إيقاف مؤقت'}</button>}</div><div className="pipeline">{stages.map((item, index) => { const current = stage === item.id; const complete = stage === 'complete' || (stage && stages.findIndex((entry) => entry.id === stage) > index); return <div className={`pipeline-step ${current ? 'current' : ''} ${complete ? 'complete' : ''}`} key={item.id}><span>{complete ? <Check size={14} /> : index + 1}</span><small>{item.label}</small></div>; })}</div>{stage && <div className="progress-area"><div className="progress-label"><span>{stage === 'complete' ? 'اكتملت المعالجة بنجاح' : `المرحلة الحالية: ${stages.find((item) => item.id === stage)?.label ?? ''}`}</span><b>{progress}%</b></div><div className="progress-track"><i style={{ width: `${progress}%` }} /></div><small>{formatNumber(processed)} سجل تمت معالجته</small></div>}</section>
-    <section className="panel import-jobs-panel"><div className="panel-head"><div><h2>سجل الدفعات</h2><p>تاريخ الاستيراد والنتائج دون حفظ الملفات الخام</p></div><Button variant="outline" onClick={refetch}><RefreshCw size={15} /> تحديث</Button></div>{loading ? <Loading /> : error ? <ErrorBox message={error} /> : jobs?.length ? <TableWrap><table><thead><tr><th>الملف</th><th>الحالة</th><th>الجودة</th><th>الصفوف</th><th>التاريخ</th></tr></thead><tbody>{jobs.map((job) => <tr key={job.id}><td><strong>{job.file_name ?? '—'}</strong><small>{job.file_hash?.slice(0, 16)}...</small></td><td><span className={`badge ${job.status === 'completed' ? 'success' : job.status === 'rejected' ? 'danger' : 'warning'}`}>{job.status === 'completed' ? 'مكتملة' : job.status === 'manual_mapping_required' ? 'تعيين يدوي' : job.status}</span></td><td>{job.data_quality_score === null ? '—' : `${job.data_quality_score}/100 (${qualityLabel(job.data_quality_score)})`}</td><td>{formatNumber(job.processed_rows)} / {formatNumber(job.total_rows)}</td><td>{new Date(job.created_at).toLocaleDateString('ar')}</td></tr>)}</tbody></table></TableWrap> : <Empty text="لا توجد دفعات مستوردة بعد" />}</section>
-  </div>;
+  return <UnifiedImportEngine onNotice={onNotice} />;
 }
 
 function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
