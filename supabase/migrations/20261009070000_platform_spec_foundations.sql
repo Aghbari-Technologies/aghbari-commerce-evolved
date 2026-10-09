@@ -107,6 +107,8 @@ CREATE INDEX IF NOT EXISTS import_jobs_org_created_idx
 CREATE INDEX IF NOT EXISTS import_jobs_profile_hash_period_idx
   ON public.import_jobs(organization_id, profile_id, file_hash, period_key)
   WHERE file_hash IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS import_job_rows_job_row_uidx
+  ON public.import_job_rows(import_job_id, row_number);
 
 CREATE TABLE IF NOT EXISTS public.onyx_snapshots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -115,6 +117,7 @@ CREATE TABLE IF NOT EXISTS public.onyx_snapshots (
   profile_id uuid REFERENCES public.import_profiles(id) ON DELETE SET NULL,
   profile_version integer,
   snapshot_version integer NOT NULL DEFAULT 1 CHECK (snapshot_version > 0),
+  period_key text,
   source_file_hash text NOT NULL,
   source_file_name text,
   report_type text NOT NULL,
@@ -130,6 +133,8 @@ CREATE TABLE IF NOT EXISTS public.onyx_snapshots (
 );
 CREATE INDEX IF NOT EXISTS onyx_snapshots_org_created_idx
   ON public.onyx_snapshots(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS onyx_snapshots_profile_period_version_idx
+  ON public.onyx_snapshots(organization_id, profile_id, period_key, snapshot_version DESC);
 
 CREATE TABLE IF NOT EXISTS public.onyx_snapshot_rows (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -926,16 +931,17 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
 DECLARE
-  v_profile_id uuid := public.current_profile_id();
+  v_actor uuid := public.current_profile_id();
   v_org uuid;
+  v_profile_id uuid;
   v_profile public.import_profiles%ROWTYPE;
   v_job public.import_jobs%ROWTYPE;
 BEGIN
-  IF auth.uid() IS NULL OR v_profile_id IS NULL OR NOT public.is_staff() THEN
+  IF auth.uid() IS NULL OR v_actor IS NULL OR NOT public.is_staff() THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='إذن استيراد البيانات مطلوب';
   END IF;
   SELECT p.organization_id INTO v_org FROM public.profiles p
-   WHERE p.id=v_profile_id AND p.auth_user_id=auth.uid() AND p.is_active;
+   WHERE p.id=v_actor AND p.auth_user_id=auth.uid() AND p.is_active;
   IF v_org IS NULL THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='المؤسسة المرتبطة بالحساب غير صالحة'; END IF;
   IF coalesce(btrim(p_file_name),'')='' OR length(p_file_name)>255
      OR p_file_size IS NULL OR p_file_size<1 OR p_file_size>104857600
@@ -947,16 +953,38 @@ BEGIN
     SELECT ip.* INTO v_profile FROM public.import_profiles ip
      WHERE ip.id=p_profile_id AND ip.organization_id=v_org AND ip.status='active';
     IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='الملف التعريفي غير نشط أو لا يتبع المؤسسة'; END IF;
+    v_profile_id:=v_profile.id;
+  ELSE
+    SELECT ip.* INTO v_profile FROM public.import_profiles ip
+     WHERE ip.organization_id=v_org AND ip.profile_name='Unified CSV' AND ip.status='active'
+     ORDER BY ip.version DESC LIMIT 1;
+    IF NOT FOUND THEN
+      INSERT INTO public.import_profiles(
+        organization_id,profile_name,report_type,source,version,required_columns,optional_columns,
+        ignored_columns,synonyms,transformation_rules,validation_rules,matching_key,merge_strategy,
+        date_rules,is_full_dataset,status,created_by,published_at
+      ) VALUES(
+        v_org,'Unified CSV','tabular','unified',1,'["item_code"]'::jsonb,'["product_name","quantity","price","cost","revenue","date","customer_code","supplier_code"]'::jsonb,
+        '[]'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'item_code','manual_review','{}'::jsonb,false,'active',v_actor,now()
+      )
+      ON CONFLICT (organization_id,profile_name,version) DO NOTHING;
+      SELECT ip.* INTO v_profile FROM public.import_profiles ip
+       WHERE ip.organization_id=v_org AND ip.profile_name='Unified CSV' AND ip.status='active'
+       ORDER BY ip.version DESC LIMIT 1;
+      IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='تعذر إنشاء ملف الاستيراد الموحد'; END IF;
+    END IF;
+    v_profile_id:=v_profile.id;
   END IF;
+
   INSERT INTO public.import_jobs(
     organization_id,job_type,file_name,file_hash,file_size,status,total_rows,processed_rows,
     success_rows,failed_rows,created_by,profile_id,profile_version,period_key,source_system,
     retention_expires_at,raw_file_retained,purge_status
   )
   VALUES(
-    v_org,p_job_type,left(p_file_name,255),p_file_hash,p_file_size,'staging',0,0,0,0,v_profile_id,
-    p_profile_id,CASE WHEN p_profile_id IS NULL THEN NULL ELSE v_profile.version END,
-    nullif(left(coalesce(p_period_key,''),120),''),left(coalesce(nullif(p_source_system,''),'manual'),80),
+    v_org,p_job_type,left(p_file_name,255),p_file_hash,p_file_size,'staging',0,0,0,0,v_actor,
+    v_profile_id,v_profile.version,nullif(left(coalesce(p_period_key,''),120),''),
+    left(coalesce(nullif(p_source_system,''),'manual'),80),
     now()+interval '30 days',false,'not_required'
   )
   RETURNING * INTO v_job;
