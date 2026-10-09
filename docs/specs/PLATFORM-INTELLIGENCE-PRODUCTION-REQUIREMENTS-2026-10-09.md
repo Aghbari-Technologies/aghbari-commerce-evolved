@@ -43,7 +43,8 @@ This file records every source requirement area so implementation is reviewable.
 - **PARTIAL:** OperationsCenter already has CSV staging, row storage, import history, a synonym map, a provisional DQS display, manual-mapping fallback, and import-row chunk calls.
 - **ADDED / CI VERIFICATION PENDING:** streaming SHA-256 and streaming CSV primitives; leading-zero preservation; explicit limit constants; deterministic five-component DQS accumulator and acceptance thresholds. These primitives must be connected to the visible ImportEngine and tested end-to-end.
 - **ADDED / CI VERIFICATION PENDING:** versioned import profiles, central synonym records, upload-session/chunk metadata, server-side DQS/finalization, and isolated Onyx snapshot schema/RLS.
-- **NOT PROVEN:** XLSX/XLS extraction; trustworthy tabular PDF extraction; duplicate-choice UI and merge semantics; upload restart from last verified chunk; server-worker processing rather than client-only stages; TTL cleanup worker; large-file memory profile.
+- **ADDED / CI VERIFICATION PENDING:** resume revalidates the exact file size and SHA-256 against its existing session, loads and validates the server's verified chunk manifest as a contiguous prefix, rejects gaps/misaligned offsets/bad hashes/session mismatches, reparses prior verified bytes locally to reconstruct CSV quote/header/DQS state without re-uploading/re-writing their rows, verifies each saved chunk digest, and resumes persistence at the first unverified chunk. The EOF final row is idempotently upserted to cover interruption after the final chunk checkpoint but before CSV finalization. Raw file bytes remain client-local; only hashes/metadata/structured rows are persisted.
+- **NOT PROVEN:** XLSX/XLS extraction; trustworthy tabular PDF extraction; browser E2E for pause/cancel/resume and duplicate choices; a server-side worker instead of client-driven parsing; TTL cleanup worker; large-file memory/performance profile.
 
 ## Phase 2 — Operational source of truth, isolated Onyx mirror, inventory reconciliation
 
@@ -167,3 +168,5 @@ Definition of Done:
 - 2026-10-09: follow-up pricing administration adds tenant-scoped rule creation/status/deletion, form validation, visible legacy-scope warnings, audit logging, and database acceptance scenarios for all four formulas, retail/wholesale targeting, and base-price reset. Production database changes remain blocked pending confirmation of the exact Supabase project.
 
 - 2026-10-09: order review navigation guard added across internal admin routes, quick navigation, storefront links, sign-out, browser route changes and before-unload; live browser/E2E proof remains a separate gate.
+
+- 2026-10-09: resumable CSV processing now validates the tenant-bound server manifest as a contiguous verified prefix, checks chunk digests during replay, suppresses writes/registration for verified chunks, safely persists rows at the first unverified checkpoint, and covers the EOF-row recovery edge case. Exact-head CI and authenticated browser proof remain required.
