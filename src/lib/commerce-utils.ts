@@ -42,6 +42,32 @@ export function normalizeCartDraft(value: unknown): CartLineDraft[] {
   return lines;
 }
 
+export type QuickOrderLineInput = {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  available: number;
+  already_in_cart?: number;
+};
+export type QuickOrderValidation =
+  | { valid: true }
+  | { valid: false; reason: 'empty' | 'invalid_quantity' | 'insufficient_stock'; product_name?: string };
+
+export function validateQuickOrderLines(lines: QuickOrderLineInput[]): QuickOrderValidation {
+  if (lines.length === 0) return { valid: false, reason: 'empty' };
+  for (const line of lines) {
+    if (!Number.isSafeInteger(line.quantity) || line.quantity <= 0) {
+      return { valid: false, reason: 'invalid_quantity', product_name: line.product_name };
+    }
+    if (!Number.isSafeInteger(line.available) || line.available < 0 ||
+        !Number.isSafeInteger(line.already_in_cart ?? 0) || (line.already_in_cart ?? 0) < 0 ||
+        line.available < (line.already_in_cart ?? 0) + line.quantity) {
+      return { valid: false, reason: 'insufficient_stock', product_name: line.product_name };
+    }
+  }
+  return { valid: true };
+}
+
 export type AssistantIntent = 'order_status' | 'catalog_search' | 'invoice_help' | 'offline_help' | 'general';
 export function classifyAssistantIntent(question: string): AssistantIntent {
   const q = question.trim().toLocaleLowerCase('ar');
