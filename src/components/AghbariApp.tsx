@@ -351,13 +351,15 @@ function pricingRuleMethodForForm(rule?: PricingRule): CreatePricingRuleInput['c
 }
 
 function pricingRuleScopeForForm(rule?: PricingRule): CreatePricingRuleInput['scope_type'] {
-  return rule && ['default', 'all', 'product', 'category'].includes(rule.scope_type)
+  const supported = new Set<string>(['default', 'all', 'product', 'category']);
+  return rule && supported.has(rule.scope_type)
     ? rule.scope_type as CreatePricingRuleInput['scope_type']
     : 'default';
 }
 
 function pricingRuleTierForForm(rule?: PricingRule): CreatePricingRuleInput['target_tier'] {
-  return rule?.target_tier && ['both', 'wholesale', 'retail'].includes(rule.target_tier)
+  const supported = new Set<string>(['both', 'wholesale', 'retail']);
+  return rule?.target_tier && supported.has(rule.target_tier)
     ? rule.target_tier as CreatePricingRuleInput['target_tier']
     : 'both';
 }
