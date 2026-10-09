@@ -5,7 +5,7 @@ import { Login } from '@/components/Login';
 import { useAuth } from '@/lib/auth';
 import { supabase, ORG_ID } from '@/lib/supabase';
 import { formatCurrency, formatDate, formatDateShort, formatNumber } from '@/lib/format';
-import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, type InvoiceAmount, type PaymentAmount } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, type InvoiceAmount, type PaymentAmount } from '@/lib/commerce-utils';
 import { fetchProducts } from '@/lib/api';
 
 type Invoice = { id:string; invoice_number:string; order_id:string; customer_id:string; status:string; issued_at:string; due_at:string|null; currency:string; subtotal?:number|string; tax_amount?:number|string; total_amount?:number|string };
@@ -15,7 +15,8 @@ type Quote = { id:string; quote_number:string; status:string; notes:string|null;
 type QuoteLine = { id:string; quote_id?:string; product_id:string|null; item_code:string|null; product_name_snapshot:string; unit_snapshot:string|null; requested_quantity:number|string; target_unit_price:number|string|null; quoted_unit_price:number|string|null };
 type ReorderTemplate = { id:string; name:string; created_at:string; updated_at:string; source_order_id:string|null };
 type ReorderTemplateLine = { product_id:string|null; quantity:number|string };
-type AssistantOrderRow = { order_number:string|number; status:string; total_amount:number|string; created_at:string };
+type AssistantOrderRow = { order_number:string|number; status:string; created_at:string };
+type AssistantInvoiceStatusRow = { invoice_number:string; status:string; issued_at:string };
 type AssistantProductRow = { name:string; item_code:string; barcode:string|null; unit:string; base_price:number|string; status:string };
 
 const card: React.CSSProperties = { background:'var(--card, #fff)', border:'1px solid #e0ecee', borderRadius:16, padding:18 };
@@ -139,8 +140,16 @@ export function CommerceAssistantPage(){return <Gate><Assistant/></Gate>;}
 function Assistant(){
  const [question,setQuestion]=useState('');const [answer,setAnswer]=useState('');const [busy,setBusy]=useState(false);const [error,setError]=useState('');
  async function ask(e:FormEvent){e.preventDefault();const q=question.trim();if(!q){setError('اكتب سؤالك أولًا.');return;}setBusy(true);setError('');setAnswer('');try{const intent=classifyAssistantIntent(q);if(intent==='offline_help')setAnswer('افتح صفحة «دون اتصال» لعرض الكتالوج المخزن سابقًا ومسودة السلة. إرسال الطلب وتأكيد السعر يحتاجان اتصالًا بالخادم.');
- else if(intent==='order_status'){const r=await supabase.from('orders').select('order_number,status,total_amount,created_at').order('created_at',{ascending:false}).limit(5);if(r.error)throw r.error;const label:Record<string,string>={draft:'مسودة',pending:'بانتظار المراجعة',confirmed:'مؤكد',processing:'قيد التجهيز',shipped:'تم الشحن',delivered:'تم التسليم',cancelled:'ملغي'};setAnswer((r.data??[]).length?'أحدث طلبات حسابك:\n'+(r.data??[]).map((o:AssistantOrderRow)=>String(o.order_number)+' — '+(label[o.status]??o.status)+' — '+formatCurrency(Number(o.total_amount))+' — '+formatDateShort(o.created_at)).join('\n'):'لم يُعثر على طلبات مسجلة لحسابك.');}
- else if(intent==='invoice_help'){const [i,p]=await Promise.all([supabase.from('customer_invoices').select('id,invoice_number,total_amount,status,issued_at').order('issued_at',{ascending:false}).limit(100),supabase.from('customer_payments').select('invoice_id,amount').limit(500)]);if(i.error||p.error)throw new Error('تعذر الوصول إلى الفواتير. تحقق من نشر مخطط المالية.');const t=summarizeAccount((i.data??[]) as InvoiceAmount[],(p.data??[]) as PaymentAmount[]);setAnswer('حسب البيانات المسجلة:\nإجمالي الفواتير: '+formatCurrency(t.invoiced)+'\nالمدفوع المسجل: '+formatCurrency(t.paid)+'\nالمتبقي: '+formatCurrency(t.outstanding)+'\nعدد الفواتير: '+(i.data??[]).length+'.');}
+ else if(intent==='order_status'){
+ const r=await supabase.from('orders').select('order_number,status,created_at').order('created_at',{ascending:false}).limit(5);
+ if(r.error)throw r.error;
+ setAnswer(summarizeCustomerOrderStatuses((r.data??[]) as AssistantOrderRow[],formatDateShort));
+}
+ else if(intent==='invoice_help'){
+ const r=await supabase.from('customer_invoices').select('invoice_number,status,issued_at').order('issued_at',{ascending:false}).limit(100);
+ if(r.error)throw new Error('تعذر الوصول إلى الفواتير. تحقق من نشر مخطط المالية.');
+ setAnswer(summarizeCustomerInvoiceStatuses((r.data??[]) as AssistantInvoiceStatusRow[],formatDateShort));
+}
  else if(intent==='catalog_search'){const r=await supabase.from('products').select('name,item_code,barcode,unit,base_price,status').eq('organization_id',ORG_ID).eq('status','active').order('name').limit(300);if(r.error)throw r.error;const tokens=q.split(/\s+/).filter(w=>w.length>2&&!/^(هل|يوجد|عندي|عندكم|من|في|على|ما|هو|هي|ابحث|لي|عن|سعر|كم|الرجاء|اريد|أريد)$/.test(w));const hits=(r.data??[]).filter((p:AssistantProductRow)=>tokens.some(t=>(p.name+' '+p.item_code+' '+(p.barcode??'')).toLocaleLowerCase('ar').includes(t.toLocaleLowerCase('ar')))).slice(0,8) as AssistantProductRow[];setAnswer(hits.length?'نتائج من الكتالوج:\n'+hits.map((p:AssistantProductRow)=>p.name+' ('+p.item_code+') — '+formatCurrency(Number(p.base_price))+'/'+p.unit).join('\n'):'لم أعثر على صنف مطابق في الكتالوج الحالي.');}
  else setAnswer('أستطيع جلب طلبات حسابك وقراءة الفواتير والمدفوعات المسجلة والبحث في الكتالوج والإرشاد للعمل دون اتصال. لا أعطي بيانات غير موجودة في النظام ولا أرسل معلوماتك لخدمة خارجية.');}
  catch(err){setError(err instanceof Error?err.message:'تعذر استرجاع بيانات موثوقة.');}finally{setBusy(false);}}
