@@ -232,7 +232,6 @@ export function applyImportProfileRules(
   transformations: unknown[] = [],
   validations: unknown[] = [],
 ): ParsedImportRow {
-  validateImportProfileRules(transformations, validations);
   const data = { ...row.data };
   const errors = [...row.errors];
 
