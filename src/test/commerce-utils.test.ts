@@ -1,3 +1,4 @@
+import { DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, validateCsvRow } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, normalizeCartDraft, summarizeAccount, validateQuickOrderLines } from '@/lib/commerce-utils';
 
@@ -42,6 +43,49 @@ describe('commerce completion utilities', () => {
     expect(validateQuickOrderLines([
       { product_id: 'p1', product_name: 'Sugar', quantity: 1.5, available: 8 },
     ])).toEqual({ valid: false, reason: 'invalid_quantity', product_name: 'Sugar' });
+  });
+
+  it('hashes incrementally with the standard SHA-256 vectors', () => {
+    expect(new IncrementalSha256().digestHex()).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+    const digest = new IncrementalSha256();
+    digest.update(new TextEncoder().encode('a'));
+    digest.update(new TextEncoder().encode('b'));
+    digest.update(new TextEncoder().encode('c'));
+    expect(digest.digestHex()).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {
+    const parser = new StreamingCsvParser();
+    const rows: string[][] = [];
+    await parser.push('item_code,name\r\n000125,"Rice,', (row) => rows.push(row));
+    await parser.push(' ""Premium"" rice"\r\n000126,Sugar\r', (row) => rows.push(row));
+    await parser.push('\n', (row) => rows.push(row), true);
+    expect(rows).toEqual([
+      ['item_code','name'],
+      ['000125','Rice, "Premium" rice'],
+      ['000126','Sugar'],
+    ]);
+  });
+
+  it('normalizes Arabic headers and preserves leading zeroes while rejecting oversize cells', () => {
+    expect(normalizeHeader('  رمز الصنف  ')).toBe('item_code');
+    expect(validateCsvRow(['000125','Rice'], ['item_code','product_name'], 2).data.item_code).toBe('000125');
+    const invalid = validateCsvRow(['000126','x'.repeat(4001)], ['item_code','product_name'], 3);
+    expect(invalid.status).toBe('rejected');
+    expect(invalid.errors[0]).toContain('يتجاوز');
+  });
+
+  it('computes all data-quality dimensions deterministically and gates import acceptance', () => {
+    const quality = new DataQualityAccumulator(['item_code','product_name'], 'item_code');
+    quality.add({ row_number: 2, data: { item_code: '000125', product_name: 'Rice', quantity: '2', date: '2026-01-10' }, status: 'valid', errors: [] });
+    quality.add({ row_number: 3, data: { item_code: '000126', product_name: 'Sugar', quantity: '5', date: '2026-01-11' }, status: 'valid', errors: [] });
+    const result = quality.result();
+    expect(result.score).toBe(100);
+    expect(result.label).toBe('excellent');
+    expect(chooseImportStatus(result.score)).toBe('completed');
+
+    expect(chooseImportStatus(74)).toBe('manual_review');
+    expect(chooseImportStatus(49)).toBe('rejected');
   });
 
   it('classifies common Arabic questions to evidence-backed actions', () => {
