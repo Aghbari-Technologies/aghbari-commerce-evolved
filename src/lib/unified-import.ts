@@ -135,12 +135,173 @@ export type ParsedImportRow = {
   errors: string[];
 };
 
+export type ImportTransformation = {
+  field: string;
+  operation: 'trim' | 'lowercase' | 'uppercase' | 'remove_spaces' | 'normalize_arabic' | 'replace_literal' | 'to_number' | 'date_iso';
+  from?: string;
+  to?: string;
+};
+
+export type ImportValidationRule = {
+  field: string;
+  rule: 'required' | 'numeric' | 'integer' | 'min' | 'max' | 'enum' | 'min_length' | 'max_length' | 'safe_pattern';
+  value?: string | number;
+  values?: string[];
+  message?: string;
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate a profile's declarative rules before processing any data.
+ * These rules are data, never JavaScript expressions or executable code.
+ */
+export function validateImportProfileRules(transformations: unknown[], validations: unknown[]): void {
+  const operations = new Set<ImportTransformation['operation']>([
+    'trim','lowercase','uppercase','remove_spaces','normalize_arabic','replace_literal','to_number','date_iso',
+  ]);
+  for (const [index, rule] of transformations.entries()) {
+    if (!isPlainObject(rule) || typeof rule.field !== 'string' || !/^[a-z][a-z0-9_]{0,79}$/.test(rule.field) ||
+      typeof rule.operation !== 'string' || !operations.has(rule.operation as ImportTransformation['operation'])) {
+      throw new Error('قاعدة تحويل رقم ' + (index + 1) + ' غير مدعومة. استخدم field وoperation من قائمة التحويلات المسموحة.');
+    }
+    if (rule.operation === 'replace_literal' &&
+      (typeof rule.from !== 'string' || rule.from.length > 200 || typeof rule.to !== 'string' || rule.to.length > 200)) {
+      throw new Error('قاعدة replace_literal تحتاج from وto نصيين لا يتجاوز كل منهما 200 حرف.');
+    }
+  }
+
+  const supported = new Set<ImportValidationRule['rule']>([
+    'required','numeric','integer','min','max','enum','min_length','max_length','safe_pattern',
+  ]);
+  for (const [index, rule] of validations.entries()) {
+    if (!isPlainObject(rule) || typeof rule.field !== 'string' || !/^[a-z][a-z0-9_]{0,79}$/.test(rule.field) ||
+      typeof rule.rule !== 'string' || !supported.has(rule.rule as ImportValidationRule['rule'])) {
+      throw new Error('قاعدة تحقق رقم ' + (index + 1) + ' غير مدعومة. استخدم field وrule من قائمة التحقق المسموحة.');
+    }
+    if (['min','max','min_length','max_length'].includes(String(rule.rule)) &&
+      (typeof rule.value !== 'number' || !Number.isFinite(rule.value) || rule.value < 0 || rule.value > 1_000_000_000)) {
+      throw new Error('قيمة الحد في قاعدة ' + rule.rule + ' غير صالحة للحقل ' + rule.field + '.');
+    }
+    if (rule.rule === 'enum' &&
+      (!Array.isArray(rule.values) || rule.values.length > 100 || rule.values.some((value) => typeof value !== 'string' || value.length > 200))) {
+      throw new Error('قاعدة enum تحتاج قائمة نصية لا تتجاوز 100 قيمة.');
+    }
+    if (rule.rule === 'safe_pattern') {
+      const pattern = rule.value;
+      // Permit bounded, simple validation patterns; reject constructs commonly used for ReDoS.
+      if (typeof pattern !== 'string' || pattern.length > 120 ||
+        /\\[1-9]|\(\?[=!<:]|\([^)]*[+*{][^)]*\)[+*{]|(?:\.\*){2,}/.test(pattern)) {
+        throw new Error('نمط التحقق غير آمن أو طويل؛ استخدم نمطًا بسيطًا محدودًا.');
+      }
+      try { new RegExp(pattern, 'u'); } catch { throw new Error('نمط التحقق ليس تعبيرًا صالحًا للحقل ' + rule.field + '.'); }
+    }
+  }
+}
+
+function normalizeArabicValue(value: string): string {
+  return value.toLocaleLowerCase('ar')
+    .replace(/[ًٌٍَُِّْـٰ]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toIsoDate(value: string): string | null {
+  const input = value.trim();
+  let year = 0; let month = 0; let day = 0;
+  let match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (match) {
+    year = Number(match[1]); month = Number(match[2]); day = Number(match[3]);
+  } else {
+    match = /^(\d{2})[/. -](\d{2})[/. -](\d{4})$/.exec(input);
+    if (!match) return null;
+    day = Number(match[1]); month = Number(match[2]); year = Number(match[3]);
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+export function applyImportProfileRules(
+  row: ParsedImportRow,
+  transformations: unknown[] = [],
+  validations: unknown[] = [],
+): ParsedImportRow {
+  validateImportProfileRules(transformations, validations);
+  const data = { ...row.data };
+  const errors = [...row.errors];
+
+  for (const raw of transformations) {
+    const rule = raw as ImportTransformation;
+    if (!(rule.field in data) || data[rule.field] == null || data[rule.field] === '') continue;
+    const value = String(data[rule.field]);
+    switch (rule.operation) {
+      case 'trim': data[rule.field] = value.trim(); break;
+      case 'lowercase': data[rule.field] = value.toLocaleLowerCase('ar'); break;
+      case 'uppercase': data[rule.field] = value.toLocaleUpperCase('ar'); break;
+      case 'remove_spaces': data[rule.field] = value.replace(/\s+/g, ''); break;
+      case 'normalize_arabic': data[rule.field] = normalizeArabicValue(value); break;
+      case 'replace_literal': data[rule.field] = value.split(rule.from ?? '').join(rule.to ?? ''); break;
+      case 'to_number': {
+        const normalized = value.replace(/,/g, '').trim();
+        if (!/^-?[0-9]+(?:\.[0-9]+)?$/.test(normalized)) {
+          errors.push('تعذر تحويل الحقل ' + rule.field + ' إلى رقم صالح');
+        } else {
+          data[rule.field] = normalized;
+        }
+        break;
+      }
+      case 'date_iso': {
+        const normalized = toIsoDate(value);
+        if (!normalized) errors.push('تعذر توحيد التاريخ في الحقل ' + rule.field + '؛ استخدم YYYY-MM-DD أو DD/MM/YYYY');
+        else data[rule.field] = normalized;
+        break;
+      }
+    }
+  }
+
+  for (const raw of validations) {
+    const rule = raw as ImportValidationRule;
+    const rawValue = data[rule.field];
+    const value = rawValue == null ? '' : String(rawValue).trim();
+    const numeric = value !== '' ? Number(value) : Number.NaN;
+    let failed = false;
+    switch (rule.rule) {
+      case 'required': failed = value.length === 0; break;
+      case 'numeric': failed = value !== '' && (!Number.isFinite(numeric) || !/^-?[0-9]+(?:\.[0-9]+)?$/.test(value)); break;
+      case 'integer': failed = value !== '' && (!Number.isInteger(numeric) || !Number.isFinite(numeric)); break;
+      case 'min': failed = value !== '' && (!Number.isFinite(numeric) || numeric < Number(rule.value)); break;
+      case 'max': failed = value !== '' && (!Number.isFinite(numeric) || numeric > Number(rule.value)); break;
+      case 'enum': failed = value !== '' && !(rule.values ?? []).includes(value); break;
+      case 'min_length': failed = value !== '' && value.length < Number(rule.value); break;
+      case 'max_length': failed = value.length > Number(rule.value); break;
+      case 'safe_pattern': failed = value !== '' && !(new RegExp(String(rule.value), 'u')).test(value); break;
+    }
+    if (failed) errors.push(rule.message?.slice(0, 240) || ('قاعدة التحقق ' + rule.rule + ' فشلت للحقل ' + rule.field));
+  }
+
+  const uniqueErrors = [...new Set(errors)];
+  return {
+    ...row,
+    data,
+    errors: uniqueErrors,
+    status: uniqueErrors.length ? 'rejected' : row.status,
+  };
+}
+
 export function validateCsvRow(values: string[], headers: string[], rowNumber: number): ParsedImportRow {
   const data: Record<string, unknown> = {};
   const errors: string[] = [];
   if (values.length > MAX_IMPORT_COLUMNS) errors.push(`عدد الأعمدة يتجاوز ${MAX_IMPORT_COLUMNS}`);
   if (values.length > headers.length) errors.push('عدد خلايا الصف أكبر من عدد أعمدة العناوين');
   for (let index = 0; index < Math.min(headers.length, values.length); index += 1) {
+    const header = headers[index];
+    if (!header) continue;
     const value = values[index] ?? '';
     if (value.length > MAX_IMPORT_CELL_CHARS) {
       errors.push(`الخلية ${headers[index]} تتجاوز ${MAX_IMPORT_CELL_CHARS} حرف`);
