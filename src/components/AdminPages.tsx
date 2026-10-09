@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useBlocker } from '@tanstack/react-router';
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
@@ -42,7 +43,7 @@ export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
 
 type OrderReviewDraft = { quantity: string; unitPrice: string; reason: string };
 
-export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; onBack: () => void; onNotice: (m: string) => void }) {
+export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { orderId: string; onBack: () => void; onNotice: (m: string) => void; onBlockedChange: (blocked: boolean) => void }) {
   const { data: orders, refetch: refetchOrders } = useFetch(fetchOrders);
   const { data: items, loading, error, refetch } = useFetch(() => fetchOrderItems(orderId), [orderId]);
   const order = orders?.find((o) => o.id === orderId);
@@ -72,6 +73,16 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
     item.proposed_quantity != null || item.proposed_unit_price != null,
   ));
   const blocked = dirty || hasStaged;
+  const blocker = useBlocker({
+    shouldBlockFn: () => blocked,
+    enableBeforeUnload: () => blocked,
+    withResolver: true,
+  });
+
+  useEffect(() => {
+    onBlockedChange(blocked);
+  }, [blocked, onBlockedChange]);
+
   const transitions: Record<string, string[]> = {
     draft: ['pending', 'cancelled'],
     pending: ['cancelled'],
@@ -118,6 +129,7 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
   function updateDraft(itemId: string, patch: Partial<OrderReviewDraft>) {
     setDrafts((previous) => ({ ...previous, [itemId]: { ...previous[itemId], ...patch } }));
     setDirty(true);
+    onBlockedChange(true);
     setReviewMessage('توجد تعديلات لم تُحفظ بعد. اعتمدها أو ألغها قبل مغادرة القسم.');
   }
 
@@ -186,6 +198,7 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
       const result = await reviewOrderLines(orderId, lines, 'approve', customerNote);
       await Promise.all([refetch(), refetchOrders()]);
       setDirty(false);
+      onBlockedChange(false);
       setReviewMessage(result.adjusted
         ? 'اعتمدت التعديلات، تأكد الطلب، أُنشئت الفاتورة من الخادم، وسُجل طلب السداد للعميل.'
         : 'اعتمدت الكميات وأُكد الطلب. أُنشئت الفاتورة وطلب السداد من الخادم.');
@@ -214,6 +227,7 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
       }
       setDirty(false);
       await Promise.all([refetch(), refetchOrders()]);
+      onBlockedChange(false);
       setReviewMessage('أُلغيت المسودة غير المعتمدة. لم يتغير المخزون ولم تصدر فاتورة من هذه المسودة.');
     } catch (cause) {
       setReviewMessage(cause instanceof Error ? cause.message : 'تعذر إلغاء المسودة');
@@ -298,7 +312,7 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
             </tr>;
           })}
         </tbody></table></TableWrap>}
-      <label className="form-field" style={{ marginTop: 12 }}><span>ملاحظة للعميل (اختيارية)</span><textarea value={customerNote} onChange={(event) => { setCustomerNote(event.target.value); setDirty(true); }} maxLength={1000} rows={2} placeholder="توضيح أي تغيير في الأصناف أو الكميات" /></label>
+      <label className="form-field" style={{ marginTop: 12 }}><span>ملاحظة للعميل (اختيارية)</span><textarea value={customerNote} onChange={(event) => { setCustomerNote(event.target.value); setDirty(true); onBlockedChange(true); }} maxLength={1000} rows={2} placeholder="توضيح أي تغيير في الأصناف أو الكميات" /></label>
       {reviewMessage && <div className={blocked ? 'form-error' : 'privacy-note'} role={blocked ? 'alert' : 'status'}>{reviewMessage}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
         <Button variant="secondary" disabled={busy || loading || !items?.length} onClick={() => void stageReview()}>{busy ? 'جارٍ الحفظ...' : 'حفظ المسودة دون اعتماد'}</Button>
@@ -316,6 +330,13 @@ export function OrderDetail({ orderId, onBack, onNotice }: { orderId: string; on
       {order.quantity_review_required && <p role="alert" style={{ color: '#9a5b13', fontWeight: 800 }}>توجد مراجعة معلقة. يجب إكمالها قبل متابعة الطلب.</p>}
       {order.customer_adjustment_note && <p>{order.customer_adjustment_note}</p>}
     </section>}
+    {blocker.status === 'blocked' && <div className="modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="order-review-navigation-title">
+      <section className="modal" style={{ maxWidth: 460 }} dir="rtl">
+        <div className="modal-head"><h2 id="order-review-navigation-title">لا يمكن مغادرة مراجعة الطلب</h2></div>
+        <p style={{ lineHeight: 1.8 }}>توجد كميات أو أسعار أو ملاحظات غير معتمدة. اعتمد التعديلات أو ألغِ المسودة قبل الانتقال إلى صفحة أخرى. سيبقى الطلب مفتوحًا حتى إكمال المراجعة.</p>
+        <div className="modal-actions"><button type="button" className="btn primary" onClick={() => blocker.reset()}>العودة إلى المراجعة</button></div>
+      </section>
+    </div>}
   </AdminPage>;
 }
 
