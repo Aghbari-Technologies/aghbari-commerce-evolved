@@ -250,10 +250,14 @@ type CheckoutPreviewLine = {
   item_code: string;
   unit: string;
   quantity: number | string;
-  unit_price: number | string;
-  line_total: number | string;
 };
-type CheckoutPricePreview = { items: CheckoutPreviewLine[]; total_amount: number; currency: string; customer_tier: string };
+type CheckoutValidation = {
+  valid: true;
+  items: CheckoutPreviewLine[];
+  item_count: number;
+  currency: string;
+  pricing_verified: true;
+};
 
 function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void }) {
   const { user } = useAuth();
@@ -262,7 +266,7 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
   const [business, setBusiness] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentTerms, setPaymentTerms] = useState<'cash_on_delivery' | 'credit'>('cash_on_delivery');
-  const [pricePreview, setPricePreview] = useState<CheckoutPricePreview | null>(null);
+  const [cartValidation, setCartValidation] = useState<CheckoutValidation | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewError, setPreviewError] = useState('');
   const [previewRetry, setPreviewRetry] = useState(0);
@@ -278,28 +282,29 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
     let active = true;
     setPreviewLoading(true);
     setPreviewError('');
-    setPricePreview(null);
+    setCartValidation(null);
     void (async () => {
       try {
-        const { data, error: rpcError } = await supabase.rpc('preview_order_pricing', { _items: checkoutItems });
-        if (rpcError) throw new Error(rpcError.message || 'تعذر التحقق من الأسعار الحالية');
-        const payload = data as { items?: unknown; total_amount?: unknown; currency?: unknown; customer_tier?: unknown } | null;
-        const amount = typeof payload?.total_amount === 'number' ? payload.total_amount : Number(payload?.total_amount);
-        if (!payload || !Array.isArray(payload.items) || payload.items.length === 0 || !Number.isFinite(amount) || amount < 0) {
-          throw new Error('لم تصل معاينة أسعار صالحة من الخادم');
+        const { data, error: rpcError } = await supabase.rpc('validate_checkout_cart', { p_items: checkoutItems });
+        if (rpcError) throw new Error(rpcError.message || 'تعذر التحقق من أصناف السلة وسياسة التسعير');
+        const payload = data as { valid?: unknown; items?: unknown; item_count?: unknown; currency?: unknown; pricing_verified?: unknown } | null;
+        if (!payload || payload.valid !== true || payload.pricing_verified !== true || !Array.isArray(payload.items) ||
+          payload.items.length === 0 || Number(payload.item_count) !== payload.items.length) {
+          throw new Error('لم يصل تأكيد تحقق صالح من الخادم');
         }
         const rows = payload.items as CheckoutPreviewLine[];
         if (rows.some((line) =>
           typeof line.product_id !== 'string' || typeof line.name !== 'string' ||
+          typeof line.item_code !== 'string' || typeof line.unit !== 'string' ||
           !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0 ||
-          !Number.isFinite(Number(line.unit_price)) || Number(line.unit_price) < 0 ||
-          !Number.isFinite(Number(line.line_total)) || Number(line.line_total) < 0
-        )) throw new Error('استجابة تسعير الخادم غير مكتملة');
-        if (active) setPricePreview({
+          'unit_price' in line || 'line_total' in line || 'total_amount' in line
+        )) throw new Error('استجابة تحقق السلة غير مكتملة أو تحتوي حقولًا مالية غير مسموحة');
+        if (active) setCartValidation({
+          valid: true,
           items: rows,
-          total_amount: amount,
+          item_count: Number(payload.item_count),
           currency: typeof payload.currency === 'string' ? payload.currency : 'YER',
-          customer_tier: typeof payload.customer_tier === 'string' ? payload.customer_tier : 'retail',
+          pricing_verified: true,
         });
       } catch (e) {
         if (active) setPreviewError(e instanceof Error ? e.message : 'تعذر التحقق من الأسعار الحالية');
@@ -333,20 +338,20 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
   async function submit() {
     if (!user) { setError('سجّل الدخول أو أنشئ حساباً لإتمام الطلب'); return; }
     if (name.trim().length < 2 || phone.trim().length < 6) { setError('الاسم ورقم الهاتف مطلوبان'); return; }
-    if (previewLoading || !pricePreview) { setError('لا يمكن تسجيل الطلب حتى ينجح التحقق من الأسعار الحالية. أعد المحاولة.'); return; }
+    if (previewLoading || !cartValidation) { setError('لا يمكن تسجيل الطلب حتى ينجح التحقق من أصناف السلة وسياسة التسعير. أعد المحاولة.'); return; }
     setSubmitting(true); setError('');
     const requestKey = getIdempotencyKey();
     try {
-      const { data, error: rpcError } = await supabase.rpc('place_order', {
+      const { data, error: rpcError } = await supabase.rpc('submit_customer_order', {
         _items: cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })),
         _notes: notes.trim(), _business_name: business.trim(), _contact_name: name.trim(), _phone: phone.trim(),
         _payment_terms: paymentTerms, _idempotency_key: requestKey,
       });
       if (rpcError) throw new Error(rpcError.message || 'تعذر إرسال الطلب');
-      const result = data as { id?: unknown; order_number?: unknown; total_amount?: unknown } | null;
-      const serverTotal = typeof result?.total_amount === 'number' ? result.total_amount : Number(result?.total_amount);
-      if (!result || typeof result.id !== 'string' || !result.id || typeof result.order_number !== 'string' || !result.order_number || !Number.isFinite(serverTotal) || serverTotal < 0) {
-        throw new Error('استجابة الخادم غير مكتملة؛ لم نعرض الطلب كتأكيد ناجح. راجع طلباتي قبل إعادة الإرسال.');
+      const result = data as { id?: unknown; order_number?: unknown; status?: unknown } | null;
+      if (!result || typeof result.id !== 'string' || !result.id || typeof result.order_number !== 'string' || !result.order_number ||
+        'total_amount' in result || 'unit_price' in result || 'line_total' in result) {
+        throw new Error('استجابة الخادم غير مكتملة أو تحتوي بيانات مالية غير مسموحة؛ راجع طلباتي قبل إعادة الإرسال.');
       }
       try {
         const storageKey = 'aghbari:checkout-attempt:v1';
@@ -376,18 +381,18 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
           <label className="sf-form-field"><span>ملاحظات</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي ملاحظات على الطلب..." /></label>
           {previewError && <div className="sf-form-error" role="alert">{previewError} <button className="sf-link" type="button" onClick={() => setPreviewRetry((n) => n + 1)}>إعادة التحقق</button></div>}
           {error && <div className="sf-form-error">{error}</div>}
-          <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting || previewLoading || !pricePreview}>{submitting ? 'جار الإرسال...' : previewLoading ? 'جارٍ التحقق من الأسعار...' : 'تأكيد الطلب'}</button></div>
+          <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting || previewLoading || !cartValidation}>{submitting ? 'جار الإرسال...' : previewLoading ? 'جارٍ التحقق من السلة...' : 'تأكيد الطلب'}</button></div>
         </div>
         <aside className="sf-checkout-summary">
           <h3>ملخص الطلب</h3>
-          {previewLoading && <p role="status">جارٍ حساب أسعار حسابك من الخادم...</p>}
-          {pricePreview ? pricePreview.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>الكمية: {formatNumber(Number(line.quantity))} {line.unit}</small></div>)
+          {previewLoading && <p role="status">جارٍ التحقق من الأصناف وسياسة التسعير من الخادم...</p>}
+          {cartValidation ? cartValidation.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>الكمية: {formatNumber(Number(line.quantity))} {line.unit}</small></div>)
             : !previewLoading && cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>الكمية: {formatNumber(i.quantity)} {i.product.unit}</small></div>)}
           <div role="note" style={{ padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70', lineHeight: 1.8 }}>
             الأسعار والإجماليات مخفية في مستندات الطلب للعميل. بعد مراجعة الإدارة سيظهر إشعار حالة الطلب وتعليمات السداد عند الحاجة.
           </div>
-          {pricePreview && <small style={{ color: '#71868a', lineHeight: 1.7 }}>تم التحقق من بيانات التسعير الحالية من الخادم. سيعيد الخادم التحقق داخل معاملة إنشاء الطلب أيضًا، لكن لا تُعرض قيم الأسعار هنا.</small>}
-          {!pricePreview && !previewLoading && <small style={{ color: '#9b2626', lineHeight: 1.7 }}>لن يُرسل الطلب حتى ينجح التحقق من الأسعار في الخادم.</small>}
+          {cartValidation && <small style={{ color: '#71868a', lineHeight: 1.7 }}>تحقق الخادم من الأصناف وصلاحية سياسة التسعير دون إرسال أي أسعار أو إجماليات للمتصفح. يعيد الخادم حساب المبلغ داخل معاملة إنشاء الطلب.</small>}
+          {!cartValidation && !previewLoading && <small style={{ color: '#9b2626', lineHeight: 1.7 }}>لن يُرسل الطلب حتى ينجح التحقق من السلة وسياسة التسعير في الخادم.</small>}
         </aside>
       </div>
     </section>
