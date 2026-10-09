@@ -171,6 +171,7 @@ export type ImportJob = {
   file_hash?: string | null;
   file_size?: number | null;
   profile_id?: string | null;
+  upload_session_id?: string | null;
   profile_version?: number | null;
   period_key?: string | null;
   source_system?: string;
