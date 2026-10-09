@@ -288,6 +288,81 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await db.unsafe("set role authenticated");
+  const staffCustomers = await db.unsafe(
+    "select id from public.customers where profile_id=$1 and organization_id=$2 limit 1",
+    [profileId, organizationId],
+  );
+  assert.equal(staffCustomers.length, 1, "staff test customer must belong to the staff organization");
+
+  const staffCreatedResult = await db.unsafe(
+    "select public.create_staff_order($1::uuid,$2::jsonb,$3,$4,$5) as result",
+    [staffCustomers[0].id,
+      db.json([{ product_id: productId, quantity: 2, unit_price: 0.01, item_code: "FORGED-SKU", product_name: "Forged Product", unit: "forged" }]),
+      "CI atomic staff-created order", "ci-staff-order-key-000001", "cash_on_delivery"],
+  );
+  const staffCreatedOrder = staffCreatedResult[0].result;
+  assert.equal(staffCreatedOrder.status, "pending");
+  assert.equal(staffCreatedOrder.idempotent_replay, false);
+  assert.equal(Number(staffCreatedOrder.total_amount), 77000,
+    "staff order price must come from the shared server resolver, not the forged unit_price of 0.01");
+
+  const staffReplay = await db.unsafe(
+    "select public.create_staff_order($1::uuid,$2::jsonb,$3,$4,$5) as result",
+    [staffCustomers[0].id,
+      db.json([{ product_id: productId, quantity: 2, unit_price: 999999, item_code: "DIFFERENT-CLIENT-CODE" }]),
+      "CI atomic staff-created order", "ci-staff-order-key-000001", "cash_on_delivery"],
+  );
+  assert.equal(staffReplay[0].result.id, staffCreatedOrder.id, "an identical normalized retry must return the original order");
+  assert.equal(staffReplay[0].result.idempotent_replay, true);
+
+  await expectFailure(
+    "staff idempotency key reused with a different order",
+    () => db.unsafe(
+      "select public.create_staff_order($1::uuid,$2::jsonb,$3,$4,$5)",
+      [staffCustomers[0].id, db.json([{ product_id: productId, quantity: 3 }]),
+        "CI atomic staff-created order", "ci-staff-order-key-000001", "cash_on_delivery"],
+    ),
+    /different order payload/i,
+  );
+
+  await expectFailure(
+    "direct authenticated INSERT to orders",
+    () => db.unsafe(
+      "insert into public.orders(organization_id,customer_id,order_number,status,total_amount,total_items,created_by) values($1,$2,'CI-DIRECT-ORDER','pending',1,1,$3)",
+      [organizationId, staffCustomers[0].id, staffProfileId],
+    ),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "direct authenticated INSERT to order_items",
+    () => db.unsafe(
+      "insert into public.order_items(order_id,product_id,item_code,product_name_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total,requested_quantity,approved_quantity,approved_unit_price) values($1,$2,'FORGED','Forged','unit',1,0.01,0.01,1,1,0.01)",
+      [staffCreatedOrder.id, productId],
+    ),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "direct authenticated update of order total",
+    () => db.unsafe("update public.orders set total_amount=0 where id=$1", [staffCreatedOrder.id]),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "direct authenticated update of order-line price",
+    () => db.unsafe("update public.order_items set unit_price_snapshot=0.01 where order_id=$1", [staffCreatedOrder.id]),
+    /permission denied/i,
+  );
+
+  const staffCreatedItems = await db.unsafe(
+    "select item_code,product_name_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total from public.fetch_staff_order_items($1::uuid)",
+    [staffCreatedOrder.id],
+  );
+  assert.equal(staffCreatedItems.length, 1);
+  assert.notEqual(staffCreatedItems[0].item_code, "FORGED-SKU", "order snapshot must use canonical server-side item code");
+  assert.notEqual(staffCreatedItems[0].product_name_snapshot, "Forged Product", "order snapshot must use the persisted product name");
+  assert.equal(Number(staffCreatedItems[0].unit_price_snapshot), 38500);
+  assert.equal(Number(staffCreatedItems[0].line_total), 77000);
+  process.stdout.write("PASS atomic tenant-bound staff order creation, server-side pricing, idempotency and direct-write denial\\n");
+
   const staffOrderRows = await db.unsafe(
     "select id,total_amount from public.fetch_staff_orders() where id=$1",
     [order.id],

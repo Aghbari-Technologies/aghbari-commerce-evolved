@@ -210,42 +210,33 @@ export async function updateOrderStatus(id: string, status: string): Promise<voi
 
 export async function createOrder(order: {
   customer_id: string;
-  items: { product_id: string; item_code: string; product_name: string; unit: string; quantity: number; unit_price: number }[];
+  items: {
+    product_id: string;
+    quantity: number;
+    // Backward-compatible descriptor fields are accepted but deliberately ignored by the server.
+    item_code?: string;
+    product_name?: string;
+    unit?: string;
+    unit_price?: number;
+  }[];
   notes?: string;
+  idempotency_key?: string;
+  payment_terms?: 'cash_on_delivery' | 'credit';
 }): Promise<Order> {
-  const totalAmount = order.items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-  const orderNumber = `ORD-${Date.now().toString().slice(-8)}`;
-
-  const { data: newOrder, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      organization_id: ORG_ID,
-      customer_id: order.customer_id,
-      order_number: orderNumber,
-      status: 'pending',
-      total_amount: totalAmount,
-      total_items: order.items.length,
-      notes: order.notes ?? null,
-    })
-    .select('id,organization_id,customer_id,order_number,status,total_items,notes,created_at')
-    .single();
-  if (orderError) throw orderError;
-
-  const orderItems = order.items.map((item) => ({
-    order_id: newOrder.id,
-    product_id: item.product_id,
-    item_code: item.item_code,
-    product_name_snapshot: item.product_name,
-    unit_snapshot: item.unit,
-    quantity: item.quantity,
-    unit_price_snapshot: item.unit_price,
-    line_total: item.unit_price * item.quantity,
-  }));
-
-  const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-  if (itemsError) throw itemsError;
-
-  return newOrder;
+  if (!order.items.length) throw new Error('يجب إضافة صنف واحد على الأقل إلى الطلب.');
+  const idempotencyKey = order.idempotency_key ?? crypto.randomUUID();
+  const { data, error } = await supabase.rpc('create_staff_order', {
+    p_customer_id: order.customer_id,
+    p_items: order.items.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+    })),
+    p_notes: order.notes ?? null,
+    p_idempotency_key: idempotencyKey,
+    p_payment_terms: order.payment_terms ?? 'cash_on_delivery',
+  });
+  if (error) throw error;
+  return data as Order;
 }
 
 // ─── Pricing rules ───
