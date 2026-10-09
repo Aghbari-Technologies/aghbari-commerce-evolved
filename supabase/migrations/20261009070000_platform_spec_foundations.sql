@@ -49,6 +49,7 @@ CREATE INDEX IF NOT EXISTS central_synonym_dictionary_lookup_idx
 CREATE TABLE IF NOT EXISTS public.import_upload_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  import_job_id uuid REFERENCES public.import_jobs(id) ON DELETE SET NULL,
   profile_id uuid REFERENCES public.import_profiles(id) ON DELETE SET NULL,
   profile_version integer,
   created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -967,3 +968,105 @@ GRANT EXECUTE ON FUNCTION public.create_import_job(text,text,bigint,text,uuid,te
 
 -- The calculated tier columns must always fall back to the base price when no eligible rule exists.
 SELECT public.refresh_product_tier_prices(o.id,NULL) FROM public.organizations o;
+
+
+CREATE OR REPLACE FUNCTION public.create_import_upload_session(p_job_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_job public.import_jobs%ROWTYPE;
+  v_org uuid;
+  v_profile uuid;
+  v_session public.import_upload_sessions%ROWTYPE;
+BEGIN
+  v_profile := public.current_profile_id();
+  SELECT p.organization_id INTO v_org FROM public.profiles p
+   WHERE p.id=v_profile AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='غير مصرح بإنشاء جلسة استيراد';
+  END IF;
+  SELECT j.* INTO v_job FROM public.import_jobs j
+   WHERE j.id=p_job_id AND j.organization_id=v_org FOR UPDATE;
+  IF NOT FOUND OR v_job.file_hash IS NULL OR v_job.file_size IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='دفعة الاستيراد غير صالحة';
+  END IF;
+  IF v_job.upload_session_id IS NOT NULL THEN
+    SELECT s.* INTO v_session FROM public.import_upload_sessions s
+     WHERE s.id=v_job.upload_session_id AND s.organization_id=v_org;
+    IF FOUND THEN RETURN to_jsonb(v_session); END IF;
+  END IF;
+  INSERT INTO public.import_upload_sessions(
+    organization_id,import_job_id,profile_id,profile_version,created_by,file_name,file_type,file_size,
+    file_hash,period_key,chunk_size_bytes,total_chunks,status,retention_expires_at,raw_file_retained
+  )
+  VALUES(
+    v_org,v_job.id,v_job.profile_id,v_job.profile_version,v_profile,coalesce(v_job.file_name,'import.csv'),
+    lower(coalesce(nullif(split_part(coalesce(v_job.file_name,''),'.',2),''),'unknown')),
+    v_job.file_size,v_job.file_hash,v_job.period_key,4194304,
+    ceil(v_job.file_size::numeric/4194304)::integer,'created',now()+interval '30 days',false
+  )
+  RETURNING * INTO v_session;
+  UPDATE public.import_jobs SET upload_session_id=v_session.id,retention_expires_at=v_session.retention_expires_at,raw_file_retained=false
+   WHERE id=v_job.id;
+  RETURN to_jsonb(v_session);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.create_import_upload_session(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_import_upload_session(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.record_import_upload_chunk(
+  p_session_id uuid, p_chunk_number integer, p_byte_offset bigint, p_byte_size integer, p_chunk_hash text
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+DECLARE
+  v_session public.import_upload_sessions%ROWTYPE;
+  v_profile uuid := public.current_profile_id();
+  v_org uuid;
+  v_expected_offset bigint;
+  v_expected_size integer;
+  v_existing public.import_upload_chunks%ROWTYPE;
+  v_verified integer;
+BEGIN
+  SELECT p.organization_id INTO v_org FROM public.profiles p
+   WHERE p.id=v_profile AND p.auth_user_id=auth.uid() AND p.is_active;
+  IF v_org IS NULL OR NOT public.is_staff() THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='غير مصرح بتسجيل شريحة استيراد';
+  END IF;
+  SELECT s.* INTO v_session FROM public.import_upload_sessions s
+   WHERE s.id=p_session_id AND s.organization_id=v_org FOR UPDATE;
+  IF NOT FOUND OR v_session.status IN ('completed','cancelled','expired') THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='جلسة الاستيراد غير متاحة';
+  END IF;
+  IF p_chunk_number<0 OR p_chunk_number>=v_session.total_chunks
+     OR coalesce(p_chunk_hash,'') !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='بيانات شريحة الاستيراد غير صالحة';
+  END IF;
+  v_expected_offset := p_chunk_number::bigint*v_session.chunk_size_bytes;
+  v_expected_size := least(v_session.chunk_size_bytes,(v_session.file_size-v_expected_offset)::integer);
+  IF p_byte_offset<>v_expected_offset OR p_byte_size<>v_expected_size OR p_byte_size<=0 THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='حجم أو موضع شريحة الاستيراد لا يطابق الجلسة';
+  END IF;
+  SELECT c.* INTO v_existing FROM public.import_upload_chunks c
+   WHERE c.session_id=p_session_id AND c.chunk_number=p_chunk_number;
+  IF FOUND THEN
+    IF v_existing.byte_offset<>p_byte_offset OR v_existing.byte_size<>p_byte_size OR v_existing.chunk_hash<>p_chunk_hash THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='تعارض في بصمة شريحة سبق التحقق منها';
+    END IF;
+  ELSE
+    INSERT INTO public.import_upload_chunks(session_id,organization_id,chunk_number,byte_offset,byte_size,chunk_hash)
+    VALUES(p_session_id,v_org,p_chunk_number,p_byte_offset,p_byte_size,p_chunk_hash);
+  END IF;
+  SELECT count(*)::integer INTO v_verified FROM public.import_upload_chunks c WHERE c.session_id=p_session_id;
+  UPDATE public.import_upload_sessions
+     SET verified_chunks=v_verified,
+         status=CASE WHEN v_verified=total_chunks THEN 'uploaded' ELSE 'uploading' END,
+         updated_at=now()
+   WHERE id=p_session_id;
+  RETURN jsonb_build_object('session_id',p_session_id,'verified_chunks',v_verified,'total_chunks',v_session.total_chunks,'complete',v_verified=v_session.total_chunks);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.record_import_upload_chunk(uuid,integer,bigint,integer,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.record_import_upload_chunk(uuid,integer,bigint,integer,text) TO authenticated;
