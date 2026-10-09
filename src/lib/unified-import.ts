@@ -10,6 +10,25 @@ export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PROCESSING_CHUNK_ROWS = 1_000;
 export const MAX_ARCHIVE_EXPANSION_FACTOR = 10;
 
+function sortJsonObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record).sort().map((key) => [key, sortJsonObjectKeys(record[key])]),
+    );
+  }
+  return value;
+}
+
+/** Stable, recursively key-sorted JSON for fingerprints over persisted configuration. */
+export function stableJsonStringify(value: unknown): string {
+  const result = JSON.stringify(sortJsonObjectKeys(value));
+  if (result === undefined) throw new Error('قيمة إعدادات الاستيراد غير قابلة للبصم.');
+  return result;
+}
+
+
 /** Persist rows only for unverified chunks, except the final EOF row which may be missing if a prior run stopped after checkpointing the last chunk. */
 export function shouldPersistParsedImportRow(
   chunkNumber: number,
