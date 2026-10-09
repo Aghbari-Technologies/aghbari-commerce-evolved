@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useBlocker } from '@tanstack/react-router';
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
-  X, ExternalLink,
+  X, ExternalLink, Save,
 } from 'lucide-react';
 import {
   fetchAiAlerts, fetchAiTasks, fetchNotifications, fetchOrders, fetchOrderItems,
@@ -17,6 +17,7 @@ import type { AiAlert, AiTask, Notification, Supplier, AdminSetting, OrderItem }
 
 import type { LucideIcon } from 'lucide-react';
 import { supabase, ORG_ID } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 type IconType = LucideIcon;
 
 export function Notifications({ onNotice }: { onNotice: (m: string) => void }) {
@@ -366,8 +367,10 @@ export function Devices({ onNotice }: { onNotice: (m: string) => void }) {
 }
 
 export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
+  const { user } = useAuth();
+  const canManageRoles = Boolean(user?.roles.includes('admin'));
   const { data: settings, loading, refetch } = useFetch(fetchSettings);
-  const [tab, setTab] = useState<'general' | 'storefront' | 'appearance'>('general');
+  const [tab, setTab] = useState<'general' | 'storefront' | 'appearance' | 'access'>('general');
   const [saving, setSaving] = useState(false);
   const map = useMemo(() => { const m: Record<string, unknown> = {}; settings?.forEach((s: AdminSetting) => m[s.key] = s.value); return m; }, [settings]);
 
@@ -375,12 +378,159 @@ export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
 
   return <AdminPage eyebrow="النظام" title="الإعدادات العامة" description="تحكم كامل في إعدادات المتجر والمظهر" icon={Settings} note="" toolbar={<Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button>}>
     {loading ? <Loading /> : <>
-      <div className="settings-tabs"><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>عام</button><button className={tab === 'storefront' ? 'active' : ''} onClick={() => setTab('storefront')}>المتجر</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>المظهر</button></div>
+      <div className="settings-tabs"><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>عام</button><button className={tab === 'storefront' ? 'active' : ''} onClick={() => setTab('storefront')}>المتجر</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>المظهر</button>{canManageRoles && <button className={tab === 'access' ? 'active' : ''} onClick={() => setTab('access')}>المستخدمون والصلاحيات</button>}</div>
       {tab === 'general' && <SettingsPanel title="معلومات المتجر"><SettingInput label="اسم المتجر" value={(map.store_name as string) ?? ''} onSave={(v) => save('store_name', v, 'general')} saving={saving} /><SettingInput label="الوصف المختصر" value={(map.store_tagline as string) ?? ''} onSave={(v) => save('store_tagline', v, 'general')} saving={saving} /><SettingInput label="الهاتف" value={(map.store_phone as string) ?? ''} onSave={(v) => save('store_phone', v, 'general')} saving={saving} /><SettingInput label="البريد" value={(map.store_email as string) ?? ''} onSave={(v) => save('store_email', v, 'general')} saving={saving} /><SettingInput label="العنوان" value={(map.store_address as string) ?? ''} onSave={(v) => save('store_address', v, 'general')} saving={saving} /></SettingsPanel>}
       {tab === 'storefront' && <SettingsPanel title="إعدادات المتجر"><SettingInput label="عنوان البانر" value={(map.hero_title as string) ?? ''} onSave={(v) => save('hero_title', v, 'storefront')} saving={saving} /><SettingInput label="نص البانر الفرعي" value={(map.hero_subtitle as string) ?? ''} onSave={(v) => save('hero_subtitle', v, 'storefront')} saving={saving} /><SettingToggle label="شريط العرض المتحرك" value={(map.ticker_enabled as boolean) ?? true} onSave={(v) => save('ticker_enabled', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار المنتجات النافدة" value={(map.show_out_of_stock as boolean) ?? true} onSave={(v) => save('show_out_of_stock', v, 'storefront')} saving={saving} /></SettingsPanel>}
       {tab === 'appearance' && <SettingsPanel title="ألوان النظام"><SettingColor label="اللون الأساسي" value={(map.theme_primary as string) ?? '#087f8d'} onSave={(v) => save('theme_primary', v, 'appearance')} saving={saving} /><SettingColor label="لون التمييز" value={(map.theme_accent as string) ?? '#0eaa97'} onSave={(v) => save('theme_accent', v, 'appearance')} saving={saving} /></SettingsPanel>}
+      {tab === 'access' && canManageRoles && user && <OrganizationRoleManagement currentProfileId={user.profileId} onNotice={onNotice} />}
     </>}
   </AdminPage>;
+}
+
+
+type ManagedOrganizationProfile = {
+  profile_id: string;
+  full_name: string;
+  email: string | null;
+  is_active: boolean;
+  roles: string[];
+};
+
+const ROLE_OPTIONS = [
+  { value: 'admin', label: 'مدير النظام', detail: 'الإدارة الكاملة وإدارة الصلاحيات.' },
+  { value: 'manager', label: 'مدير', detail: 'تشغيل الأقسام وصلاحيات المالية المعتمدة.' },
+  { value: 'staff', label: 'موظف تشغيل', detail: 'الطلبات والمهام التشغيلية دون صلاحيات المحاسبة.' },
+  { value: 'accountant', label: 'محاسب', detail: 'الفواتير والتحصيل فقط، دون أقسام التشغيل.' },
+  { value: 'customer', label: 'عميل', detail: 'واجهة المتجر والحساب التجاري.' },
+] as const;
+
+function OrganizationRoleManagement({ currentProfileId, onNotice }: { currentProfileId: string; onNotice: (m: string) => void }) {
+  const [rows, setRows] = useState<ManagedOrganizationProfile[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string[]>>({});
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [savingProfileId, setSavingProfileId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await supabase.rpc('list_organization_user_roles');
+      if (result.error) {
+        setError('تعذر تحميل حسابات المؤسسة وصلاحياتها. تحقق من نشر ترحيل إدارة الأدوار.');
+        return;
+      }
+      const loaded = (Array.isArray(result.data) ? result.data : []) as ManagedOrganizationProfile[];
+      setRows(loaded);
+      setDrafts(Object.fromEntries(loaded.map((profile) => [profile.profile_id, [...(profile.roles ?? [])]])));
+    } catch {
+      setError('تعذر الاتصال بالخادم لتحميل حسابات المؤسسة.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const visible = rows.filter((profile) =>
+    !query.trim() || (profile.full_name + ' ' + (profile.email ?? '')).toLocaleLowerCase('ar').includes(query.trim().toLocaleLowerCase('ar')),
+  );
+
+  function toggleRole(profileId: string, role: string, checked: boolean) {
+    setDrafts((previous) => {
+      const current = previous[profileId] ?? [];
+      // Customer is a standalone identity; it cannot be combined with staff/admin roles.
+      const next = role === 'customer'
+        ? (checked ? ['customer'] : [])
+        : checked
+          ? [...current.filter((value) => value !== 'customer' && value !== role), role]
+          : current.filter((value) => value !== role);
+      return { ...previous, [profileId]: next };
+    });
+    setError('');
+  }
+
+  async function save(profile: ManagedOrganizationProfile) {
+    const selected = [...(drafts[profile.profile_id] ?? [])].sort();
+    if (!selected.length) {
+      setError('يجب إبقاء دور واحد على الأقل لكل حساب نشط.');
+      return;
+    }
+    if (profile.profile_id === currentProfileId) {
+      setError('لا يمكنك تعديل أدوار حسابك الحالي من هذه الشاشة. استخدم حساب مدير آخر لتغييرها.');
+      return;
+    }
+    setSavingProfileId(profile.profile_id);
+    setError('');
+    try {
+      const result = await supabase.rpc('set_organization_user_roles', {
+        p_profile_id: profile.profile_id,
+        p_roles: selected,
+      });
+      if (result.error) {
+        const message = result.error.message;
+        setError(message.includes('last active administrator')
+          ? 'لا يمكن إزالة آخر مدير نظام نشط في المؤسسة.'
+          : message.includes('outside the current organization')
+            ? 'لا يمكن إدارة حساب خارج مؤسستك.'
+            : message.includes('customer role cannot be combined')
+              ? 'لا يمكن جمع دور العميل مع أدوار الإدارة أو التشغيل.'
+              : 'تعذر حفظ الأدوار. تحقق من صلاحيتك وأن الحساب ما زال نشطًا.');
+        return;
+      }
+      onNotice('تم حفظ أدوار ' + profile.full_name + ' وتسجيل التغيير في سجل التدقيق.');
+      await load();
+    } catch {
+      setError('تعذر الاتصال بالخادم لحفظ الأدوار. أعد التحميل للتحقق من الحالة الحالية.');
+    } finally {
+      setSavingProfileId(null);
+    }
+  }
+
+  const roleLabel = (role: string) => ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
+  const changed = (profile: ManagedOrganizationProfile) =>
+    JSON.stringify([...(profile.roles ?? [])].sort()) !== JSON.stringify([...(drafts[profile.profile_id] ?? [])].sort());
+
+  return <SettingsPanel title="المستخدمون والأدوار">
+    <div style={{ padding: 18 }}>
+      <p style={{ marginTop: 0, color: '#71868a', lineHeight: 1.8 }}>
+        إدارة الأدوار متاحة لمدير النظام فقط. تُحفظ عبر أوامر خادمية مقيّدة بالمؤسسة، ويسجل كل تغيير في سجل التدقيق.
+        دور المحاسب مخصص للفواتير والتحصيل ولا يمنح صلاحيات تشغيل الطلبات أو المخزون. لا يمكن تعديل دور حسابك الحالي من هذه الشاشة.
+      </p>
+      <label style={{ display: 'block', marginBottom: 14 }}>
+        <span style={{ display: 'block', fontWeight: 800, marginBottom: 6 }}>بحث بالاسم أو البريد</span>
+        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="اسم المستخدم أو البريد الإلكتروني" style={{ width: '100%', maxWidth: 440, padding: '10px 12px', border: '1px solid #d5e7e9', borderRadius: 9 }} />
+      </label>
+      {error && <div className="error-box" role="alert" style={{ display: 'block' }}>{error}<Button variant="outline" onClick={() => void load()}>إعادة التحميل</Button></div>}
+      {loading ? <Loading /> : !visible.length ? <Empty text="لا توجد حسابات نشطة في هذه المؤسسة." /> : <div style={{ display: 'grid', gap: 12 }}>
+        {visible.map((profile) => {
+          const selected = drafts[profile.profile_id] ?? [];
+          const isSelf = profile.profile_id === currentProfileId;
+          const busy = savingProfileId === profile.profile_id;
+          return <article key={profile.profile_id} style={{ border: '1px solid #dcebed', borderRadius: 14, padding: 14, background: '#fff' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div><strong style={{ display: 'block', color: '#234b55' }}>{profile.full_name}</strong><span style={{ color: '#789297', fontSize: 12 }}>{profile.email ?? 'بريد غير مسجل'}</span></div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{profile.roles.map((role) => <span key={role} className="badge info">{roleLabel(role)}</span>)}</div>
+            </div>
+            <fieldset disabled={isSelf || busy} style={{ display: 'flex', flexWrap: 'wrap', gap: 12, border: 0, padding: '12px 0 4px', margin: 0 }}>
+              {ROLE_OPTIONS.map((option) => <label key={option.value} title={option.detail} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#385d65', fontSize: 12 }}>
+                <input type="checkbox" checked={selected.includes(option.value)} onChange={(event) => toggleRole(profile.profile_id, option.value, event.target.checked)} />
+                {option.label}
+              </label>)}
+            </fieldset>
+            {isSelf && <small style={{ display: 'block', color: '#9a6a1c', marginBottom: 8 }}>حسابك الحالي محمي من التعديل المباشر.</small>}
+            {!isSelf && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <small style={{ color: '#71868a' }}>{selected.length} دور محدد</small>
+              <Button onClick={() => void save(profile)} disabled={busy || savingProfileId !== null || !changed(profile)}>
+                <Save size={14} /> {busy ? 'جارٍ الحفظ...' : 'حفظ الأدوار'}
+              </Button>
+            </div>}
+          </article>;
+        })}
+      </div>}
+    </div>
+  </SettingsPanel>;
 }
 
 function SettingsPanel({ title, children }: { title: string; children: React.ReactNode }) { return <section className="panel settings-panel"><div className="panel-head"><div><h2>{title}</h2></div></div><div className="settings-body">{children}</div></section>; }

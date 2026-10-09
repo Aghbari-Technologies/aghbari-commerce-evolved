@@ -208,3 +208,5 @@ Definition of Done:
 - 2026-10-09: extended the migration acceptance runner to reject duplicate 14-digit Supabase migration version prefixes, added explicit rollback proof for failed multi-item staff-order creation, and made the staff API's stable idempotency key mandatory instead of silently generating a new key on each retry.
 
 - Final tracker sweep: all CI statuses now distinguish tested code/schema from unproven production, authenticated browser, AI-runtime, worker-recovery and performance gates.
+
+- 2026-10-09: role-management UI is added under Settings for admins, backed by admin-only tenant-scoped list/set RPCs. Generic staff and accountants cannot read profile/role directories or mutate profile/auth binding and role rows directly; role changes are audited, self-role edits are blocked, and customer role cannot be combined with staff roles. Exact-SHA CI/browser acceptance is pending; no production database was touched.
