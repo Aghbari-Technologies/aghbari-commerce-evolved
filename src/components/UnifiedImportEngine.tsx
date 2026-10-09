@@ -525,7 +525,7 @@ export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) 
           <p>الاسم: <strong>{duplicatePrompt.file.name}</strong> • SHA-256: <code>{duplicatePrompt.fileHash.slice(0, 20)}…</code> • دفعات سابقة: {duplicatePrompt.duplicate.jobs.length} • لقطات: {duplicatePrompt.duplicate.snapshots.length}</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button variant="outline" onClick={() => void resolveDuplicate("ignore")}>تجاهل</Button>
-            {duplicatePrompt.duplicate.jobs.some((item) => ["staging", "failed"].includes(item.status) && Boolean(item.upload_session_id)) &&
+            {duplicatePrompt.duplicate.jobs.some((item) => ["staging", "uploading", "failed"].includes(item.status) && Boolean(item.upload_session_id)) &&
               <Button variant="secondary" onClick={() => void resolveDuplicate("resume")}>استئناف دفعة غير مكتملة</Button>}
             <Button variant="secondary" onClick={() => void resolveDuplicate("replace")}>استبدال النسخة</Button>
             <Button variant="secondary" onClick={() => void resolveDuplicate("merge")}>دمج وفق سياسة الملف</Button>
