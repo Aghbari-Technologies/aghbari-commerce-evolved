@@ -43,6 +43,11 @@ describe('Auth bootstrap resilience', () => {
 
   it.each([
     '/',
+    '/cart',
+    '/checkout',
+    '/compare',
+    '/product/route-smoke-test-product',
+    '/wishlist',
     '/login',
     '/orders',
     '/orders/route-smoke-test',

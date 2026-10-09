@@ -42,6 +42,22 @@ export function normalizeCartDraft(value: unknown): CartLineDraft[] {
   return lines;
 }
 
+/** Normalize locally persisted wishlist/compare IDs without trusting browser storage. */
+export function normalizeSavedProductIds(value: unknown, maxItems = 500): string[] {
+  if (!Array.isArray(value) || !Number.isSafeInteger(maxItems) || maxItems < 1) return [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (typeof candidate !== 'string') continue;
+    const id = candidate.trim();
+    if (!id || id.length > 128 || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= maxItems) break;
+  }
+  return ids;
+}
+
 export type QuickOrderLineInput = {
   product_id: string;
   product_name: string;
