@@ -155,15 +155,16 @@ describe('commerce completion utilities', () => {
       'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
       'xl/sharedStrings.xml': '<sst><si><t>item_code</t></si><si><t>product_name</t></si><si><t>Rice</t></si><si><t>Sugar</t></si></sst>',
       'xl/styles.xml': '<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="000000"/></numFmts><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>',
-      'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" s="1"><v>125</v></c><c r="B2" t="s"><v>2</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>000126</t></is></c><c r="B3" t="s"><v>3</v></c></row></sheetData></worksheet>',
+      'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" s="1"><v>125</v></c><c r="B2" t="s"><v>2</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>000126</t></is></c><c r="B3" t="s"><v>3</v></c></row><row r="4"><c r="A4" t="s"><v>0</v></c><c r="C4" t="s"><v>3</v></c></row></sheetData></worksheet>',
     });
     const rows: string[][] = [];
     const result = await parseXlsxFirstWorksheet(file, (row) => { rows.push(row); });
-    expect(result).toEqual({ rowCount: 3, worksheetName: 'بيانات' });
+    expect(result).toEqual({ rowCount: 4, worksheetName: 'بيانات' });
     expect(rows).toEqual([
       ['item_code', 'product_name'],
       ['000125', 'Rice'],
       ['000126', 'Sugar'],
+      ['item_code', '', 'Sugar'],
     ]);
   });
 
