@@ -72,7 +72,7 @@ describe('commerce completion utilities', () => {
     expect(validateCsvRow(['000125','Rice'], ['item_code','product_name'], 2).data.item_code).toBe('000125');
     const invalid = validateCsvRow(['000126','x'.repeat(4001)], ['item_code','product_name'], 3);
     expect(invalid.status).toBe('rejected');
-    expect(invalid.errors[0]).toContain('يتجاوز');
+    expect(invalid.errors[0]).toContain('تتجاوز');
   });
 
   it('computes all data-quality dimensions deterministically and gates import acceptance', () => {
