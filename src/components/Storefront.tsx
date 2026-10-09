@@ -224,7 +224,7 @@ function Checkout({ cart, total, onBack, onComplete }: { cart: CartItem[]; total
 
   function getIdempotencyKey() {
     const items = cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })).sort((a, b) => a.product_id.localeCompare(b.product_id));
-    const signature = JSON.stringify({ profile_id: user?.profileId, payment_terms: paymentTerms, items });
+    const signature = JSON.stringify({ profile_id: user?.profileId, payment_terms: paymentTerms, items, contact_name: name.trim(), business_name: business.trim(), phone: phone.trim(), notes: notes.trim() });
     if (idempotencyRef.current?.signature === signature) return idempotencyRef.current.key;
     const storageKey = 'aghbari:checkout-attempt:v1';
     try {
