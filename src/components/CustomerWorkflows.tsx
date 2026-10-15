@@ -56,8 +56,8 @@ import {
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
   writeLegacyCartOwner,
-  subscribeToOfflineCartLedger,
   getOfflineCatalogSyncTimestampKey,
+  subscribeToOfflineCartState,
 } from "@/lib/offline-cart-ledger";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
@@ -2006,7 +2006,7 @@ function Offline() {
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     refresh();
-    const unsubscribeLedger = subscribeToOfflineCartLedger(cartScopeKey, refresh);
+    const unsubscribeLedger = subscribeToOfflineCartState(cartScopeKey, refresh);
     return () => {
       unsubscribeLedger();
       window.removeEventListener("online", on);

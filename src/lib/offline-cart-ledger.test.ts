@@ -9,6 +9,7 @@ import {
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
   subscribeToOfflineCartLedger,
+  subscribeToOfflineCartState,
   type LocalStorageLike,
   type OfflineCartMutationInput,
 } from "@/lib/offline-cart-ledger";
@@ -214,6 +215,32 @@ describe("scoped durable offline cart mutation journal", () => {
     expect(compacted.applied_mutation_ids).toContain("initial-operation");
     expect(compacted.applied_mutation_ids).toContain("concurrent-operation");
     expect(storage.getItem(getOfflineCartLedgerPrefix(scope) + "op:" + encodeURIComponent("initial-operation"))).not.toBeNull();
+  });
+
+  it("refreshes scoped cart/catalog changes across tabs and after localStorage.clear", () => {
+    const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
+    const otherScope = createOfflineCartScopeKey("profile-b", "https://store.example");
+    const listeners = new Map<string, EventListener>();
+    const target = {
+      addEventListener: (type: string, listener: EventListener) => { listeners.set(type, listener); },
+      removeEventListener: (type: string, listener: EventListener) => {
+        if (listeners.get(type) === listener) listeners.delete(type);
+      },
+    } as Pick<Window, "addEventListener" | "removeEventListener">;
+    const onChange = vi.fn();
+    const unsubscribe = subscribeToOfflineCartState(scope, onChange, target);
+    const handler = listeners.get("storage");
+    expect(handler).toBeDefined();
+
+    handler?.({ key: getOfflineCartLedgerPrefix(scope) + "op:one" } as StorageEvent);
+    handler?.({ key: getOfflineCatalogCacheKey(scope) } as StorageEvent);
+    handler?.({ key: getOfflineCatalogSyncTimestampKey(scope) } as StorageEvent);
+    handler?.({ key: getOfflineCatalogCacheKey(otherScope) } as StorageEvent);
+    handler?.({ key: null } as StorageEvent);
+    expect(onChange).toHaveBeenCalledTimes(4);
+
+    unsubscribe();
+    expect(listeners.has("storage")).toBe(false);
   });
 
   it("rejects reuse of a compacted mutation ID with a different payload", () => {

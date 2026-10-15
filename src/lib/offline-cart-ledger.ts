@@ -573,6 +573,31 @@ export function subscribeToOfflineCartLedger(
   return () => eventTarget.removeEventListener("storage", listener as EventListener);
 }
 
+/** Notify only when this scoped offline workspace's persisted cart/catalog state changes. */
+export function subscribeToOfflineCartState(
+  scopeKey: string,
+  onChange: () => void,
+  eventTarget: Pick<Window, "addEventListener" | "removeEventListener"> = window,
+): () => void {
+  const ledgerPrefix = prefixFor(scopeKey);
+  const seed = seedKey(scopeKey);
+  const catalog = getOfflineCatalogCacheKey(scopeKey);
+  const syncedAt = getOfflineCatalogSyncTimestampKey(scopeKey);
+  const listener = (event: Event) => {
+    const key = (event as StorageEvent).key;
+    // StorageEvent.key is null when another same-origin tab calls localStorage.clear().
+    if (
+      key === null ||
+      key === seed ||
+      key === catalog ||
+      key === syncedAt ||
+      (key !== null && key.startsWith(ledgerPrefix))
+    ) onChange();
+  };
+  eventTarget.addEventListener("storage", listener as EventListener);
+  return () => eventTarget.removeEventListener("storage", listener as EventListener);
+}
+
 export function legacyCartOwnerScope(storage: LocalStorageLike): string | null {
   return storage.getItem(LEGACY_CART_OWNER_KEY);
 }
