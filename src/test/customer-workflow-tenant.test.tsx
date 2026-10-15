@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   getCurrentTenantScope: vi.fn(),
   fetchProducts: vi.fn(),
   fetchResolvedProductPrices: vi.fn(),
+  fetchSettings: vi.fn(),
+  settings: [] as Array<{ id: string; organization_id: string; key: string; value: unknown; category: string; updated_at: string }>,
   from: vi.fn(),
   rpc: vi.fn(),
   signOut: vi.fn(),
@@ -55,6 +57,7 @@ vi.mock("@/lib/supabase", () => ({
 vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
   fetchResolvedProductPrices: mocks.fetchResolvedProductPrices,
+  fetchSettings: mocks.fetchSettings,
 }));
 
 
@@ -145,8 +148,26 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     });
     mocks.fetchProducts.mockResolvedValue([]);
     mocks.fetchResolvedProductPrices.mockImplementation(async (ids: string[]) => new Map(ids.map((id) => [id, 1000])));
+    mocks.settings = [];
+    mocks.fetchSettings.mockImplementation(async () => [...mocks.settings]);
     mocks.from.mockImplementation((table: string) => makeQuery(table));
-    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    mocks.rpc.mockImplementation(async (name: string, args: { p_surface?: string; p_visible?: boolean }) => {
+      if (name === "set_customer_money_display_policy" && (args.p_surface === "cart" || args.p_surface === "order")) {
+        const key = args.p_surface === "cart" ? "customer_cart_amounts_visible" : "customer_order_amounts_visible";
+        const existing = mocks.settings.find((setting) => setting.key === key);
+        if (existing) existing.value = args.p_visible;
+        else mocks.settings.push({
+          id: "setting-" + args.p_surface,
+          organization_id: ORGANIZATION_ID,
+          key,
+          value: args.p_visible,
+          category: "privacy",
+          updated_at: "2026-10-15T00:00:00.000Z",
+        });
+        return { data: { surface: args.p_surface, visible: args.p_visible }, error: null };
+      }
+      return { data: null, error: null };
+    });
   });
 
   afterEach(async () => {
@@ -291,6 +312,95 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("المبالغ غير معروضة");
     expect(host?.textContent).not.toContain("سعر الوحدة");
     expect(host?.textContent).not.toContain("الإجمالي المسجل للطلب");
+  });
+
+  it("lets a manager change cart and order visibility independently through the governed RPC", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-manager@example.test",
+      name: "CI Manager",
+      roles: ["manager"],
+      isStaff: true,
+    };
+    mocks.settings = [
+      {
+        id: "setting-cart",
+        organization_id: ORGANIZATION_ID,
+        key: "customer_cart_amounts_visible",
+        value: false,
+        category: "privacy",
+        updated_at: "2026-10-15T00:00:00.000Z",
+      },
+      {
+        id: "setting-order",
+        organization_id: ORGANIZATION_ID,
+        key: "customer_order_amounts_visible",
+        value: false,
+        category: "privacy",
+        updated_at: "2026-10-15T00:00:00.000Z",
+      },
+    ];
+
+    await mountQuoteWorkspace("/admin/settings");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(host?.textContent).toContain("الإعدادات العامة");
+    const storefrontTab = Array.from(host?.querySelectorAll<HTMLButtonElement>(".settings-tabs button") ?? [])
+      .find((button) => button.textContent?.trim() === "المتجر");
+    expect(storefrontTab).toBeDefined();
+    await act(async () => {
+      storefrontTab?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const findVisibilityInput = (label: string) => {
+      const row = Array.from(host?.querySelectorAll<HTMLElement>(".setting-row") ?? [])
+        .find((element) => element.textContent?.includes(label));
+      const input = row?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      if (!input) throw new Error("Missing visibility toggle: " + label);
+      return input;
+    };
+    const cartInput = findVisibilityInput("إظهار الأسعار والإجمالي التقديري في السلة وإتمام الطلب");
+    const orderInput = findVisibilityInput("إظهار أسعار وإجمالي الطلب المسجّل للعميل");
+    expect(cartInput.checked).toBe(false);
+    expect(orderInput.checked).toBe(false);
+
+    await act(async () => {
+      cartInput.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith("set_customer_money_display_policy", { p_surface: "cart", p_visible: true });
+    expect(findVisibilityInput("إظهار الأسعار والإجمالي التقديري في السلة وإتمام الطلب").checked).toBe(true);
+    expect(findVisibilityInput("إظهار أسعار وإجمالي الطلب المسجّل للعميل").checked).toBe(false);
+
+    await act(async () => {
+      findVisibilityInput("إظهار أسعار وإجمالي الطلب المسجّل للعميل").click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith("set_customer_money_display_policy", { p_surface: "order", p_visible: true });
+    const policyCalls = mocks.rpc.mock.calls.filter((call) => call[0] === "set_customer_money_display_policy");
+    expect(policyCalls).toHaveLength(2);
+    expect(policyCalls.map((call) => call[1]?.p_surface)).toEqual(["cart", "order"]);
+  });
+
+  it("never exposes manager money-display controls to a customer account", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-customer@example.test",
+      name: "CI Customer",
+      roles: ["customer"],
+      isStaff: false,
+    };
+
+    await mountQuoteWorkspace("/admin/settings");
+
+    expect(host?.textContent).toContain("لا تملك صلاحية الإدارة");
+    expect(host?.textContent).not.toContain("إظهار الأسعار والإجمالي التقديري في السلة وإتمام الطلب");
+    expect(host?.textContent).not.toContain("إظهار أسعار وإجمالي الطلب المسجّل للعميل");
+    expect(mocks.fetchSettings).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("requires an authenticated user before loading customer quote or catalog data", async () => {
