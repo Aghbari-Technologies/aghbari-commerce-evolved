@@ -20,7 +20,8 @@ async function loadServiceWorker(overrides: {
   const listeners = new Map<string, Listener>();
   const cacheAdd = vi.fn(async (url: string) => overrides.cacheAdd?.(url));
   const cachePut = vi.fn(async (_request: Request | string, _response: Response) => undefined);
-  const cache = { add: cacheAdd, put: cachePut };
+  const cacheMatch = vi.fn(async (request: Request | string) => overrides.cacheMatch?.(request) ?? null);
+  const cache = { add: cacheAdd, put: cachePut, match: cacheMatch };
   const cacheDelete = vi.fn(async () => true);
   const cacheNames = overrides.cacheNames ?? [];
   const cachesMock = {
@@ -50,7 +51,7 @@ async function loadServiceWorker(overrides: {
     console,
   });
 
-  return { listeners, cacheAdd, cachePut, cachesMock, cacheDelete, skipWaiting, claim };
+  return { listeners, cacheAdd, cachePut, cacheMatch, cachesMock, cacheDelete, skipWaiting, claim };
 }
 
 describe("Aghbari PWA offline shell", () => {
@@ -117,7 +118,7 @@ describe("Aghbari PWA offline shell", () => {
       respondWith: (promise) => offlinePending.push(promise),
     });
     await expect(Promise.all(offlinePending)).resolves.toEqual([shell]);
-    expect(worker.cachesMock.match).toHaveBeenCalledWith("/");
+    expect(worker.cacheMatch).toHaveBeenCalledWith("/");
     expect(worker.cachePut).toHaveBeenCalledTimes(1);
   });
 
@@ -155,6 +156,27 @@ describe("Aghbari PWA offline shell", () => {
     expect(respondWith).not.toHaveBeenCalled();
     expect(worker.cachesMock.open).not.toHaveBeenCalled();
     expect(worker.cachePut).not.toHaveBeenCalled();
+  });
+
+  it("never reads a matching response from an unrelated Cache Storage namespace", async () => {
+    const foreign = new Response("foreign cache response", { status: 200 });
+    const worker = await loadServiceWorker({
+      cacheMatch: async (key) => key === "/assets/app.js" ? null : foreign,
+      fetcher: async () => new Response("own cache response", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const responses = await Promise.all(pending);
+    expect(responses[0]).not.toBe(foreign);
+    expect(worker.cachesMock.match).not.toHaveBeenCalled();
+    expect(worker.cacheMatch).toHaveBeenCalled();
   });
 
   it("does not cache profile or arbitrary same-origin image URLs by extension", async () => {

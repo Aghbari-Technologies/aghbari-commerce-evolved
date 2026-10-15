@@ -46,19 +46,23 @@ self.addEventListener('fetch', (event) => {
           void caches.open(CACHE_NAME).then((cache) => cache.put('/', homeResponse));
         }
         return response;
-      }).catch(async () => (await caches.match('/')) || Response.error()),
+      }).catch(async () => {
+        const shellCache = await caches.open(CACHE_NAME);
+        return (await shellCache.match('/')) || Response.error();
+      }),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(request);
       const network = fetch(request).then((response) => {
         const isPublicBuildAsset =
           (url.pathname.startsWith('/assets/') && /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(url.pathname)) ||
           url.pathname === '/favicon.ico';
         if (response.ok && response.type === 'basic' && isPublicBuildAsset) {
-          void caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          void cache.put(request, response.clone());
         }
         return response;
       });
