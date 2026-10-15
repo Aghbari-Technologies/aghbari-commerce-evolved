@@ -153,10 +153,10 @@ async function main() {
     [otherProductId, foreignWarehouseId],
   );
   await db.unsafe(
-    \`insert into public.admin_settings(organization_id,key,value,category)
+    `insert into public.admin_settings(organization_id,key,value,category)
       values ($1,'hero_title',to_jsonb('CI public hero'::text),'storefront'),
              ($1,'internal_provider_secret',to_jsonb('must-not-leak'::text),'ai')
-      on conflict (organization_id,key) do update set value=excluded.value\`,
+      on conflict (organization_id,key) do update set value=excluded.value`,
     [organizationId],
   );
 
@@ -356,6 +356,7 @@ async function main() {
   const scope = scopeRows[0].scope;
   assert.equal(scope.profile_id, staffProfileId, "tenant context must resolve the authenticated profile on the server");
   assert.equal(scope.organization_id, organizationId, "tenant context must resolve the profile's organization on the server");
+  assert.equal(scope.is_staff, true, "tenant context must derive the staff role from database role assignments");
   if (scope.warehouse_id) {
     const scopedWarehouse = await db.unsafe(
       "select id from public.warehouses where id=$1 and organization_id=$2",
