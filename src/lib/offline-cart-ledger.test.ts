@@ -4,6 +4,7 @@ import {
   compactOfflineCartLedger,
   createOfflineCartScopeKey,
   createStableOfflineCartMutationId,
+  getOfflineCartLedgerPrefix,
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
   type LocalStorageLike,
