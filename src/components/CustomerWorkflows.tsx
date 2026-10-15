@@ -463,6 +463,11 @@ function Invoices() {
         </button>
       </div>
       {error && <ErrorBox message={error} retry={() => void load()} />}
+      {!busy && rows.length >= 100 && (
+        <p role="status" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
+          تنبيه اكتمال البيانات: تعرض هذه الصفحة أحدث 100 فاتورة فقط؛ قد توجد فواتير أقدم خارج القائمة.
+        </p>
+      )}
       <section style={{ ...card, padding: 0, overflowX: "auto" }}>
         {busy ? (
           <p role="status" style={{ padding: 18 }}>
