@@ -8,6 +8,17 @@ export type InvoiceAmount = {
 };
 export type PaymentAmount = { invoice_id: string; amount: number | string };
 
+// Must remain aligned with the row limits on the customer account-statement RPC.
+export const CUSTOMER_STATEMENT_MAX_INVOICES = 200;
+export const CUSTOMER_STATEMENT_MAX_PAYMENTS = 500;
+
+export function isCustomerStatementPossiblyPartial(invoiceCount: number, paymentCount: number): boolean {
+  if (!Number.isSafeInteger(invoiceCount) || invoiceCount < 0 ||
+      !Number.isSafeInteger(paymentCount) || paymentCount < 0) return true;
+  return invoiceCount >= CUSTOMER_STATEMENT_MAX_INVOICES ||
+    paymentCount >= CUSTOMER_STATEMENT_MAX_PAYMENTS;
+}
+
 type InvoiceBalance = {
   valid: boolean;
   currency: string;

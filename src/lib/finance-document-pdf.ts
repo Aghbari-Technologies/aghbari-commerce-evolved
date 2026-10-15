@@ -1,5 +1,6 @@
 import fontkit from "@pdf-lib/fontkit";
 import { drawArabicText } from "naqqash/pdf-lib";
+import { isCustomerStatementPossiblyPartial } from "./commerce-utils";
 import {
   PDFDocument,
   rgb,
@@ -415,7 +416,7 @@ export async function buildCustomerStatementPdf(
     drawArabic(page, font, "لا توجد دفعات مسجلة للفواتير المعروضة.", PAGE_WIDTH - 40, y, 8, MUTED, 250);
   }
 
-  if (invoices.length === 200 || payments.length === 500) {
+  if (isCustomerStatementPossiblyPartial(invoices.length, payments.length)) {
     if (y < 90) {
       page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
       pages.push(page);
