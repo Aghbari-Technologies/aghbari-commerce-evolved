@@ -307,6 +307,11 @@ async function main() {
     [productId, organizationId],
   );
   await db.unsafe("set role anon");
+  await expectFailure(
+    "anonymous role cannot execute the private staff product-detail RPC",
+    () => db.unsafe("select * from public.fetch_staff_products(null::uuid)"),
+    /permission denied/i,
+  );
   const publicScopeRows = await db.unsafe("select public.get_public_storefront_context() as scope");
   const publicScope = publicScopeRows[0].scope;
   assert.equal(publicScope.organization_id, organizationId, "anonymous storefront scope must come from server-side publication config");
@@ -387,6 +392,11 @@ async function main() {
     [productId],
   );
   assert.equal(authenticatedSafeProducts.length, 1, "authenticated customers retain safe catalog fields");
+  await expectFailure(
+    "authenticated customers cannot use the staff product-detail RPC",
+    () => db.unsafe("select * from public.fetch_staff_products(null::uuid)"),
+    /active staff role and organization required|active staff role required/i,
+  );
 
   // Authenticated customers may submit a cart, but must not enumerate the
   // organization-wide pricing-tier table directly. A denied SELECT or an RLS
