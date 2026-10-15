@@ -1,16 +1,17 @@
 # Aghbari Commerce — Latest Execution State
 
-## Verified batch — AGH-FINANCE-DOCS-001: payment over-limit UI regression coverage (PR #34)
+## Latest verified implementation checkpoint — AGH-FINANCE-DOCS-001: Arabic server-generated finance PDFs (PR #35)
 
-- **Main base SHA:** `aa71dc4ee9f17fcbae2197f6f9c29b3f3fd123e8`.
-- **Exact tested PR SHA:** `2835e1b7be5b2271cc3ce2d68dedc06ae10f8bca`; PR [#34](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/34) remains open pending merge.
-- **Exact-SHA Actions:** [run 38747410147](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38747410147) **SUCCESS** on `2835e1b7be5b2271cc3ce2d68dedc06ae10f8bca`: Unit tests, isolated PostgreSQL 17 migrations/workflow acceptance, lint, build and dev-server smoke test on port 5173 all completed successfully.
-- **Changed path:** `src/components/CustomerWorkflows.finance.test.tsx` plus this checkpoint, `ops/AGHBARI-DEVELOPMENT-PROGRESS.md`, and `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
-- **Regression covered:** payment greater than the remaining balance is rejected before `record_customer_payment`; payment equal to the remaining balance is submitted to the RPC. Test uses React DOM APIs and does not introduce an undeclared testing-library dependency.
-- **Scope limit:** this is a component/jsdom regression test, not authenticated live-browser or production finance proof. Existing isolated PostgreSQL acceptance separately rejects overpayment. Current invoice/statement buttons call `window.print()`; this is browser print-to-PDF, not server-generated Arabic PDF.
-- **Still open under AGH-FINANCE-DOCS-001:** server-generated Arabic PDF, authenticated live-browser proof, and the intended production database verification. No production DB was changed. Public Lovable root and login routes respond; direct `/invoices`, `/statement`, and `/admin/finance` currently return 404 from external fetch, so deployed deep-route availability/synchronization requires follow-up verification.
-- **Lovable synchronization:** repository says pushes to the connected branch synchronize; this test run proves GitHub branch CI only, not the live editor/deployment SHA. Do not mark sync proven without direct evidence.
-- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL**; continue the server-PDF/browser gaps without creating a parallel ledger.
+- **Verified main baseline:** `ca97c5f88e50780c006ebb575f025cfac8929615` (PR #34 merged; its main CI passed at [run 38748007056](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38748007056)).
+- **Exact tested implementation SHA:** `3f96b2b5aa5a28eabdbacf828ee5f09d66da0258`. [Actions run 38750723505](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38750723505) **SUCCESS** on this exact SHA: Bun lockfile consistency via `bun install --frozen-lockfile --dry-run`, unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build, and dev-server route smoke on port 5173.
+- **Pull request:** [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) — open at the time of this checkpoint; do not assume merge or production deployment until the live PR and main SHA are rechecked.
+- **Changed application paths:** `package.json`, `bun.lock`, `.github/workflows/commerce-checks.yml`, `src/lib/finance-document-pdf.ts`, `src/lib/finance-document-pdf.test.ts`, `src/lib/finance-pdf-server.ts`, `src/routes/api.statement-pdf.ts`, `src/routes/api.invoice-pdf.$invoiceId.ts`, `src/components/CustomerWorkflows.tsx`.
+- **Statement PDF:** authenticated request-scoped Supabase client; reuses `get_customer_account_statement()` to derive the caller's own account scope; creates a server PDF with embedded Noto Sans Arabic, multi-page invoice/payment tables, exact decimal arithmetic, currency-separated totals, and private/no-store responses.
+- **Invoice PDF:** validates the invoice UUID and the caller's auth token, selects only existing customer-visible invoice/line/customer fields, and remains behind RLS. By design it does **not** render money/amounts because the customer invoice-table grant explicitly hides those fields; no financial information was reintroduced to this surface.
+- **Regression coverage:** PDF bytes are loaded by `pdf-lib`; statement currency separation, invoice redaction, malformed monetary-value rejection, unauthenticated 401, and anonymous route smoke checks are covered. Browser print remains available as a separate fallback, not mislabeled server PDF.
+- **Dependency integrity:** `bun.lock` was regenerated using Bun; the permanent CI now rejects manifest/lock mismatch before npm install. The frozen-lockfile check passed on the exact tested SHA.
+- **Evidence boundary:** no production Supabase writes/migrations occurred. Public root/login were reachable in external inspection, but direct external fetch of `/invoices`, `/statement`, and `/admin/finance` returned 404; CI's local route smoke passed, so deployed deep routes still need verification through the actual runtime/browser. Lovable editor/deployment SHA synchronization remains **UNVERIFIED**.
+- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL.** Keep open until authorized authenticated-browser finance flow, intended production DB proof, and Lovable/runtime sync/deep-route evidence are closed. Do not create a parallel gap ledger.
 
 
 ---
