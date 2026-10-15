@@ -147,3 +147,11 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - New additive migration `20261015140000_checkout_delivery_address_snapshot.sql` adds a frozen safe order snapshot, server-derived ownership checking, private internal address FK/fingerprint, address-sensitive idempotent replay rules and transactional `OrderCreated` outbox event.
 - Customer and staff order details display the persisted snapshot; the customer projection reveals only the display-safe snapshot field. Existing server-side price/credit/idempotency transaction remains the authoritative order creator.
 - Expanded isolated PostgreSQL test coverage for frozen snapshot, direct-column denial, idempotent outbox, retry mismatch and history immutability. This follow-up's exact-SHA CI remains pending; no production migration or live browser claim.
+
+## 2026-10-15 — Customer company contacts verified on main
+
+- Contact-management implementation merged to main as ec2d63e4cbd88887a285b06630bf4108cf59b3e2; exact push-to-main CI [38703404206](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38703404206) SUCCESS in 1m28s.
+- Passed gates on the main SHA: npm test (110 tests across 10 files), npm run test:db applying migrations and isolated PostgreSQL workflow acceptance, lint, build, and dev-server route smoke on port 5173 including /company/contacts.
+- Added customer_company_contacts with owner-scoped RPCs, a single-primary lifecycle, audit trail and /company/contacts; direct client writes are revoked. This is a commercial contact directory, not a login/member system.
+- Duplicate parallel PR #31 was closed after PR #32 merged the contact feature first; no duplicate implementation was merged.
+- Next: connect company sub-users to the customer record using explicit membership and invitation lifecycles. The current customers.profile_id assumption means this must include all customer authorization/query/RLS paths, not just an invitation UI. Production Supabase remains inaccessible; no production migration/live-auth browser test is claimed.

@@ -1,12 +1,13 @@
 # Aghbari Commerce — Latest Execution State
 
-## Active implementation — AGH-CUSTOMER-360-001: freeze delivery address into the checkout/order lifecycle
+## Active implementation — AGH-CUSTOMER-360-001: company-member identity and invitation lifecycle
 
-- Customer address book merged to `main` at `12b31fa9c1a9ad89934e936ef822b1288f342649`; implementation head `64a7056274a7b24324c53f9020ec1b710133a724`, exact-head CI [38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) **SUCCESS** across unit tests, isolated PostgreSQL 17, lint, build and port-5173 route smoke.
-- Follow-up on `feat/checkout-delivery-address-20261015-v2` adds an optional saved-address picker to checkout; server-side ownership validation; immutable `orders.delivery_address_snapshot`; idempotency/address mismatch guards; and a transactional, idempotent `OrderCreated` outbox event.
-- Customer/staff order detail surfaces display only the safe frozen delivery snapshot. Authenticated customer SELECT stays column-limited: internal `delivery_address_id` and `delivery_address_fingerprint` are not granted. Isolated PostgreSQL regressions cover snapshot immutability, retry mismatch, event idempotency and privacy.
-- **Exact-SHA CI is pending for this follow-up.** Do not treat a route, migration source, or pending PR as completion. No production database was changed; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible.
-- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. Validate this follow-up in exact-SHA CI, fix any failure, merge only after proof, then continue to company contacts/member management. `AGH-SEC-BROWSER-E2E-001` remains separately OPEN for live authenticated browser and production evidence.
+- Customer address book merged to main at 12b31fa9c1a9ad89934e936ef822b1288f342649; exact-head CI [38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) SUCCESS.
+- Checkout/order delivery snapshot merged to main at df87290ec3c27d152c88e64a23e089dcae64bc49; exact PR-head CI [38701603398](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38701603398) SUCCESS.
+- Company contact directory merged to main at ec2d63e4cbd88887a285b06630bf4108cf59b3e2; exact push-to-main CI [38703404206](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38703404206) SUCCESS across unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke. It uses customer_company_contacts, server-derived ownership RPCs and audited single-primary behavior at /company/contacts.
+- Next open implementation: company sub-user invitations and identity-to-customer membership mapping. Existing customer scoping assumes customers.profile_id; do not create login users that cannot access their correct company, and do not weaken tenant RLS. Scope each new member only to its owning customer/company, define explicit allowed role capabilities, and test customer A/B isolation and invitation/replay/expired-token behavior.
+- No production migration or live authenticated-browser proof has been performed. Intended Supabase ref ffxxjaolfntzbapmfbuv remains inaccessible; never substitute mrcyqezbhpncuvaehwgf. Live Lovable editor sync is not proven by this commit alone.
+- next_task_id = AGH-CUSTOMER-360-001 — PARTIAL until company-member identity/linkage is implemented and tested. Keep AGH-SEC-BROWSER-E2E-001 separately OPEN for real authenticated browser and production evidence.
 
 ---
 
