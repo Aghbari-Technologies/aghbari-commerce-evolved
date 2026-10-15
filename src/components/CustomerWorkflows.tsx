@@ -159,6 +159,7 @@ const secondary: React.CSSProperties = {
 const links = [
   ["/addresses", "عناوين التوصيل"],
   ["/company/contacts", "جهات الاتصال بالشركة"],
+  ["/company/members", "أعضاء الشركة"],
   ["/invoices", "الفواتير"],
   ["/statement", "كشف الحساب"],
   ["/quotes", "عروض الأسعار"],

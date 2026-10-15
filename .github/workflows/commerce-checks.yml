@@ -89,7 +89,7 @@ jobs:
           # Probe the client and admin workspaces plus PWA assets. Route-unit tests alone
           # don't prove the dev server can serve each URL.
           for route in \
-            /cart /checkout /compare /wishlist /addresses /company/contacts /product/ci-route-smoke-test \
+            /cart /checkout /compare /wishlist /addresses /company/contacts /company/members /company/accept-invitation /product/ci-route-smoke-test \
             /orders /invoices /statement /quotes /reorder /assistant /barcode /offline \
             /admin /admin/orders /admin/products /admin/customers /admin/pricing \
             /admin/operations /admin/finance /admin/reports /admin/settings \
