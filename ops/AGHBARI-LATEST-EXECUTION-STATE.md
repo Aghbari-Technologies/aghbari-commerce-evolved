@@ -1,5 +1,11 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active security subgate — authenticated customer tier-price non-enumeration
+
+- Adds a targeted assertion to `scripts/test-database-migrations.mjs`: under the CI `authenticated` role for a customer identity, querying `public.product_prices` directly must either be denied by SQL privileges or return zero visible rows. Returning any tier rows fails the test. Existing checkout tests still verify the customer cart endpoint does not return unit prices or order totals.
+- This closes a specific gap not previously asserted directly for authenticated customers (anonymous direct access was already tested). Exact-SHA CI for this new assertion is pending. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN until complete channel and real-browser evidence exists.
+
+---
 ## Latest verified subgate — customer quote workflow route acceptance
 
 - **Current source SHA:** `6a4b68acc8a9295f508d4301cce754cf826e7f3d`.

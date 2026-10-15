@@ -212,6 +212,25 @@ async function main() {
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
 
+  // Authenticated customers may submit a cart, but must not enumerate the
+  // organization-wide pricing-tier table directly. A denied SELECT or an RLS
+  // result with zero visible rows is safe; returning any tier rows is a leak.
+  let directTierReadDenied = false;
+  let directlyReadableTierRows = [];
+  try {
+    directlyReadableTierRows = await db.unsafe(
+      "select tier,price from public.product_prices where product_id=$1",
+      [productId],
+    );
+  } catch (error) {
+    directTierReadDenied = /permission denied/i.test(String(error));
+    if (!directTierReadDenied) throw error;
+  }
+  assert.ok(
+    directTierReadDenied || directlyReadableTierRows.length === 0,
+    "authenticated customers must not enumerate wholesale/retail tier prices directly",
+  );
+
   const previewInput10 = db.json([{ product_id: productId, quantity: 10 }]);
   const payloadCheck = await db.unsafe(
     "select jsonb_typeof($1::jsonb) as json_type, $1::jsonb as payload",
