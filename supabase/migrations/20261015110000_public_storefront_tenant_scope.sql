@@ -219,16 +219,16 @@ END
 $block$;
 
 -- Minimize what unauthenticated visitors can fetch at the column/relationship level.
-REVOKE SELECT ON TABLE public.organizations FROM anon;
-REVOKE SELECT ON TABLE public.warehouses FROM anon;
-REVOKE SELECT ON TABLE public.product_prices FROM anon;
-REVOKE SELECT ON TABLE public.products FROM anon;
+REVOKE SELECT ON TABLE public.organizations FROM PUBLIC, anon;
+REVOKE SELECT ON TABLE public.warehouses FROM PUBLIC, anon;
+REVOKE SELECT ON TABLE public.product_prices FROM PUBLIC, anon;
+REVOKE SELECT ON TABLE public.products FROM PUBLIC, anon;
 GRANT SELECT (id, organization_id, category_id, name, item_code, barcode, description, unit, base_price, status, image_url, created_at)
   ON TABLE public.products TO anon;
 
-REVOKE SELECT ON TABLE public.inventory_balances FROM anon;
+REVOKE SELECT ON TABLE public.inventory_balances FROM PUBLIC, anon;
 GRANT SELECT (id, product_id, warehouse_id, quantity_on_hand, quantity_available)
   ON TABLE public.inventory_balances TO anon;
 
 -- Do not expose private admin settings through the old broad storefront helper.
-REVOKE SELECT ON TABLE public.admin_settings FROM anon;
+REVOKE SELECT ON TABLE public.admin_settings FROM PUBLIC, anon;
