@@ -10,11 +10,14 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const scope = await getStorefrontDataScope();
   const { organizationId: orgId, warehouseId, isStaff } = scope;
   const publicProductColumns = 'id,organization_id,category_id,name,item_code,barcode,description,unit,base_price,status,image_url,created_at';
-  const { data: products, error } = await supabase
+  let productsQuery = supabase
     .from('products')
     .select(isStaff ? '*' : publicProductColumns)
-    .eq('organization_id', orgId)
-    .order('name');
+    .eq('organization_id', orgId);
+  // Public/customer catalog requests must not return disabled products even if a permissive
+  // tenant policy is later broadened. Staff tooling retains inactive rows for maintenance.
+  if (!isStaff) productsQuery = productsQuery.eq('status', 'active');
+  const { data: products, error } = await productsQuery.order('name');
   if (error) throw error;
 
   const inventoryResult = warehouseId
@@ -29,10 +32,14 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const invMap = new Map<string, InventoryBalance>();
   inventory?.forEach((inv: InventoryBalance) => invMap.set(inv.product_id, inv));
 
-  const { data: categories, error: categoryError } = await supabase
+  let categoriesQuery = supabase
     .from('categories')
-    .select('*')
+    .select(isStaff ? '*' : 'id,name,code,parent_id,sort_order,is_active')
     .eq('organization_id', orgId);
+  // Categories can contain internal descriptions; expose only storefront fields and active
+  // categories to non-staff clients. Keep the full scoped projection for staff maintenance.
+  if (!isStaff) categoriesQuery = categoriesQuery.eq('is_active', true);
+  const { data: categories, error: categoryError } = await categoriesQuery;
   if (categoryError) throw categoryError;
   const catMap = new Map<string, Category>();
   categories?.forEach((cat: Category) => catMap.set(cat.id, cat));
@@ -73,12 +80,13 @@ export async function deleteProduct(id: string): Promise<void> {
 
 // ─── Categories ───
 export async function fetchCategories(): Promise<Category[]> {
-  const { organizationId: orgId } = await getStorefrontDataScope();
-  const { data, error } = await supabase
+  const { organizationId: orgId, isStaff } = await getStorefrontDataScope();
+  let query = supabase
     .from('categories')
-    .select('*')
-    .eq('organization_id', orgId)
-    .order('sort_order');
+    .select(isStaff ? '*' : 'id,name,code,parent_id,sort_order,is_active')
+    .eq('organization_id', orgId);
+  if (!isStaff) query = query.eq('is_active', true);
+  const { data, error } = await query.order('sort_order');
   if (error) throw error;
   return data as Category[];
 }
