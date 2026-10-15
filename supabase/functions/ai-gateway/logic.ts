@@ -121,7 +121,9 @@ export function buildGeminiRequestConfig(baseUrl: string, model: string, apiKey:
   if (!isSafeProviderBaseUrl(baseUrl, "gemini") || !model.trim() || model.length > 160 || !apiKey.trim()) {
     throw new Error("invalid_gemini_provider_config");
   }
-  const url = new URL(baseUrl.replace(/\\/+$/, "") + "/models/" + encodeURIComponent(model.trim()) + ":generateContent");
+  let normalizedBaseUrl = baseUrl;
+  while (normalizedBaseUrl.endsWith("/")) normalizedBaseUrl = normalizedBaseUrl.slice(0, -1);
+  const url = new URL(normalizedBaseUrl + "/models/" + encodeURIComponent(model.trim()) + ":generateContent");
   return {
     url,
     headers: {
