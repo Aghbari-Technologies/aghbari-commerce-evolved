@@ -87,3 +87,9 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Root cause located in the public-storefront boundary: direct SELECT was revoked from `PUBLIC, anon` but not `authenticated`. Row-level organization scope is not sufficient to keep tier prices staff/private.
 - Added new migration `supabase/migrations/20261015120000_customer_tier_price_read_boundary.sql`: revoke direct SELECT from `PUBLIC, anon, authenticated`, and abort migration if table-level or column-level `SELECT` is still effective for `authenticated`. The existing `scripts/test-database-migrations.mjs` assertion is retained as regression coverage.
 - Fix commit and exact-SHA CI are pending; no production database mutation. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `next_task_id = AGH-SEC-BROWSER-E2E-001` OPEN until the new run passes.
+## 2026-10-15 — Direct customer tier-table disclosure fixed in CI
+
+- Root cause confirmed by failing isolated Postgres test: `product_prices` SELECT was revoked from `PUBLIC, anon` but not `authenticated`, leaving direct row enumeration possible despite organization-scoped RLS.
+- New migration `supabase/migrations/20261015120000_customer_tier_price_read_boundary.sql` revokes direct SELECT from all client roles and validates no table-level or column-level SELECT remains for `authenticated`; `scripts/test-database-migrations.mjs` checks direct customer reads return no price rows or are denied.
+- Exact fix SHA `8f1a7ec7b6f85a280da66e183bfd130996902edb`; Actions [run 38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337) **SUCCESS** for unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
+- Scope: no production database mutation. This closes the direct-table read flaw in CI and keeps the price-tier item PARTIAL pending all-channel and authenticated real-browser evidence. `next_task_id = AGH-SEC-BROWSER-E2E-001` remains OPEN.

@@ -1,5 +1,14 @@
 # Aghbari Commerce — Latest Execution State
 
+## Verified security fix — authenticated tier-price enumeration closed in isolated CI
+
+- **Code SHA:** `8f1a7ec7b6f85a280da66e183bfd130996902edb`.
+- **Exact-SHA CI:** [run 38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337) **SUCCESS** across unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
+- CI run `38695976338` on parent SHA `700fef00cd26bc022b2f8837236530195951db19` exposed the actual defect: an authenticated customer could enumerate `public.product_prices`, because the public storefront migration revoked direct SELECT from `PUBLIC, anon` but omitted `authenticated`.
+- New migration `supabase/migrations/20261015120000_customer_tier_price_read_boundary.sql` revokes direct table SELECT from `PUBLIC, anon, authenticated` and aborts if table-level or any column-level SELECT remains available to `authenticated`. The new database regression now passes and order pricing still works through the server-owned pricing workflow on isolated CI.
+- **Proof boundary:** production Supabase ref `ffxxjaolfntzbapmfbuv` is still inaccessible; no production migration was applied. This closes the direct-table leak in repository migration tests, not all pricing transports. `AGH-PRICE-PRIVACY-001` remains PARTIAL; `AGH-SEC-BROWSER-E2E-001` remains OPEN.
+
+---
 ## Security finding — authenticated tier prices were directly readable
 
 - Exact CI run [38695976338](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695976338) failed `Apply all migrations to isolated PostgreSQL 17 and verify core workflows` at SHA `700fef00cd26bc022b2f8837236530195951db19`. The new assertion proved that an authenticated customer could directly enumerate `public.product_prices`; this is a real isolated-DB security defect, not a browser-test harness issue.
