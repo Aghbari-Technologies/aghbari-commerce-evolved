@@ -157,6 +157,23 @@ describe("Aghbari PWA offline shell", () => {
     expect(worker.cachePut).not.toHaveBeenCalled();
   });
 
+  it("does not cache profile or arbitrary same-origin image URLs by extension", async () => {
+    const worker = await loadServiceWorker({
+      fetcher: async () => new Response("account-bound image", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/profile/customer-avatar.png",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    await expect(Promise.all(pending)).resolves.toHaveLength(1);
+    expect(worker.cachePut).not.toHaveBeenCalled();
+  });
+
   it("removes previous shell cache versions during activation", async () => {
     const worker = await loadServiceWorker({ cacheNames: ["aghbari-shell-v1", "aghbari-shell-v2", "unrelated-cache"] });
     const pending: Promise<unknown>[] = [];

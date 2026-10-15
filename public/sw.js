@@ -54,7 +54,10 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(request).then((cached) => {
       const network = fetch(request).then((response) => {
-        if (response.ok && response.type === 'basic' && /\.(js|css|svg|png|jpe?g|webp|woff2?|ico)$/i.test(url.pathname)) {
+        const isPublicBuildAsset =
+          (url.pathname.startsWith('/assets/') && /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(url.pathname)) ||
+          url.pathname === '/favicon.ico';
+        if (response.ok && response.type === 'basic' && isPublicBuildAsset) {
           void caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
         }
         return response;
