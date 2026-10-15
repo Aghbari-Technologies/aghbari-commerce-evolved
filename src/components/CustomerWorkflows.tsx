@@ -1918,6 +1918,7 @@ function Offline() {
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [cached, setCached] = useState(0);
   const [catalogRows, setCatalogRows] = useState<ReturnType<typeof sanitizePublicCatalogCache>>([]);
+  const [catalogSearch, setCatalogSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
@@ -2069,11 +2070,34 @@ function Offline() {
       </div>
       <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-catalog-heading">
         <h2 id="offline-catalog-heading" style={{ marginTop: 0, fontSize: 18 }}>الكتالوج المحلي</h2>
+        <label htmlFor="offline-catalog-search" style={{ ...quiet, display: "block", marginBottom: 8 }}>ابحث بالاسم أو رمز الصنف أو الباركود أو التصنيف</label>
+        <input
+          id="offline-catalog-search"
+          aria-label="البحث في الكتالوج المحلي"
+          type="search"
+          dir="rtl"
+          value={catalogSearch}
+          onChange={(event) => setCatalogSearch(event.target.value)}
+          placeholder="اسم الصنف أو الرمز..."
+          style={{ ...inputStyle, width: "100%", marginBottom: 12 }}
+        />
         {catalogRows.length === 0 ? (
           <p role="status" style={quiet}>لا توجد أصناف محفوظة على هذا الجهاز. اتصل بالخادم ثم حدّث الكتالوج.</p>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
-            {catalogRows.map((product) => (
+            {catalogRows
+              .filter((product) => {
+                const query = catalogSearch.trim().toLocaleLowerCase();
+                if (!query) return true;
+                return [
+                  product.name,
+                  product.item_code,
+                  product.barcode ?? "",
+                  product.category?.name ?? "",
+                ].some((value) => String(value).toLocaleLowerCase().includes(query));
+              })
+              .slice(0, 100)
+              .map((product) => (
               <article key={product.id} style={{ border: "1px solid #dbe5e7", borderRadius: 10, padding: 12 }}>
                 <strong>{product.name}</strong>
                 <p style={quiet}>رمز الصنف: {product.item_code} · الوحدة: {product.unit}</p>
@@ -2086,6 +2110,20 @@ function Offline() {
             ))}
           </div>
         )}
+        {catalogRows.filter((product) => {
+          const query = catalogSearch.trim().toLocaleLowerCase();
+          if (!query) return true;
+          return [product.name, product.item_code, product.barcode ?? "", product.category?.name ?? ""]
+            .some((value) => String(value).toLocaleLowerCase().includes(query));
+        }).length > 100 && (
+          <p style={quiet}>يُعرض أول 100 صنف مطابق لتجنب تحميل قائمة كبيرة؛ أضف كلمات بحث لتضييق النتائج.</p>
+        )}
+        {catalogRows.length > 0 && catalogRows.filter((product) => {
+          const query = catalogSearch.trim().toLocaleLowerCase();
+          if (!query) return true;
+          return [product.name, product.item_code, product.barcode ?? "", product.category?.name ?? ""]
+            .some((value) => String(value).toLocaleLowerCase().includes(query));
+        }).length === 0 && <p role="status" style={quiet}>لا توجد أصناف مطابقة لبحثك.</p>}
       </section>
       <section style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button style={primary} onClick={() => void sync()} disabled={syncing || !online}>

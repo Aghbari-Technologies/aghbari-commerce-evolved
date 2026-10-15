@@ -595,7 +595,10 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     };
     // Simulate a legacy cache written by a staff session before the allowlist was wired in.
     window.localStorage.setItem("aghbari:catalog:v1", JSON.stringify([unsafeRow]));
-    mocks.fetchProducts.mockResolvedValueOnce([unsafeRow]);
+    mocks.fetchProducts.mockResolvedValueOnce([
+      unsafeRow,
+      { ...unsafeRow, id: "product-offline-2", name: "Rice", item_code: "000126" },
+    ]);
 
     await mountQuoteWorkspace("/offline");
 
@@ -614,7 +617,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
 
     const syncedSafe = JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(catalogScope)) || "[]");
     expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
-    expect(syncedSafe).toHaveLength(1);
+    expect(syncedSafe).toHaveLength(2);
     expect(syncedSafe[0].base_price).toBe(0);
     expect(syncedSafe[0]).not.toHaveProperty("display_price");
     expect(syncedSafe[0]).not.toHaveProperty("cost_price");
@@ -623,6 +626,25 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(syncedSafe[0].inventory).not.toHaveProperty("quantity_reserved");
     expect(syncedSafe[0].inventory).not.toHaveProperty("reorder_point");
     expect(host?.textContent).toContain("Sugar");
+    expect(host?.textContent).toContain("Rice");
+    const searchInput = host?.querySelector<HTMLInputElement>("#offline-catalog-search");
+    expect(searchInput).toBeDefined();
+    await act(async () => {
+      if (searchInput) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(searchInput, "Rice");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    expect(host?.textContent).toContain("Rice");
+    expect(host?.textContent).not.toContain("Sugar");
+    await act(async () => {
+      if (searchInput) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(searchInput, "Sugar");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
     expect(host?.textContent).toContain("السعر والمخزون الحاليان يحتاجان مراجعة الخادم");
 
     const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
