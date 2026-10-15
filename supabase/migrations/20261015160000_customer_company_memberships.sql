@@ -86,6 +86,7 @@ BEGIN
  SELECT i.* INTO v_invitation FROM public.customer_company_invitations i WHERE i.token_hash=pg_catalog.md5(pg_catalog.lower(p_token)) FOR UPDATE;
  IF NOT FOUND OR v_invitation.status<>'pending' THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='الدعوة غير موجودة أو استُخدمت أو أُلغيت'; END IF;
  IF v_invitation.expires_at<=pg_catalog.now() THEN UPDATE public.customer_company_invitations SET status='expired',updated_at=pg_catalog.now() WHERE id=v_invitation.id; RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='انتهت صلاحية الدعوة؛ اطلب رابطًا جديدًا'; END IF;
+ IF pg_catalog.nullif(auth.jwt()->>'email_confirmed_at','') IS NULL THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='أكّد بريدك الإلكتروني قبل قبول الدعوة'; END IF;
  IF v_email='' OR v_email<>v_invitation.invited_email THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='سجّل الدخول بالبريد الإلكتروني الذي استلم الدعوة'; END IF;
  SELECT p.organization_id INTO v_org FROM public.profiles p WHERE p.id=v_profile AND p.auth_user_id=auth.uid() AND p.is_active;
  IF v_org IS DISTINCT FROM v_invitation.organization_id THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='حسابك لا ينتمي إلى نطاق المؤسسة المدعوة'; END IF;
