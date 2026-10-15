@@ -1,4 +1,4 @@
-import { supabase, ORG_ID, WAREHOUSE_ID } from './supabase';
+import { getCurrentTenantScope, supabase } from './supabase';
 import type {
   Product, Category, Customer, Supplier, Order, OrderItem,
   InventoryBalance, PricingRule, CreatePricingRuleInput, Promotion, AiAlert, AiTask, Notification,
@@ -7,17 +7,18 @@ import type {
 
 // ─── Products ───
 export async function fetchProducts(): Promise<ProductWithInventory[]> {
+  const { organizationId: orgId, warehouseId } = await getCurrentTenantScope();
   const { data: products, error } = await supabase
     .from('products')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('name');
   if (error) throw error;
 
-  const { data: inventory, error: inventoryError } = await supabase
-    .from('inventory_balances')
-    .select('*')
-    .eq('warehouse_id', WAREHOUSE_ID);
+  const inventoryResult = warehouseId
+    ? await supabase.from('inventory_balances').select('*').eq('warehouse_id', warehouseId)
+    : { data: [] as InventoryBalance[], error: null };
+  const { data: inventory, error: inventoryError } = inventoryResult;
   if (inventoryError) throw inventoryError;
 
   const invMap = new Map<string, InventoryBalance>();
@@ -26,7 +27,7 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const { data: categories, error: categoryError } = await supabase
     .from('categories')
     .select('*')
-    .eq('organization_id', ORG_ID);
+    .eq('organization_id', orgId);
   if (categoryError) throw categoryError;
   const catMap = new Map<string, Category>();
   categories?.forEach((cat: Category) => catMap.set(cat.id, cat));
@@ -39,9 +40,10 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
 }
 
 export async function createProduct(p: Partial<Product>): Promise<Product> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('products')
-    .insert({ ...p, organization_id: ORG_ID })
+    .insert({ ...p, organization_id: orgId })
     .select()
     .single();
   if (error) throw error;
@@ -66,19 +68,21 @@ export async function deleteProduct(id: string): Promise<void> {
 
 // ─── Categories ───
 export async function fetchCategories(): Promise<Category[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('categories')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('sort_order');
   if (error) throw error;
   return data as Category[];
 }
 
 export async function createCategory(c: Partial<Category>): Promise<Category> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('categories')
-    .insert({ ...c, organization_id: ORG_ID })
+    .insert({ ...c, organization_id: orgId })
     .select()
     .single();
   if (error) throw error;
@@ -92,19 +96,21 @@ export async function deleteCategory(id: string): Promise<void> {
 
 // ─── Customers ───
 export async function fetchCustomers(): Promise<Customer[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('customers')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as Customer[];
 }
 
 export async function createCustomer(c: Partial<Customer>): Promise<Customer> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('customers')
-    .insert({ ...c, organization_id: ORG_ID })
+    .insert({ ...c, organization_id: orgId })
     .select()
     .single();
   if (error) throw error;
@@ -121,19 +127,21 @@ export async function updateCustomerStatus(id: string, status: string): Promise<
 
 // ─── Suppliers ───
 export async function fetchSuppliers(): Promise<Supplier[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('suppliers')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('name');
   if (error) throw error;
   return data as Supplier[];
 }
 
 export async function createSupplier(s: Partial<Supplier>): Promise<Supplier> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('suppliers')
-    .insert({ ...s, organization_id: ORG_ID })
+    .insert({ ...s, organization_id: orgId })
     .select()
     .single();
   if (error) throw error;
@@ -142,6 +150,7 @@ export async function createSupplier(s: Partial<Supplier>): Promise<Supplier> {
 
 // ─── Orders ───
 export async function fetchOrders(): Promise<OrderWithCustomer[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   // The staff-only SECURITY DEFINER RPC derives the tenant from the signed-in profile.
   // The client can no longer SELECT financial order columns directly.
   const { data: orders, error } = await supabase.rpc('fetch_staff_orders');
@@ -150,7 +159,7 @@ export async function fetchOrders(): Promise<OrderWithCustomer[]> {
   const { data: customers, error: customersError } = await supabase
     .from('customers')
     .select('*')
-    .eq('organization_id', ORG_ID);
+    .eq('organization_id', orgId);
   if (customersError) throw customersError;
   const custMap = new Map<string, Customer>();
   customers?.forEach((c: Customer) => custMap.set(c.id, c));
@@ -245,10 +254,11 @@ export async function createOrder(order: {
 
 // ─── Pricing rules ───
 export async function fetchPricingRules(): Promise<PricingRule[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('pricing_rules')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('priority');
   if (error) throw error;
   return data as PricingRule[];
@@ -331,20 +341,22 @@ function buildPricingRuleDatabaseFields(input: CreatePricingRuleInput): PricingR
 }
 
 export async function createPricingRule(input: CreatePricingRuleInput): Promise<void> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const fields = buildPricingRuleDatabaseFields(input);
   const { error } = await supabase.from('pricing_rules').insert({
-    organization_id: ORG_ID,
+    organization_id: orgId,
     ...fields,
   });
   if (error) throw new Error('تعذر إنشاء قاعدة التسعير: ' + error.message);
 }
 
 export async function updatePricingRule(id: string, input: CreatePricingRuleInput): Promise<void> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const fields = buildPricingRuleDatabaseFields(input);
   const { data: current, error: readError } = await supabase
     .from('pricing_rules')
     .select('id,manually_locked,requires_approval,approved_at')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .eq('id', id)
     .maybeSingle();
   if (readError) throw readError;
@@ -357,7 +369,7 @@ export async function updatePricingRule(id: string, input: CreatePricingRuleInpu
   const { data, error } = await supabase
     .from('pricing_rules')
     .update(fields)
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .eq('id', id)
     .eq('manually_locked', false)
     .eq('requires_approval', false)
@@ -368,10 +380,11 @@ export async function updatePricingRule(id: string, input: CreatePricingRuleInpu
 }
 
 export async function togglePricingRule(id: string, isActive: boolean): Promise<{ requires_approval: boolean; approved_at: string | null; is_active: boolean }> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data: rule, error: readError } = await supabase
     .from('pricing_rules')
     .select('id,scope_type,manually_locked')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .eq('id', id)
     .maybeSingle();
   if (readError) throw readError;
@@ -383,7 +396,7 @@ export async function togglePricingRule(id: string, isActive: boolean): Promise<
   const { data, error } = await supabase
     .from('pricing_rules')
     .update({ is_active: isActive })
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .eq('id', id)
     .eq('manually_locked', false)
     .select('id,requires_approval,approved_at,is_active')
@@ -394,10 +407,11 @@ export async function togglePricingRule(id: string, isActive: boolean): Promise<
 }
 
 export async function deletePricingRule(id: string): Promise<void> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('pricing_rules')
     .delete()
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .eq('id', id)
     .eq('manually_locked', false)
     .select('id')
@@ -431,10 +445,11 @@ export async function approvePricingRule(id: string, approvalNote: string): Prom
 
 // ─── Promotions ───
 export async function fetchPromotions(): Promise<Promotion[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('promotions')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as Promotion[];
@@ -447,10 +462,11 @@ export async function togglePromotion(id: string, isActive: boolean): Promise<vo
 
 // ─── AI Alerts ───
 export async function fetchAiAlerts(): Promise<AiAlert[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('ai_alerts')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) throw error;
@@ -464,10 +480,11 @@ export async function resolveAiAlert(id: string): Promise<void> {
 
 // ─── AI Tasks ───
 export async function fetchAiTasks(): Promise<AiTask[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('ai_tasks')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as AiTask[];
@@ -482,10 +499,11 @@ export async function toggleAiTaskStatus(id: string, status: string): Promise<vo
 
 // ─── Notifications ───
 export async function fetchNotifications(): Promise<Notification[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(30);
   if (error) throw error;
@@ -498,29 +516,32 @@ export async function markNotificationRead(id: string): Promise<void> {
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { error } = await supabase
     .from('notifications')
     .update({ is_read: true })
-    .eq('organization_id', ORG_ID)
+    .eq('organization_id', orgId)
     .eq('is_read', false);
   if (error) throw error;
 }
 
 // ─── Admin Settings ───
 export async function fetchSettings(): Promise<AdminSetting[]> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { data, error } = await supabase
     .from('admin_settings')
     .select('*')
-    .eq('organization_id', ORG_ID);
+    .eq('organization_id', orgId);
   if (error) throw error;
   return data as AdminSetting[];
 }
 
 export async function updateSetting(key: string, value: unknown, category: string): Promise<void> {
+  const { organizationId: orgId } = await getCurrentTenantScope();
   const { error } = await supabase
     .from('admin_settings')
     .upsert(
-      { organization_id: ORG_ID, key, value, category, updated_at: new Date().toISOString() },
+      { organization_id: orgId, key, value, category, updated_at: new Date().toISOString() },
       { onConflict: 'organization_id,key' }
     );
   if (error) throw error;
@@ -733,12 +754,15 @@ export async function fetchImportRows(jobId: string): Promise<ImportJobRow[]> {
 
 // ─── Dashboard stats ───
 export async function fetchDashboardStats() {
+  const { organizationId: orgId, warehouseId } = await getCurrentTenantScope();
   const [products, customers, orders, alerts, lowStock] = await Promise.all([
-    supabase.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('status', 'active'),
-    supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID),
+    supabase.from('products').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'active'),
+    supabase.from('customers').select('id', { count: 'exact', head: true }).eq('organization_id', orgId),
     supabase.rpc('fetch_staff_orders'),
-    supabase.from('ai_alerts').select('id', { count: 'exact', head: true }).eq('organization_id', ORG_ID).eq('is_resolved', false),
-    supabase.from('inventory_balances').select('quantity_on_hand, reorder_point, product_id').eq('warehouse_id', WAREHOUSE_ID),
+    supabase.from('ai_alerts').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('is_resolved', false),
+    warehouseId
+      ? supabase.from('inventory_balances').select('quantity_on_hand, reorder_point, product_id').eq('warehouse_id', warehouseId)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const lowStockCount = (lowStock.data || []).filter(

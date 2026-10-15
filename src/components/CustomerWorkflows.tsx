@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Login } from "@/components/Login";
 import { useAuth } from "@/lib/auth";
-import { supabase, ORG_ID } from "@/lib/supabase";
+import { getCurrentTenantScope, supabase } from "@/lib/supabase";
 import { formatCurrency, formatDate, formatDateShort, formatNumber } from "@/lib/format";
 import {
   classifyAssistantIntent,
@@ -673,11 +673,18 @@ function Quotes() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    const tenantScope = await getCurrentTenantScope().catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "تعذر تحديد المؤسسة الحالية.");
+      setLoading(false);
+      return null;
+    });
+    if (!tenantScope) return;
+    const { organizationId: orgId } = tenantScope;
     const [p, q] = await Promise.all([
       supabase
         .from("products")
         .select("id,name,item_code,barcode,unit,base_price,status")
-        .eq("organization_id", ORG_ID)
+        .eq("organization_id", orgId)
         .eq("status", "active")
         .order("name")
         .limit(500),
@@ -958,11 +965,17 @@ function Reorder() {
   const [notice, setNotice] = useState("");
   const load = useCallback(async () => {
     setError("");
+    const tenantScope = await getCurrentTenantScope().catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "تعذر تحديد المؤسسة الحالية.");
+      return null;
+    });
+    if (!tenantScope) return;
+    const { organizationId: orgId } = tenantScope;
     const [p, t] = await Promise.all([
       supabase
         .from("products")
         .select("id,name,item_code,barcode,unit,base_price,status")
-        .eq("organization_id", ORG_ID)
+        .eq("organization_id", orgId)
         .eq("status", "active")
         .order("name")
         .limit(500),
@@ -1183,10 +1196,17 @@ function Barcode() {
       setBusy(true);
       setError("");
       setProduct(null);
+      const tenantScope = await getCurrentTenantScope().catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "تعذر تحديد المؤسسة الحالية.");
+        setBusy(false);
+        return null;
+      });
+      if (!tenantScope) return;
+      const { organizationId: orgId } = tenantScope;
       let r = await supabase
         .from("products")
         .select("id,name,item_code,barcode,unit,base_price,status")
-        .eq("organization_id", ORG_ID)
+        .eq("organization_id", orgId)
         .eq("status", "active")
         .eq("barcode", code)
         .maybeSingle();
@@ -1194,7 +1214,7 @@ function Barcode() {
         r = await supabase
           .from("products")
           .select("id,name,item_code,barcode,unit,base_price,status")
-          .eq("organization_id", ORG_ID)
+          .eq("organization_id", orgId)
           .eq("status", "active")
           .eq("item_code", code)
           .maybeSingle();
@@ -1401,10 +1421,11 @@ function Assistant() {
           ),
         );
       } else if (intent === "catalog_search") {
+        const { organizationId: orgId } = await getCurrentTenantScope();
         const r = await supabase
           .from("products")
           .select("name,item_code,barcode,unit,base_price,status")
-          .eq("organization_id", ORG_ID)
+          .eq("organization_id", orgId)
           .eq("status", "active")
           .order("name")
           .limit(300);
