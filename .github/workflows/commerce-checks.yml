@@ -50,9 +50,12 @@ jobs:
           npm run test:db 2>&1 | tee /tmp/aghbari-db-migration.log
           db_status=${PIPESTATUS[0]}
           if [ "$db_status" -ne 0 ]; then
-            echo "::error title=Database migration diagnostic::The isolated migration/workflow command failed; the last 70 lines follow."
-            tail -n 70 /tmp/aghbari-db-migration.log | while IFS= read -r line; do
-              echo "::error title=Database migration output::$line"
+            echo "::error title=Database migration diagnostic::The isolated migration/workflow command failed; structured error follows."
+            grep -E '^(MIGRATION_FAILED|MIGRATION_DIAGNOSTIC) ' /tmp/aghbari-db-migration.log | tail -n 2 | while IFS= read -r line; do
+              echo "::error title=Database migration root cause::$line"
+            done
+            grep -E 'Error:|error:|AssertionError:|not ok|FAIL|ERROR' /tmp/aghbari-db-migration.log | tail -n 12 | while IFS= read -r line; do
+              echo "::error title=Database test failure::$line"
             done
           fi
           exit "$db_status"

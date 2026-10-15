@@ -60,7 +60,19 @@ async function main() {
 
   for (const name of migrations) {
     const contents = await readFile(resolve(migrationDir, name), "utf8");
-    await db.unsafe(contents);
+    try {
+      await db.unsafe(contents);
+    } catch (cause) {
+      const error = cause && typeof cause === "object" ? cause : { message: String(cause) };
+      const diagnostic = Object.fromEntries(
+        ["name", "message", "code", "severity", "detail", "hint", "position", "where", "schema", "table", "column", "constraint", "file", "line", "routine", "stack"]
+          .filter((key) => key in error)
+          .map((key) => [key, error[key]]),
+      );
+      process.stderr.write("MIGRATION_FAILED " + name + "\\n");
+      process.stderr.write("MIGRATION_DIAGNOSTIC " + JSON.stringify(diagnostic) + "\\n");
+      throw cause;
+    }
     process.stdout.write("APPLIED " + name + "\n");
   }
 
