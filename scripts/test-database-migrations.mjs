@@ -656,7 +656,7 @@ async function main() {
       retryEventId,
       "ci-outbox-worker-recovery",
       "unsupported_event",
-      "No handler registered for CIUnsupportedEvent; buyer@example.com; Authorization: Bearer opaque-access-token; sk-12345678901234567890; ?access_token=opaque-query-token",
+      "No handler registered for CIUnsupportedEvent; buyer@example.com; Bearer opaque-access-token; api_key=opaque-api-key; sk-12345678901234567890; ?access_token=opaque-query-token\nAuthorization: Basic opaque-basic-token\nProxy-Authorization: Bearer opaque-proxy-token\nCookie: session=opaque-cookie; next=opaque-session\nSet-Cookie: refresh_token=opaque-refresh-cookie",
     ],
   );
   assert.equal(retryResult[0].result.status, "retry");
@@ -669,10 +669,19 @@ async function main() {
   const durableError = String(retryState[0].last_error.message);
   assert.ok(durableError.includes("[email redacted]"), "database redacts email addresses even when called without the Edge worker");
   assert.ok(durableError.includes("Bearer [redacted]"), "database redacts bearer credentials");
+  assert.ok(durableError.includes("api_key=[redacted]"), "database preserves credential field names while redacting their values");
+  assert.ok(durableError.includes("?access_token=[redacted]"), "database preserves query parameter names while redacting values");
+  assert.ok(durableError.includes("[authorization redacted]"), "database redacts Authorization and Proxy-Authorization header values");
+  assert.ok(durableError.includes("[cookie redacted]"), "database redacts Cookie and Set-Cookie header values");
   assert.ok(durableError.includes("[secret redacted]"), "database redacts provider-key formats");
-  assert.ok(durableError.includes("[redacted]"), "database redacts query-string tokens");
   assert.ok(!durableError.includes("buyer@example.com"));
   assert.ok(!durableError.includes("opaque-access-token"));
+  assert.ok(!durableError.includes("opaque-api-key"));
+  assert.ok(!durableError.includes("opaque-basic-token"));
+  assert.ok(!durableError.includes("opaque-proxy-token"));
+  assert.ok(!durableError.includes("opaque-cookie"));
+  assert.ok(!durableError.includes("opaque-session"));
+  assert.ok(!durableError.includes("opaque-refresh-cookie"));
   assert.ok(!durableError.includes("sk-12345678901234567890"));
   assert.ok(!durableError.includes("opaque-query-token"));
 
