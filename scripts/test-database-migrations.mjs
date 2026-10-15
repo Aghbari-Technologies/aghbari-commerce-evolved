@@ -471,7 +471,12 @@ async function main() {
     () => db.unsafe("select public.set_customer_money_display_policy('cart',true)"), /admin or manager/i);
 
   await db.unsafe("reset role");
-  await db.unsafe("insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_cart_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,category=excluded.category,updated_at=now()", [organizationId]);
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const cartVisibilityEnabled = await db.unsafe("select public.set_customer_money_display_policy('cart',true) as result");
+  assert.equal(cartVisibilityEnabled[0].result.surface, "cart");
+  assert.equal(cartVisibilityEnabled[0].result.visible, true, "an authorized admin must be able to enable cart price display");
+  await db.unsafe("reset role");
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
   const checkoutMoneyVisibleResult = await db.unsafe(
@@ -544,7 +549,12 @@ async function main() {
   assert.ok(orderMoneyHidden.items.every((line) => line.unit_price === null && line.line_total === null), "hidden order items must carry NULL financial values");
 
   await db.unsafe("reset role");
-  await db.unsafe("insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_order_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,category=excluded.category,updated_at=now()", [organizationId]);
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const orderVisibilityEnabled = await db.unsafe("select public.set_customer_money_display_policy('order',true) as result");
+  assert.equal(orderVisibilityEnabled[0].result.surface, "order");
+  assert.equal(orderVisibilityEnabled[0].result.visible, true, "an authorized admin must be able to enable order price display");
+  await db.unsafe("reset role");
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
   const orderMoneyVisibleResult = await db.unsafe("select public.get_customer_order_financials($1::uuid) as result", [order.id]);
@@ -1454,6 +1464,32 @@ async function main() {
   assert.equal(Number(reviewedLines[0].quantity), 1);
   assert.equal(Number(reviewedLines[0].approved_unit_price), 36000);
   assert.match(reviewedLines[0].price_override_reason, /CI one-order override/);
+
+  // Customer order money must follow the approved unit price, approved quantity and
+  // recalculated persisted order total, not the original request snapshot.
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const reviewedOrderPolicy = await db.unsafe("select public.set_customer_money_display_policy('order',true) as result");
+  assert.equal(reviewedOrderPolicy[0].result.visible, true);
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const reviewedCustomerMoneyResult = await db.unsafe(
+    "select public.get_customer_order_financials($1::uuid) as result",
+    [reviewOrder.id],
+  );
+  const reviewedCustomerMoney = reviewedCustomerMoneyResult[0].result;
+  assert.equal(reviewedCustomerMoney.amounts_visible, true);
+  assert.equal(Number(reviewedCustomerMoney.total_amount), 36000, "customer detail total must match the approved order total");
+  assert.equal(reviewedCustomerMoney.items.length, 1);
+  assert.equal(Number(reviewedCustomerMoney.items[0].unit_price), 36000, "customer detail unit price must match the approved price");
+  assert.equal(Number(reviewedCustomerMoney.items[0].line_total), 36000, "customer detail line total must match approved quantity × approved price");
+
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key='customer_order_amounts_visible'", [organizationId]);
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
   const reviewedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
   const reviewedInvoice = reviewedFinance[0].result.invoices.filter((row) => row.order_id === reviewOrder.id);
   assert.equal(reviewedInvoice.length, 1, "approval should issue exactly one invoice");
