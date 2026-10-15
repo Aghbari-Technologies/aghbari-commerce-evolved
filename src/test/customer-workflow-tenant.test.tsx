@@ -733,6 +733,19 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("تعذر التحقق من التخزين المحلي أو سجل السلة");
     expect(host?.textContent).not.toContain("لا توجد أصناف محفوظة على هذا الجهاز");
     expect(host?.querySelector('[role="alert"]')?.textContent).toContain("لم تُرسل أي عملية");
+    const retryButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إعادة محاولة قراءة التخزين"),
+    );
+    expect(retryButton).toBeDefined();
+
+    window.localStorage.removeItem(getOfflineCartLedgerPrefix(scope) + "seed");
+    await act(async () => {
+      retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host?.querySelector('[role="alert"]')).toBeNull();
+    expect(host?.textContent).toContain("تمت إعادة قراءة النسخة المحلية");
+    expect(host?.textContent).toContain("لا توجد أصناف محفوظة على هذا الجهاز");
   });
 
   it("preserves the last offline catalog when sync returns malformed server data", async () => {

@@ -2098,6 +2098,14 @@ function Offline() {
       setMessage(cause instanceof Error ? cause.message : "تعذر إضافة الصنف إلى المسودة المحلية.");
     }
   }
+  function retryLocalStorage() {
+    const recovered = refresh();
+    setMessage(
+      recovered
+        ? "تمت إعادة قراءة النسخة المحلية والتحقق من سجل السلة."
+        : "ما زال التحقق من التخزين المحلي متعذرًا؛ لم نحذف أي مسودة.",
+    );
+  }
   return (
     <WorkspaceShell
       title="العمل دون اتصال"
@@ -2132,9 +2140,10 @@ function Offline() {
         </article>
       </div>
       {storageError && (
-        <p role="alert" style={{ ...card, marginBottom: 14, border: "1px solid #b91c1c", color: "#991b1b" }}>
-          {storageError}
-        </p>
+        <div role="alert" style={{ ...card, marginBottom: 14, border: "1px solid #b91c1c", color: "#991b1b" }}>
+          <p style={{ marginTop: 0 }}>{storageError}</p>
+          <button style={secondary} onClick={retryLocalStorage}>إعادة محاولة قراءة التخزين</button>
+        </div>
       )}
       <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-catalog-heading">
         <h2 id="offline-catalog-heading" style={{ marginTop: 0, fontSize: 18 }}>الكتالوج المحلي</h2>
