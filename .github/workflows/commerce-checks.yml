@@ -35,6 +35,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install Bun for frozen-lockfile verification
+        uses: oven-sh/setup-bun@v2
+      - name: Verify Bun lockfile matches package.json
+        run: bun install --frozen-lockfile --dry-run
       - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
