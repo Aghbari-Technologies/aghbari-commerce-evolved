@@ -376,7 +376,7 @@ async function main() {
     [accountantPriceProductId,organizationId],
   );
   await db.unsafe(
-    "insert into public.product_prices(product_id,tier,price,min_quantity,is_active) values($1,'retail',1234,1,true) on conflict(product_id,tier,min_quantity) do update set price=excluded.price,is_active=true",
+    "insert into public.product_prices(product_id,tier,price,min_quantity,is_active) values($1,'retail',1234,1,true)",
     [accountantPriceProductId],
   );
   await setIdentity(accountantAuthUserId, "ci-accountant@example.test");
