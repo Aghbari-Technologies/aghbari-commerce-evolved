@@ -31,6 +31,7 @@ import {
   sanitizePublicCatalogCache,
   summarizeAccount,
   summarizeInvoiceAmounts,
+  isCustomerStatementPossiblyPartial,
   summarizeCustomerInvoiceStatuses,
   summarizeCustomerOrderStatuses,
   type InvoiceAmount,
@@ -729,7 +730,7 @@ function Statement() {
     () => summarizeAccount(invoices as InvoiceAmount[], payments),
     [invoices, payments],
   );
-  const statementMayBePartial = invoices.length >= 200 || payments.length >= 500;
+  const statementMayBePartial = isCustomerStatementPossiblyPartial(invoices.length, payments.length);
   return (
     <WorkspaceShell title="كشف الحساب" subtitle="ملخص من الفواتير والمدفوعات المسجلة فقط.">
       <div
