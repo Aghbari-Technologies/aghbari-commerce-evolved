@@ -44,7 +44,18 @@ jobs:
       - name: Unit tests
         run: npm test
       - name: Apply all migrations to isolated PostgreSQL 17 and verify core workflows
-        run: npm run test:db
+        shell: bash
+        run: |
+          set +e
+          npm run test:db 2>&1 | tee /tmp/aghbari-db-migration.log
+          db_status=${PIPESTATUS[0]}
+          if [ "$db_status" -ne 0 ]; then
+            echo "::error title=Database migration diagnostic::The isolated migration/workflow command failed; the last 70 lines follow."
+            tail -n 70 /tmp/aghbari-db-migration.log | while IFS= read -r line; do
+              echo "::error title=Database migration output::$line"
+            done
+          fi
+          exit "$db_status"
       # The repository-wide Prettier rule currently reports thousands of pre-existing formatting errors.
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
       - name: Lint (excluding repository-wide Prettier formatting rule)
