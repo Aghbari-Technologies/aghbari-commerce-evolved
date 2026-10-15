@@ -195,6 +195,49 @@ describe("public catalog privacy and tenant query contract", () => {
     await expect(fetchResolvedProductPrices(["p2"])).rejects.toThrow(/تعذر تحميل أسعار فئة حسابك/);
   });
 
+  it("rejects invalid quantities and product identifiers before making a price RPC", async () => {
+    await expect(fetchResolvedProductPrices(["p1"], 0)).rejects.toThrow(/الكمية المطلوبة/);
+    await expect(fetchResolvedProductPrices(["p1"], 10001)).rejects.toThrow(/الكمية المطلوبة/);
+    await expect(fetchResolvedProductPrices(["p1", ""], 1)).rejects.toThrow(/هوية أحد الأصناف/);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("rejects a price RPC response with a foreign identifier or duplicate product rows", async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: [{ product_id: "other-tenant-product", unit_price: 1 }],
+      error: null,
+    });
+    await expect(fetchResolvedProductPrices(["p1"])).rejects.toThrow(/نتيجة أسعار غير متطابقة/);
+
+    mocks.rpc.mockResolvedValueOnce({
+      data: [
+        { product_id: "p1", unit_price: 1200 },
+        { product_id: "p1", unit_price: 1 },
+      ],
+      error: null,
+    });
+    await expect(fetchResolvedProductPrices(["p1"])).rejects.toThrow(/نتيجة أسعار غير متطابقة/);
+  });
+
+  it("deduplicates price requests and splits large requests into bounded server batches", async () => {
+    mocks.rpc.mockImplementation((functionName: string, args: { p_product_ids: string[]; p_quantity: number }) =>
+      Promise.resolve({
+        data: args.p_product_ids.map((product_id) => ({ product_id, unit_price: 1234 })),
+        error: null,
+      }),
+    );
+    const ids = Array.from({ length: 501 }, (_, index) => "price-product-" + index);
+    const prices = await fetchResolvedProductPrices([...ids, ids[0]], 20);
+
+    expect(prices).toHaveLength(501);
+    expect(prices.get("price-product-500")).toBe(1234);
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    expect(mocks.rpc.mock.calls[0][0]).toBe("get_storefront_product_prices");
+    expect(mocks.rpc.mock.calls[0][1]).toMatchObject({ p_quantity: 20 });
+    expect(mocks.rpc.mock.calls[0][1].p_product_ids).toHaveLength(500);
+    expect(mocks.rpc.mock.calls[1][1].p_product_ids).toHaveLength(1);
+  });
+
   it("does not issue catalog queries if the server-derived storefront scope fails", async () => {
     mocks.getStorefrontDataScope.mockRejectedValueOnce(
       new Error("Public storefront tenant is not configured"),
