@@ -207,7 +207,8 @@ describe("outbox worker logical RPC result handling", () => {
     expect(value).not.toContain("signed-token");
     expect(value).not.toContain("sk-12345678901234567890");
     expect(value).not.toContain("AIza123456789012345678901234567890");
-    expect(value).toContain("[redacted]");
+    expect(value).toContain("[authorization redacted]");
+    expect(value).toContain("[cookie redacted]");
     expect(value).toContain("[token redacted]");
     expect(value).toContain("[secret redacted]");
   });
