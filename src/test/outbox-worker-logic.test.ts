@@ -166,6 +166,7 @@ describe("outbox worker logical RPC result handling", () => {
     ));
     expect(value).not.toContain("opaque-access-token");
     expect(value).not.toContain("private-cookie");
+    expect(value).not.toContain("next=ignored");
     expect(value).not.toContain("eyJhbGciOiJIUzI1NiJ9");
     expect(value).not.toContain("signed-token");
     expect(value).not.toContain("sk-12345678901234567890");
