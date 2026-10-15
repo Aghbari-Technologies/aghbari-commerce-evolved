@@ -984,6 +984,62 @@ async function main() {
     "server-side account totals must cover the complete ledger grouped by currency",
   );
 
+  // Exercise both detail caps with isolated fixtures. The full summary and per-invoice
+  // balances must include rows that are intentionally absent from the returned detail arrays.
+  await db.unsafe("reset role");
+  const cappedOrders = await db.unsafe(
+    `insert into public.orders
+       (organization_id,customer_id,order_number,status,total_amount,total_items,created_by)
+     select $1,$2,'CI-STMT-CAP-' || lpad(n::text,4,'0'),'confirmed',100,1,$3
+       from generate_series(1,205) n
+     returning id`,
+    [organizationId, invoice.customer_id, staffProfileId],
+  );
+  assert.equal(cappedOrders.length, 205, "limit fixture must create 205 isolated orders");
+  const cappedInvoices = await db.unsafe(
+    `insert into public.customer_invoices
+       (organization_id,customer_id,order_id,invoice_number,status,issued_at,currency,subtotal,tax_amount,total_amount)
+     select o.organization_id,o.customer_id,o.id,'CI-STMT-CAP-' || o.order_number,'issued',
+            now() - (row_number() over (order by o.order_number) * interval '1 second'),
+            'YER',100,0,100
+       from public.orders o
+      where o.organization_id=$1 and o.customer_id=$2 and o.created_by=$3
+        and o.order_number like 'CI-STMT-CAP-%'
+     returning id`,
+    [organizationId, invoice.customer_id, staffProfileId],
+  );
+  assert.equal(cappedInvoices.length, 205, "limit fixture must create 205 isolated invoices");
+  await db.unsafe(
+    `insert into public.customer_payments
+       (organization_id,customer_id,invoice_id,amount,payment_method,reference,paid_at,created_by)
+     select $1,$2,$3,1,'cash','CI-STMT-PAY-CAP-' || lpad(n::text,4,'0'),
+            now() - (n * interval '1 second'),$4
+       from generate_series(1,501) n`,
+    [organizationId, invoice.customer_id, invoice.id, staffProfileId],
+  );
+  await db.unsafe(
+    "update public.customer_invoices set issued_at=now()+interval '1 hour' where id=$1",
+    [invoice.id],
+  );
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const cappedStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
+  const cappedStatement = cappedStatementResult[0].result;
+  assert.equal(cappedStatement.invoices.length, 200, "invoice details must remain bounded at 200 rows");
+  assert.equal(cappedStatement.payments.length, 500, "payment details must remain bounded at 500 rows");
+  assert.equal(cappedStatement.summary.invoice_count, 206, "summary must count invoices beyond the detail cap");
+  assert.equal(cappedStatement.summary.payment_count, 502, "summary must count payments beyond the detail cap");
+  const cappedYER = cappedStatement.summary.totals_by_currency.find((row) => row.currency === "YER");
+  assert.ok(cappedYER, "full-ledger summary must contain the invoice currency");
+  assert.equal(Number(cappedYER.invoiced), 390500, "full-ledger invoiced total must include all 206 invoices");
+  assert.equal(Number(cappedYER.paid), 100501, "full-ledger paid total must include payments beyond the 500-row detail cap");
+  assert.equal(Number(cappedYER.outstanding), 289999, "full-ledger outstanding total must reconcile across all invoices");
+  assert.equal(cappedYER.invoice_count, 206);
+  const cappedOriginalInvoice = cappedStatement.invoices.find((row) => row.id === invoice.id);
+  assert.ok(cappedOriginalInvoice, "the deliberately recent invoice should remain in detail output");
+  assert.equal(Number(cappedOriginalInvoice.paid_amount), 100501, "per-invoice paid amount must aggregate payments missing from the detail payload");
+  assert.equal(Number(cappedOriginalInvoice.outstanding_amount), 269499, "per-invoice balance must use the complete payment ledger");
+
   // Privacy-by-default: when no setting exists, monetary amounts must not leave the server RPC.
   await db.unsafe("reset role");
   await db.unsafe(
