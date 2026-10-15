@@ -43,7 +43,9 @@ self.addEventListener('fetch', (event) => {
         // identity-bound data in future SSR changes.
         if (response.ok && url.pathname === '/') {
           const homeResponse = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put('/', homeResponse));
+          void caches.open(CACHE_NAME)
+            .then((cache) => cache.put('/', homeResponse))
+            .catch(() => undefined);
         }
         return response;
       }).catch(async () => {
@@ -62,7 +64,7 @@ self.addEventListener('fetch', (event) => {
           (url.pathname.startsWith('/assets/') && /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(url.pathname)) ||
           url.pathname === '/favicon.ico';
         if (response.ok && response.type === 'basic' && isPublicBuildAsset) {
-          void cache.put(request, response.clone());
+          void cache.put(request, response.clone()).catch(() => undefined);
         }
         return response;
       });

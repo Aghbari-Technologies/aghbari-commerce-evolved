@@ -14,12 +14,14 @@ async function loadServiceWorker(overrides: {
   cacheAdd?: (url: string) => Promise<void>;
   cacheNames?: string[];
   cacheMatch?: (request: Request | string) => Promise<Response | null>;
+  cachePut?: (request: Request | string, response: Response) => Promise<void>;
   fetcher?: (request: Request) => Promise<Response>;
 } = {}) {
   const source = await readFile(resolve(process.cwd(), "public/sw.js"), "utf8");
   const listeners = new Map<string, Listener>();
   const cacheAdd = vi.fn(async (url: string) => overrides.cacheAdd?.(url));
-  const cachePut = vi.fn(async (_request: Request | string, _response: Response) => undefined);
+  const cachePut = vi.fn(async (request: Request | string, response: Response) =>
+    overrides.cachePut ? overrides.cachePut(request, response) : undefined);
   const cacheMatch = vi.fn(async (request: Request | string) => overrides.cacheMatch?.(request) ?? null);
   const cache = { add: cacheAdd, put: cachePut, match: cacheMatch };
   const cacheDelete = vi.fn(async () => true);
@@ -177,6 +179,24 @@ describe("Aghbari PWA offline shell", () => {
     expect(responses[0]).not.toBe(foreign);
     expect(worker.cachesMock.match).not.toHaveBeenCalled();
     expect(worker.cacheMatch).toHaveBeenCalled();
+  });
+
+  it("does not fail a successful network response when cache persistence is unavailable", async () => {
+    const worker = await loadServiceWorker({
+      cachePut: async () => { throw new Error("quota exceeded"); },
+      fetcher: async () => new Response("public build asset", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const responses = await Promise.all(pending);
+    expect(await responses[0].text()).toBe("public build asset");
   });
 
   it("does not cache profile or arbitrary same-origin image URLs by extension", async () => {
