@@ -3,10 +3,42 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   classifyOutboxProcessResult,
+  readBoundedRequestBody,
   sanitizeOutboxErrorMessage,
 } from "../../supabase/functions/outbox-worker/logic";
 
 describe("outbox worker logical RPC result handling", () => {
+  it("bounds worker request reads before buffering an oversized body", async () => {
+    const oversized = new Request("https://worker.example", {
+      method: "POST",
+      body: "x".repeat(4097),
+    });
+    await expect(readBoundedRequestBody(oversized, 4096)).resolves.toEqual({
+      ok: false,
+      reason: "too_large",
+    });
+  });
+
+  it("accepts a body exactly at the byte limit and rejects invalid UTF-8", async () => {
+    const exactLimit = new Request("https://worker.example", {
+      method: "POST",
+      body: "x".repeat(4096),
+    });
+    await expect(readBoundedRequestBody(exactLimit, 4096)).resolves.toEqual({
+      ok: true,
+      text: "x".repeat(4096),
+    });
+
+    const invalidUtf8 = new Request("https://worker.example", {
+      method: "POST",
+      body: new Uint8Array([0xff, 0xfe]),
+    });
+    await expect(readBoundedRequestBody(invalidUtf8, 4096)).resolves.toEqual({
+      ok: false,
+      reason: "invalid_utf8",
+    });
+  });
+
   it("keeps the Edge worker retry failure path connected to the tested sanitizer", async () => {
     const source = await readFile(
       resolve(process.cwd(), "supabase/functions/outbox-worker/index.ts"),
