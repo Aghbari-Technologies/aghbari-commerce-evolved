@@ -37,6 +37,7 @@ import {
 } from "@/lib/commerce-utils";
 import { fetchProducts } from "@/lib/api";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
+import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
 
 type Invoice = {
   id: string;
@@ -157,6 +158,7 @@ const secondary: React.CSSProperties = {
 };
 const links = [
   ["/addresses", "عناوين التوصيل"],
+  ["/company/contacts", "جهات الاتصال بالشركة"],
   ["/invoices", "الفواتير"],
   ["/statement", "كشف الحساب"],
   ["/quotes", "عروض الأسعار"],
@@ -2231,6 +2233,128 @@ function CustomerAddresses() {
            </div>
          </article>)}
        </div>}
+    </section>
+  </WorkspaceShell>;
+}
+
+
+export function CustomerCompanyContactsPage() {
+  const { user, ready } = useAuth();
+  if (!ready) return <WorkspaceShell title="جهات الاتصال بالشركة" subtitle="جارٍ التحقق من الحساب"><p role="status">جارٍ التحقق من جلسة الحساب...</p></WorkspaceShell>;
+  if (!user) return <Login />;
+  if (user.isStaff) return <WorkspaceShell title="جهات الاتصال بالشركة" subtitle="مساحة حساب العميل"><ErrorBox message="هذه الشاشة مخصصة لحساب العميل. استخدم ملف العميل في لوحة الإدارة للوصول إلى البيانات وفق صلاحيتك." /></WorkspaceShell>;
+  return <CustomerCompanyContacts />;
+}
+
+const EMPTY_COMPANY_CONTACT: CustomerCompanyContactInput = {
+  id: null, full_name: "", job_title: "", department: "", phone: "", email: "", is_primary: false,
+};
+
+function CustomerCompanyContacts() {
+  const [contacts, setContacts] = useState<CustomerCompanyContact[]>([]);
+  const [draft, setDraft] = useState<CustomerCompanyContactInput>({ ...EMPTY_COMPANY_CONTACT });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try { setContacts(await fetchCustomerCompanyContacts()); }
+    catch (e) { setError(e instanceof Error ? e.message : "تعذر تحميل جهات اتصال الشركة."); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  function reset() { setDraft({ ...EMPTY_COMPANY_CONTACT }); setError(""); }
+  function edit(contact: CustomerCompanyContact) {
+    setError(""); setNotice("");
+    setDraft({
+      id: contact.id, full_name: contact.full_name, job_title: contact.job_title ?? "",
+      department: contact.department ?? "", phone: contact.phone, email: contact.email ?? "",
+      is_primary: contact.is_primary,
+    });
+  }
+  const setText = (key: Exclude<keyof CustomerCompanyContactInput, "id" | "is_primary">, value: string) =>
+    setDraft(d => ({ ...d, [key]: value }));
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || loading) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await saveCustomerCompanyContact(draft);
+      setNotice(draft.id ? "تم تحديث جهة الاتصال." : "تم حفظ جهة الاتصال.");
+      reset();
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذر حفظ جهة الاتصال."); }
+    finally { setSaving(false); }
+  }
+
+  async function remove(contact: CustomerCompanyContact) {
+    if (deleting || saving || !window.confirm("هل تريد حذف جهة الاتصال «" + contact.full_name + "»؟")) return;
+    setDeleting(contact.id); setError(""); setNotice("");
+    try {
+      await deleteCustomerCompanyContact(contact.id);
+      setNotice("تم حذف جهة الاتصال وتحديث جهة الاتصال الرئيسية عند الحاجة.");
+      if (draft.id === contact.id) reset();
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذر حذف جهة الاتصال."); }
+    finally { setDeleting(null); }
+  }
+
+  const inputStyle: React.CSSProperties = { ...field, marginTop: 6 };
+  return <WorkspaceShell
+    title="جهات الاتصال بالشركة"
+    subtitle="أدر جهات الاتصال التشغيلية لشركتك. يستنتج الخادم حساب العميل والمؤسسة من الجلسة؛ هذه السجلات لا تنشئ حسابات دخول أو صلاحيات مستخدمين."
+  >
+    {error && <ErrorBox message={error} retry={() => void load()} />}
+    {notice && <div role="status" style={{ ...card, borderColor: "#a8d7c0", color: "#17684d", marginBottom: 14 }}>{notice}</div>}
+    <section style={{ ...card, marginBottom: 18 }}>
+      <h2 style={{ margin: "0 0 14px", fontSize: 19 }}>{draft.id ? "تعديل جهة اتصال" : "إضافة جهة اتصال"}</h2>
+      <form onSubmit={submit}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 12 }}>
+          <label>اسم جهة الاتصال<input style={inputStyle} value={draft.full_name} onChange={e => setText("full_name", e.target.value)} minLength={2} maxLength={120} autoComplete="name" required /></label>
+          <label>رقم الهاتف<input style={inputStyle} type="tel" dir="auto" value={draft.phone} onChange={e => setText("phone", e.target.value)} minLength={7} maxLength={32} autoComplete="tel" required /></label>
+          <label>البريد الإلكتروني<input style={inputStyle} type="email" dir="auto" value={draft.email ?? ""} onChange={e => setText("email", e.target.value)} maxLength={254} autoComplete="email" /></label>
+          <label>المسمى الوظيفي<input style={inputStyle} value={draft.job_title ?? ""} onChange={e => setText("job_title", e.target.value)} maxLength={80} /></label>
+          <label>القسم<input style={inputStyle} value={draft.department ?? ""} onChange={e => setText("department", e.target.value)} maxLength={80} /></label>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontWeight: 750 }}>
+          <input type="checkbox" checked={draft.is_primary} onChange={e => setDraft(d => ({ ...d, is_primary: e.target.checked }))} />
+          اجعلها جهة الاتصال الرئيسية
+        </label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+          <button style={primary} type="submit" disabled={saving || loading}>{saving ? "جارٍ الحفظ..." : draft.id ? "حفظ التعديلات" : "حفظ جهة الاتصال"}</button>
+          {draft.id && <button style={secondary} type="button" disabled={saving} onClick={reset}>إلغاء التعديل</button>}
+          <button style={secondary} type="button" disabled={loading} onClick={() => void load()}>تحديث القائمة</button>
+        </div>
+      </form>
+    </section>
+    <section style={{ ...card, padding: 0, overflow: "hidden" }}>
+      <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 16, borderBottom: "1px solid #edf2f3" }}>
+        <h2 style={{ margin: 0, fontSize: 18 }}>جهات الاتصال المحفوظة ({contacts.length})</h2>
+      </header>
+      {loading ? <p role="status" style={{ padding: 18 }}>جارٍ تحميل جهات الاتصال...</p> :
+        contacts.length === 0 ? <EmptyBox><p>لا توجد جهات اتصال محفوظة بعد.</p><p style={quiet}>أضف مسؤول المشتريات أو المحاسب أو جهة الاستلام لتسهيل التواصل التجاري.</p></EmptyBox> :
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12, padding: 14 }}>
+          {contacts.map(contact => <article key={contact.id} style={{ ...card, padding: 16, borderColor: contact.is_primary ? "#83c8bc" : "#e0ecee" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17 }}>{contact.full_name}</h3>
+                {contact.is_primary && <span style={{ display: "inline-block", marginTop: 6, padding: "3px 8px", borderRadius: 20, background: "#e8f7f1", color: "#17684d", fontSize: 12, fontWeight: 800 }}>جهة الاتصال الرئيسية</span>}
+              </div>
+            </div>
+            {(contact.job_title || contact.department) && <p style={{ margin: "10px 0 4px", color: "#516b70" }}>{[contact.job_title, contact.department].filter(Boolean).join(" · ")}</p>}
+            <p dir="auto" style={{ margin: "8px 0 4px", fontWeight: 750 }}>{contact.phone}</p>
+            {contact.email && <p dir="auto" style={{ margin: "0 0 4px", color: "#516b70" }}>{contact.email}</p>}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+              <button type="button" style={secondary} onClick={() => edit(contact)} disabled={saving || Boolean(deleting)}>تعديل</button>
+              <button type="button" style={{ ...secondary, color: "#9b2626" }} onClick={() => void remove(contact)} disabled={Boolean(deleting) || saving}>{deleting === contact.id ? "جارٍ الحذف..." : "حذف"}</button>
+            </div>
+          </article>)}
+        </div>}
     </section>
   </WorkspaceShell>;
 }
