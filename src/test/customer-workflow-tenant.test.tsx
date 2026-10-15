@@ -767,7 +767,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     });
 
     expect(window.localStorage.getItem(cacheKey)).toBe(beforeSync);
-    expect(host?.textContent).toContain("تعذر تحديث الكتالوج؛ لم نغيّر النسخة المحلية.");
+    expect(host?.textContent).toContain("تعذر تحديث الكتالوج أو حفظه محليًا؛ راجع حالة النسخة المحفوظة قبل المتابعة.");
     expect(host?.textContent).toContain("Legacy Sugar");
   });
 

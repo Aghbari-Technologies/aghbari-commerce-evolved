@@ -2162,7 +2162,7 @@ function Offline() {
             وقت تحديث هذه النسخة غير معروف؛ تعامل معها كبيانات قديمة حتى تنجح المزامنة مع الخادم.
           </p>
         ) : null}
-        {catalogRows.length === 0 ? (
+        {catalogRows.length === 0 && !storageError ? (
           <p role="status" style={quiet}>لا توجد أصناف محفوظة على هذا الجهاز. اتصل بالخادم ثم حدّث الكتالوج.</p>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
