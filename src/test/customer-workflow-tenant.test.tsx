@@ -1029,6 +1029,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       expect(window.localStorage.getItem(cacheKey)).toBe(cacheBeforeSync);
       expect(window.localStorage.getItem(timestampKey)).toBe(timestampBeforeSync);
       expect(host?.querySelector('[role="alert"]')?.textContent).toContain("فشل حفظ تحديث الكتالوج محليًا");
+      expect(host?.textContent).toContain("لم نعلن نجاح المزامنة");
       const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
         button.textContent?.includes("إضافة إلى المسودة المحلية"),
       );

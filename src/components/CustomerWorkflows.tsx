@@ -2119,7 +2119,7 @@ function Offline() {
         ? cause.message
         : "تعذر تحديث الكتالوج من الخادم.";
       if (localPersistenceFailed) {
-        setStorageError(detail + " احتفظنا بالنسخة السابقة قدر الإمكان؛ أعد التحقق من التخزين قبل تعديل السلة.");
+        setStorageError("فشل حفظ تحديث الكتالوج محليًا. احتفظنا بالنسخة السابقة قدر الإمكان؛ أعد التحقق من التخزين قبل تعديل السلة.");
         setMessage("فشل حفظ تحديث الكتالوج محليًا؛ لم نعلن نجاح المزامنة.");
       } else {
         // Network and validation failures must not disable a valid saved cart/catalog.
