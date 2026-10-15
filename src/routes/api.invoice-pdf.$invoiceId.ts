@@ -21,42 +21,35 @@ export const Route = createFileRoute("/api/invoice-pdf/$invoiceId")({
           return financeDocumentError(400, "معرّف الفاتورة غير صالح.");
         }
 
-        // RLS and scoped read grants keep this invoice bound to the signed-in customer.
-        const invoiceResult = await auth.client
-          .from("customer_invoices")
-          .select("id,invoice_number,customer_id,status,issued_at,due_at,currency")
-          .eq("id", invoiceId)
-          .maybeSingle();
-
-        if (invoiceResult.error) {
-          return financeDocumentError(503, "تعذر قراءة بيانات الفاتورة.");
+        // The RPC derives the customer, tenant and invoice-read capability from auth.uid().
+        // Financial columns are returned only for this customer's requested invoice.
+        const invoicePdfResult = await auth.client.rpc("get_customer_invoice_pdf", {
+          p_invoice_id: invoiceId,
+        });
+        if (invoicePdfResult.error) {
+          if (invoicePdfResult.error.code === "42501") {
+            return financeDocumentError(403, "هذا الحساب غير مخوّل لتنزيل هذه الفاتورة.");
+          }
+          if (invoicePdfResult.error.code === "P0002") {
+            return financeDocumentError(404, "الفاتورة غير موجودة أو غير متاحة لهذا الحساب.");
+          }
+          return financeDocumentError(503, "تعذر تحميل بيانات الفاتورة المعتمدة.");
         }
-        if (!invoiceResult.data) {
-          return financeDocumentError(404, "الفاتورة غير موجودة أو غير متاحة لهذا الحساب.");
-        }
 
-        const [linesResult, customerResult] = await Promise.all([
-          auth.client
-            .from("customer_invoice_items")
-            .select("id,item_code,description,unit,quantity")
-            .eq("invoice_id", invoiceId)
-            .order("created_at", { ascending: true }),
-          auth.client
-            .from("customers")
-            .select("customer_code,business_name,contact_name")
-            .eq("id", invoiceResult.data.customer_id)
-            .maybeSingle(),
-        ]);
-
-        if (linesResult.error || customerResult.error) {
-          return financeDocumentError(503, "تعذر تحميل تفاصيل الفاتورة.");
+        const payload = invoicePdfResult.data as {
+          invoice?: unknown;
+          lines?: unknown;
+          customer?: unknown;
+        } | null;
+        if (!payload?.invoice || !Array.isArray(payload.lines) || !payload.customer) {
+          return financeDocumentError(503, "أعاد الخادم بيانات فاتورة غير مكتملة؛ لم يتم إنشاء المستند.");
         }
 
         try {
           const bytes = await buildCustomerInvoicePdf(
-            invoiceResult.data,
-            linesResult.data ?? [],
-            customerResult.data,
+            payload.invoice,
+            payload.lines,
+            payload.customer,
             loadArabicDocumentFont(),
           );
           return pdfResponse(bytes, "aghbari-invoice.pdf");

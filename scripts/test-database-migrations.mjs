@@ -969,6 +969,19 @@ async function main() {
   assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
   assert.equal(Number(statement.payments[0].amount), 100000);
 
+  // The invoice PDF RPC returns amounts only for the signed-in customer's own invoice.
+  const ownInvoicePdfResult = await db.unsafe(
+    "select public.get_customer_invoice_pdf($1::uuid) as result",
+    [invoice.id],
+  );
+  const ownInvoicePdf = ownInvoicePdfResult[0].result;
+  assert.equal(ownInvoicePdf.invoice.id, invoice.id);
+  assert.equal(Number(ownInvoicePdf.invoice.total_amount), 370000);
+  assert.equal(ownInvoicePdf.lines.length, 1);
+  assert.equal(Number(ownInvoicePdf.lines[0].unit_price), 37000);
+  assert.equal(Number(ownInvoicePdf.lines[0].line_total), 370000);
+  assert.equal(ownInvoicePdf.customer.id, undefined, "PDF customer projection should not return an internal customer primary key");
+
   // A second customer in the same organization must never receive the first customer's statement.
   await db.unsafe("reset role");
   await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
@@ -976,6 +989,11 @@ async function main() {
   const otherStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
   assert.deepEqual(otherStatementResult[0].result.invoices, [], "customer two must not see customer one's invoice");
   assert.deepEqual(otherStatementResult[0].result.payments, [], "customer two must not see customer one's payments");
+  await expectFailure(
+    "customer two cannot read customer one's invoice PDF",
+    () => db.unsafe("select public.get_customer_invoice_pdf($1::uuid)", [invoice.id]),
+    /الفاتورة غير موجودة أو غير متاحة/,
+  );
   const otherVisibleInvoices = await db.unsafe(
     "select id,invoice_number from public.customer_invoices where id=$1",
     [invoice.id],
@@ -991,6 +1009,11 @@ async function main() {
     "inactive customer statement access",
     () => db.unsafe("select public.get_customer_account_statement()"),
     /authenticated active customer required/i,
+  );
+  await expectFailure(
+    "inactive customer invoice PDF access",
+    () => db.unsafe("select public.get_customer_invoice_pdf($1::uuid)", [invoice.id]),
+    /authenticated active customer with invoice-read permission required/i,
   );
   await db.unsafe("reset role");
   await db.unsafe("update public.profiles set is_active=true where id=$1", [profileId]);
