@@ -33,3 +33,12 @@
 
 ## Safe next step
 Read `PROJECT_MEMORY.md` and `ops/AGHBARI-SESSION-RESUME.md`; then verify live `main` HEAD and latest CI once, and continue from the first open security/release gate in the requirement registry. No broad rediscovery, no fake success, no production mutation without verified access.
+
+
+## XLSX export implementation — tested code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c`
+- Added `src/lib/onyx-export.ts`: a dependency-free OOXML/ZIP workbook generator, exact 27-column item sheet using the uploaded section-21 headers, plus separate order/customer metadata sheet. Unavailable mapping values are deliberately blank, and SKU/customer code cells are inline strings so leading zeroes survive.
+- Added an order-detail download action in `src/components/AdminPages.tsx`. It is enabled only for confirmed/processing/shipped/delivered orders with no pending review. UI explicitly says actual Onyx-version acceptance and centralized export auditing are not proven.
+- Added `src/test/onyx-export.test.ts` for exact columns, row mapping, leading-zero identifiers, ZIP/OOXML structure and filename handling.
+- Exact-head CI run [38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670) completed **SUCCESS**: unit tests, isolated PostgreSQL migration/workflow acceptance, ESLint, build, and expanded customer/admin/PWA smoke tests.
+- Important limit: no XLSX viewer or actual Onyx sandbox was accessible; this is a code-verified workbook draft, not a certified Onyx import template. Central audit logging for exports is still open.
+- Release blockers unchanged: intended Supabase ref `ffxxjaolfntzbapmfbuv` unavailable through current connection; public Lovable preview still returns 404 for several deep routes and `/manifest.webmanifest`; Lovable editor probe is 403 and exact deployed SHA remains unproven.

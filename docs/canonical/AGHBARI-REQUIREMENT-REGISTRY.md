@@ -31,7 +31,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 | Invoices / statements | **PARTIAL** | Pages and RPC foundations exist; production flow, overpayment browser test and server-generated PDF remain open. |
 | Excel / CSV import | **PARTIAL** | CSV/XLSX streaming, DQS, hashing and resumable manifests exist; browser interruption E2E, rollback, TTL cleanup and large-file profiling are unproven. XLS binary and reliable PDF extraction are unsupported; manual mapping must be explicit. |
 | Onyx Pro | **PARTIAL** | Snapshots and comparison-only reconciliation exist; shared reporting must retain source lineage and avoid duplicate balances. No actual Onyx API contract is confirmed. |
-| Onyx Excel export | **NOT PROVEN** | Validate exact column order against section 21 of the canonical spec with a real workbook and import-compatibility check. |
+| Onyx Excel export | **PARTIAL / CODE-VERIFIED** | `src/lib/onyx-export.ts` now creates a real XLSX with a first detail sheet containing the exact 27 headers from section 21, a separate order/customer header sheet, inline-string SKU fields (leading zeroes preserved), and blanks for unmapped data. Unit tests and full CI pass on code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c` ([run 38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670)). **NOT PROVEN:** import acceptance on the owner's actual Onyx version and central audit logging for exports. |
 | Outbox / workers | **PARTIAL** | Schema/isolated acceptance exist; deployed workers, crash/replay recovery and consumer idempotency drills remain unproven. |
 | AI gateway / forecasting | **PARTIAL / no provider proven** | Deterministic assistant and governance schema exist; provider routing, safe Test Connection, budgets, sanitization, action cards and model-backed forecasts remain unproven. |
 | WhatsApp | **PARTIAL / external dependency** | Internal notifications exist. No official provider/credentials confirmed; never claim Sent without provider message ID/status. |
@@ -54,9 +54,16 @@ This is an execution index, not proof that every feature is complete. A route, c
 2. Resolve intended Supabase access; verify migrations before any live writes.
 3. Replace fixed tenant assumptions with a server-derived contract and add cross-tenant negative tests.
 4. Prove three-tier privacy and full checkout E2E.
-5. Finish Onyx-compatible workbook export, invoice PDF and truthful integration statuses.
+5. Run an owner-authorized import-acceptance test for the XLSX workbook against the actual Onyx version, add a server-backed export audit event, and complete invoice PDF.
 6. Complete company onboarding/addresses/users, inventory movements and fine-grained permissions.
 7. Build AI gateway and queue workers only against verified contracts, with budgets/privacy gates/rule fallback.
 8. Record responsive RTL browser UAT and exact-SHA evidence.
 
 Protocol: `INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX → VERIFY → COMMIT → PUSH MAIN → SYNC LOVABLE`. A Git push alone is not proof of Lovable sync.
+
+
+## XLSX export evidence (2026-10-15)
+- The source now has a browser-triggered XLSX download from approved order details. The first worksheet uses the fixed 27-column section-21 order; a second worksheet stores order number/ID/status/customer code/name/export time. Missing warehouse, batch, expiry, discounts, reservations, cost-center/project/activity and physical-dimension fields are left blank when unavailable.
+- Export button is only enabled for confirmed/processing/shipped/delivered orders with no pending quantity review. This prevents exporting an unapproved order as a finalized accounting document.
+- Code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c`, CI [38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670): **PASS** for unit tests, isolated PostgreSQL acceptance, lint, build, route/PWA smoke. This proves workbook generation structure and order mapping tests, not Excel application parsing or actual Onyx import acceptance.
+- Export audit event and target-system compatibility test remain open; the UI reports that limitation explicitly.

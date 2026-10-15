@@ -18,3 +18,10 @@ Rule: tests and evidence apply only to the exact SHA recorded with them. The pus
 
 ## Execution protocol
 Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requirement registry first. Continue from the current GitHub `main` SHA. No broad repeated discovery, no placeholder success, no unverified production operation, no Lovable point spend before a tested push.
+
+
+## 2026-10-15 — Approved-order XLSX export
+- **PASS — source/code generation:** commit `6112b24c2807fbb013b9fcd2d38c889631286a7c`, [CI run 38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670). Unit tests verify exact 27 section-21 headers, line mapping, leading-zero SKU strings, XLSX ZIP/OOXML package structures, customer header worksheet, and file-name sanitization. The same run passes isolated PostgreSQL acceptance, lint, build, route and PWA asset smoke.
+- **PARTIAL:** file generation is real; actual opening in Excel/LibreOffice and import acceptance into the owner’s Onyx version are not tested. No central server-side export audit event exists yet. Unknown accounting values are blank, never synthesized.
+- **UI safety:** the export button is disabled until the order is approved/confirmed and no quantity review is pending.
+- **Release/sync:** external fetch still returns 404 for several published deep routes and the PWA manifest; Lovable editor fetch returns 403. Git push and green CI do not prove Lovable deployed this SHA.

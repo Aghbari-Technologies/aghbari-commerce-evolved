@@ -32,3 +32,11 @@
 3. أصلح المصدر واختبره قبل push؛ لا تدفع تغييرات غير مختبرة إن كان بالإمكان إجراء CI أولًا، ولا تجبر main.
 4. بعد الدفع انتظر نتيجة CI عبر فحص مباشر، ثم سجّل الـ SHA والنتيجة.
 5. افحص مزامنة Lovable بشكل مستقل. إذا بقيت محجوبة بـ 403، سجّلها BLOCKED ولا تستهلك نقطة بلا فائدة.
+
+
+## Newest verified implementation checkpoint — 2026-10-15
+- Code SHA tested: `6112b24c2807fbb013b9fcd2d38c889631286a7c`.
+- CI [38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670) completed **SUCCESS**: unit tests, isolated PostgreSQL acceptance, lint, build, and expanded route/PWA smoke.
+- An XLSX draft exporter was added to approved order details. Keep it classified PARTIAL until the actual Onyx import profile is tested and a central export audit event is recorded.
+- Production Supabase and Lovable runtime remain blocked/unverified; do not apply migrations to a different Supabase project and do not spend Lovable points on speculative prompts. The public deep-route/PWA 404 and Lovable editor 403 are documented in latest state/progress.
+- Always verify current HEAD after any documentation follow-up commit; the code-proof SHA above is not automatically the current HEAD.
