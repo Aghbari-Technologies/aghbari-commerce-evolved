@@ -157,3 +157,12 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Added customer_company_contacts with owner-scoped RPCs, a single-primary lifecycle, audit trail and /company/contacts; direct client writes are revoked. This is a commercial contact directory, not a login/member system.
 - Duplicate parallel PR #31 was closed after PR #32 merged the contact feature first; no duplicate implementation was merged.
 - Next: connect company sub-users to the customer record using explicit membership and invitation lifecycles. The current customers.profile_id assumption means this must include all customer authorization/query/RLS paths, not just an invitation UI. Production Supabase remains inaccessible; no production migration/live-auth browser test is claimed.
+
+
+## Finance overpayment UI regression — 2026-10-15 (verification pending)
+
+- PR [#34](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/34), test head SHA `0376356722511f6da38a29e29f1684ea43978575`, based on main SHA `aa71dc4ee9f17fcbae2197f6f9c29b3f3fd123e8`.
+- Added `src/components/CustomerWorkflows.finance.test.tsx`: over-balance amount (75.01 against 75.00 due) must be rejected without calling `record_customer_payment`; exact remaining balance must be submitted.
+- Exact-SHA verification has **not** been observed: connector status and workflow-run queries returned no entries at checkpoint time. The new test/build/lint remain PENDING; PR is not merged. Do not report PASS without Actions evidence for this SHA.
+- This UI regression test is not authenticated live-browser evidence. Existing isolated PostgreSQL acceptance is separate; server-generated PDF and authorized production finance checks remain open. `next_task_id = AGH-FINANCE-DOCS-001`.
+
