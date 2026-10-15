@@ -62,7 +62,13 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       });
-      return cached || network;
+      if (cached) {
+        // The network promise is a background refresh; handle failure without
+        // turning an offline refresh into an unhandled rejection.
+        void network.catch(() => undefined);
+        return cached;
+      }
+      return network.catch(() => Response.error());
     }),
   );
 });
