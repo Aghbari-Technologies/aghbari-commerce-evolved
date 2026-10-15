@@ -2266,6 +2266,18 @@ function Offline() {
         lines.push({ product_id: line.product_id, quantity: Number(line.quantity) });
       }
       lines.sort((left, right) => left.product_id.localeCompare(right.product_id));
+      const currentLines = initialOfflineCartLines();
+      const resultingCart = new Map(currentLines.map((line) => [line.product_id, line.quantity]));
+      for (const line of lines) {
+        const combinedQuantity = (resultingCart.get(line.product_id) ?? 0) + line.quantity;
+        if (combinedQuantity > 10000) {
+          throw new Error("لا يمكن دمج النسخة دون تجاوز حد 10,000 وحدة للصنف؛ لم تُغيّر المسودة.");
+        }
+        resultingCart.set(line.product_id, combinedQuantity);
+      }
+      if (resultingCart.size > 1000) {
+        throw new Error("لا يمكن دمج النسخة؛ سيتجاوز عدد أصناف المسودة الحد الآمن البالغ 1,000 صنف.");
+      }
       const totalUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
       const approved = window.confirm(
         "سيتم دمج " + lines.length + " صنفًا (" + formatNumber(totalUnits) +
@@ -2283,7 +2295,7 @@ function Offline() {
           id: mutationId,
           kind: "merge",
           lines,
-        }, initialOfflineCartLines());
+        }, currentLines);
         writeLegacyCartOwner(localStorage, cartScopeKey);
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : "تعذر حفظ المسودة المستعادة محليًا.";

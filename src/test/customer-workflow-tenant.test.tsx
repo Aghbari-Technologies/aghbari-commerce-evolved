@@ -816,6 +816,29 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     confirmSpy.mockRestore();
 
+    // Unknown product IDs are rejected before confirmation and never mutate the draft.
+    const restoreConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const restoreInput = host?.querySelector<HTMLInputElement>("#offline-cart-backup-input");
+    expect(restoreInput).toBeDefined();
+    const invalidBackup = JSON.stringify({
+      schema: "aghbari.offline-cart-draft",
+      version: 1,
+      lines: [{ product_id: "other-tenant-product", quantity: 5, base_price: 999999 }],
+    });
+    const fakeInvalidFile = {
+      name: "invalid-backup.json",
+      size: invalidBackup.length,
+      text: async () => invalidBackup,
+    } as File;
+    Object.defineProperty(restoreInput, "files", { configurable: true, value: [fakeInvalidFile] });
+    await act(async () => {
+      restoreInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines).toEqual([]);
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(host?.textContent).toContain("صنفًا غير موجود في كتالوج الحساب الحالي");
+
     // Restore an allowlisted JSON backup with hostile extra fields, then import it
     // again to prove the stable restore mutation ID prevents duplicate quantities.
     const backupPayload = JSON.stringify({
@@ -838,9 +861,6 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       size: backupPayload.length,
       text: async () => backupPayload,
     } as File;
-    const restoreConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const restoreInput = host?.querySelector<HTMLInputElement>("#offline-cart-backup-input");
-    expect(restoreInput).toBeDefined();
     for (let attempt = 0; attempt < 2; attempt++) {
       Object.defineProperty(restoreInput, "files", {
         configurable: true,
