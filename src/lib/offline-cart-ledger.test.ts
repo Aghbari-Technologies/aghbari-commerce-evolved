@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   appendOfflineCartMutation,
   compactOfflineCartLedger,
@@ -7,6 +7,7 @@ import {
   getOfflineCartLedgerPrefix,
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
+  subscribeToOfflineCartLedger,
   type LocalStorageLike,
   type OfflineCartMutationInput,
 } from "@/lib/offline-cart-ledger";
@@ -242,6 +243,29 @@ describe("scoped durable offline cart mutation journal", () => {
       mutation({ id: "legacy-checkpoint-operation", kind: "adjust", product_id: "p1", delta: 99 }),
     )).toThrow(/نقطة استئناف قديمة/);
     expect(readOfflineCartLedger(storage, scope).lines).toEqual([{ product_id: "p1", quantity: 1 }]);
+  });
+
+  it("refreshes on this cart scope storage events and ignores unrelated keys", () => {
+    const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
+    const listeners = new Map<string, EventListener>();
+    const target = {
+      addEventListener: (type: string, listener: EventListener) => { listeners.set(type, listener); },
+      removeEventListener: (type: string, listener: EventListener) => {
+        if (listeners.get(type) === listener) listeners.delete(type);
+      },
+    } as Pick<Window, "addEventListener" | "removeEventListener">;
+    const onChange = vi.fn();
+    const unsubscribe = subscribeToOfflineCartLedger(scope, onChange, target);
+    const handler = listeners.get("storage");
+    expect(handler).toBeDefined();
+
+    handler?.({ key: getOfflineCartLedgerPrefix(scope) + "op:changed" } as StorageEvent);
+    handler?.({ key: "aghbari:catalog:v2:another-scope" } as StorageEvent);
+    handler?.({ key: null } as StorageEvent);
+    expect(onChange).toHaveBeenCalledOnce();
+
+    unsubscribe();
+    expect(listeners.has("storage")).toBe(false);
   });
 
   it("rejects reuse of an active mutation ID with a different payload", () => {

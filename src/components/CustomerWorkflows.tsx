@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent } from "react";
+import { Link,
+  useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   FileText,
@@ -19,11 +26,15 @@ import {
   Plus,
   Pencil,
   Trash2,
-} from "lucide-react";
+  } from "lucide-react";
 import { Login } from "@/components/Login";
 import { useAuth } from "@/lib/auth";
-import { getCurrentTenantScope, supabase } from "@/lib/supabase";
-import { formatCurrency, formatDate, formatDateShort, formatNumber } from "@/lib/format";
+import { getCurrentTenantScope,
+  supabase } from "@/lib/supabase";
+import { formatCurrency,
+  formatDate,
+  formatDateShort,
+  formatNumber } from "@/lib/format";
 import {
   classifyAssistantIntent,
   matchesArabicCatalogSearch,
@@ -32,8 +43,9 @@ import {
   summarizeCustomerInvoiceStatuses,
   summarizeCustomerOrderStatuses,
   type PaymentAmount,
-} from "@/lib/commerce-utils";
-import { fetchProducts, fetchResolvedProductPrices } from "@/lib/api";
+  } from "@/lib/commerce-utils";
+import { fetchProducts,
+  fetchResolvedProductPrices } from "@/lib/api";
 import {
   appendOfflineCartMutation,
   compactOfflineCartLedger,
@@ -44,6 +56,7 @@ import {
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
   writeLegacyCartOwner,
+  subscribeToOfflineCartLedger,
 } from "@/lib/offline-cart-ledger";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
@@ -1976,11 +1989,13 @@ function Offline() {
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     refresh();
+    const unsubscribeLedger = subscribeToOfflineCartLedger(cartScopeKey, refresh);
     return () => {
+      unsubscribeLedger();
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
-  }, [refresh]);
+  }, [cartScopeKey, refresh]);
   async function sync() {
     if (!navigator.onLine) {
       setMessage("لا يوجد اتصال؛ ستظل النسخة المحلية محفوظة.");
