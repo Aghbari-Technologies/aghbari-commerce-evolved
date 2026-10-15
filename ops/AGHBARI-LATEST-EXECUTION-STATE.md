@@ -1,19 +1,22 @@
-# Latest live checkpoint before this protocol update — 2026-10-15
-
-- **Remote `main` HEAD:** `943c8cc0279318da751634101a6114c2d90566fc` (commit dated 2026-10-15T06:21:28Z): https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/943c8cc0279318da751634101a6114c2d90566fc.
-- **Exact-SHA CI:** [run 38691930376](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38691930376) completed **SUCCESS** for exactly `943c8cc0279318da751634101a6114c2d90566fc`. This baseline PASS does not apply to any later commit.
-- **Ref safety:** GitHub reports `main` is not branch-protected. Use a non-forced expected-SHA lease for any remote ref update; abort and re-inspect if the expected SHA no longer matches.
-- **Local checkout limitation:** no checkout is mounted in this execution host. The remote branch/commit/Actions were checked through GitHub API. Local `git fetch origin`, `git status --short --branch`, current local branch, and local `HEAD` have **not** been run here; working-tree state is **UNKNOWN**.
-- **Permanent instruction anchors verified present:** root `AGENTS.md` and `.github/copilot-instructions.md`. The Copilot entry-point file is committed on `main`; actual loading of instructions by Lovable/other hosts and sync to the editor are not proven by repository text or push.
-- **Protocol batch scope:** maintain and tighten existing canonical resume controls only; no new parallel registry/progress file, no broad source discovery, no Lovable point spent. Relevant files: `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, this file, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. The full master specification is deliberately untouched.
-- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Continue with source-runnable authenticated customer/staff browser acceptance and tenant/pricing privacy checks using non-production fixtures.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001` — last recorded external blocker.** Intended project ref is `ffxxjaolfntzbapmfbuv`; verify current authorized access before production use. Do not apply migrations to another project.
-- After this protocol batch is committed, independently read the new remote `main` SHA and its own Actions result before treating the batch as verified. Do not inherit the baseline SHA's CI result.
-
----
 # Aghbari Commerce — Latest Execution State
 
-## Active resume checkpoint — 2026-10-15
+## Verified protocol implementation checkpoint — 2026-10-15
+
+- **Implementation SHA on remote `main`:** `90602f6deeba79a5d80efad38d83efec64be5173` — https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/90602f6deeba79a5d80efad38d83efec64be5173.
+- **Exact-SHA CI:** [run 38692264543](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692264543) completed **SUCCESS** for the implementation SHA above. The job's unit tests, isolated PostgreSQL 17 migration/core workflow acceptance, lint, build, port 5173 dev-server smoke and cleanup steps all concluded success.
+- **Protocol files changed in this batch:** `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, `ops/AGHBARI-LATEST-EXECUTION-STATE.md`, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. Root `AGENTS.md` and `.github/copilot-instructions.md` were already committed and were verified present; no duplicate instruction system was created.
+- **Protocol task:** `AGH-OPS-RESUME-001` is now `DONE_VERIFIED` for repository persistence and the implementation SHA's exact CI. This proves the repository files are committed and CI passed; it does **not** prove Lovable automatically loaded the instructions or synchronized the editor.
+- **Remote ref safety:** GitHub reports branch protection disabled. Any direct `main` update must use an expected-SHA lease with `force=false`; abort on SHA mismatch.
+- **Local Git limitation:** this execution host has no mounted checkout. The remote branch, commit and Actions were verified by GitHub API; local `git fetch`, `git status`, local branch and local `HEAD` were not run. Working-tree state remains **UNKNOWN**.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Resume here; implement/execute source-runnable authenticated customer/staff browser acceptance and tenant/pricing privacy checks with non-production fixtures. Do not repeat broad discovery.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001` — external / recheck before production use.** Expected Supabase project ref is `ffxxjaolfntzbapmfbuv`; do not migrate a different project. Keep production tenant isolation unproven until authorized access and required E2E evidence exist.
+- **Lovable instruction loading/sync:** still unverified. Do not spend Lovable points on discovery or claim sync based on Git push alone.
+
+---
+
+## Historical checkpoints
+
+## Historical checkpoint before protocol setup (preserved; latest proof is above)
 
 - **Remote branch:** `main`; the source baseline checked immediately before this protocol-only batch was `8324f22419a967fc86f20dddc3b8650a6fd89390` ([commit](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/8324f22419a967fc86f20dddc3b8650a6fd89390)). Its commit date was 2026-10-15 06:10:49 UTC.
 - **Exact-SHA CI:** [run 38690894558](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38690894558) for that exact SHA completed **SUCCESS**; workflow job `test-and-build` concluded success. This evidence applies to `8324f224...` only, not to any later documentation commit.

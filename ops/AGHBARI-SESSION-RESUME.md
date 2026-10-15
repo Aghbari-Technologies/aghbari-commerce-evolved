@@ -61,11 +61,11 @@
 - Do not overstate closure: expected production Supabase project ref `ffxxjaolfntzbapmfbuv` is not accessible. No production migration was applied. Authenticated browser E2E, full pricing-tier privacy and anonymous storefront domain-to-tenant scoping remain open. Lovable sync remains unverified and points remain unused.
 - At any resumption, read this checkpoint and the latest state/registry/progress, then re-check live `main` and latest exact-SHA CI before changing files.
 
-## Latest remote checkpoint before protocol update — 2026-10-15
+## Latest verified protocol implementation checkpoint — 2026-10-15
 
-- Remote `main` was read from GitHub at exact SHA `943c8cc0279318da751634101a6114c2d90566fc` (commit: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/943c8cc0279318da751634101a6114c2d90566fc).
-- The exact-SHA Actions run [38691930376](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38691930376) completed **SUCCESS** for that SHA. This is baseline evidence only; never transfer it to the protocol commit that follows.
-- GitHub reports `main` branch protection disabled. Any direct ref update must therefore use an expected-SHA lease and must not force-push.
-- This execution host has no mounted checkout. Remote GitHub API evidence was used; local `git fetch`, `git status`, and local `HEAD` were not run and are **UNKNOWN**.
-- The durable instruction entry points already exist: root `AGENTS.md` and `.github/copilot-instructions.md`. The latter is the repository-wide GitHub Copilot instruction path. Automatic loading by Lovable or another host, and Lovable synchronization, remain **UNVERIFIED** until that host provides direct evidence.
-- Resume cursor remains `next_task_id = AGH-SEC-BROWSER-E2E-001`. Last recorded external blocker: `AGH-EXT-SUPABASE-001` (access to intended Supabase project `ffxxjaolfntzbapmfbuv`); do not mutate a different project. Read the latest execution-state file and registry again before implementation.
+- Protocol implementation is present on remote `main` at exact SHA `90602f6deeba79a5d80efad38d83efec64be5173`: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/90602f6deeba79a5d80efad38d83efec64be5173.
+- Exact-SHA GitHub Actions run [38692264543](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692264543) completed **SUCCESS**. Unit tests, isolated PostgreSQL 17 migration/workflow tests, lint, build and the port 5173 smoke test passed on this SHA. Do not transfer that result to later SHAs.
+- Stable protocol task `AGH-OPS-RESUME-001` is closed as `DONE_VERIFIED` for the committed repository instructions and this exact-SHA CI. The next open implementation task is `AGH-SEC-BROWSER-E2E-001` in the latest execution-state file and requirement registry.
+- This host did not have a local checkout, so local `git fetch`/`git status`/local `HEAD` were not run. Remote metadata and CI were checked through GitHub API. GitHub reports `main` branch protection disabled; direct ref updates require expected-SHA lease and no force push.
+- Root `AGENTS.md` and `.github/copilot-instructions.md` are present on `main`. Copilot has its repository-wide instruction entry point; automatic loading by Lovable/another host and Lovable sync are still **UNVERIFIED** without direct host evidence.
+- External blocker to recheck before any production database action: `AGH-EXT-SUPABASE-001`, intended Supabase ref `ffxxjaolfntzbapmfbuv`. Never apply migration to a different project.
