@@ -966,8 +966,23 @@ async function main() {
   const statementInvoice = statement.invoices.find((row) => row.id === invoice.id);
   assert.ok(statementInvoice, "customer statement should include the customer's own invoice");
   assert.equal(Number(statementInvoice.total_amount), 370000, "statement RPC may expose invoice totals on the authorized account-statement surface");
+  assert.equal(Number(statementInvoice.paid_amount), 100000, "per-invoice paid total must include the complete payment ledger");
+  assert.equal(Number(statementInvoice.outstanding_amount), 270000, "per-invoice balance must reconcile independently of the capped payment detail array");
   assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
   assert.equal(Number(statement.payments[0].amount), 100000);
+  assert.equal(statement.summary.invoice_count, 1, "full-ledger invoice count is independent of returned detail rows");
+  assert.equal(statement.summary.payment_count, 1, "full-ledger payment count is independent of returned detail rows");
+  assert.deepEqual(
+    statement.summary.totals_by_currency.map((row) => ({
+      currency: row.currency,
+      invoiced: Number(row.invoiced),
+      paid: Number(row.paid),
+      outstanding: Number(row.outstanding),
+      invoice_count: row.invoice_count,
+    })),
+    [{ currency: "YER", invoiced: 370000, paid: 100000, outstanding: 270000, invoice_count: 1 }],
+    "server-side account totals must cover the complete ledger grouped by currency",
+  );
 
   // Privacy-by-default: when no setting exists, monetary amounts must not leave the server RPC.
   await db.unsafe("reset role");
@@ -1017,6 +1032,9 @@ async function main() {
   const otherStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
   assert.deepEqual(otherStatementResult[0].result.invoices, [], "customer two must not see customer one's invoice");
   assert.deepEqual(otherStatementResult[0].result.payments, [], "customer two must not see customer one's payments");
+  assert.equal(otherStatementResult[0].result.summary.invoice_count, 0, "full-ledger summary must remain customer-scoped");
+  assert.equal(otherStatementResult[0].result.summary.payment_count, 0, "full-ledger payment count must remain customer-scoped");
+  assert.deepEqual(otherStatementResult[0].result.summary.totals_by_currency, [], "currency summaries must not cross customer boundaries");
   await expectFailure(
     "customer two cannot read customer one's invoice PDF",
     () => db.unsafe("select public.get_customer_invoice_pdf($1::uuid)", [invoice.id]),
