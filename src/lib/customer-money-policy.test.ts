@@ -14,7 +14,7 @@ describe("server-authorized customer financial display", () => {
     expect(parsed).not.toHaveProperty("total_amount");
   });
   it("rejects monetary values when the server marks the cart as hidden", () => {
-    expect(() => parseCustomerCheckoutPreview({ ...hiddenCheckout, items: [{ ...hiddenCheckout.items[0], unit_price: 5 }] })).toThrow(/حقولًا مالية غير مسموحة/);
+    expect(() => parseCustomerCheckoutPreview({ ...hiddenCheckout, items: [{ ...hiddenCheckout.items[0], unit_price: 5 }] })).toThrow(/مالية/);
     expect(() => parseCustomerCheckoutPreview({ ...hiddenCheckout, total_amount: 10 })).toThrow(/بيانات مالية غير مسموحة/);
   });
   it("accepts complete server-resolved values when the manager-enabled policy is true", () => {

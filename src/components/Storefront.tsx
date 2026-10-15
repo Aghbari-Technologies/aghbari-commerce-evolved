@@ -412,7 +412,7 @@ function CartFinancialPreview({ cart, profileId }: { cart: CartItem[]; profileId
   );
 }
 
-function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void })
+function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void }) {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState('');
