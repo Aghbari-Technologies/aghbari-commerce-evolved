@@ -1952,6 +1952,18 @@ function Offline() {
   function finishLocalMutation(intent: string) {
     pendingLocalMutationIds.current.delete(intent);
   }
+  function initialOfflineCartLines() {
+    const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+    if (seedExists) return [];
+    const catalog = sanitizePublicCatalogCache(
+      JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+    );
+    return readLegacyCartDraftForScope(
+      localStorage,
+      cartScopeKey,
+      catalog.map((product) => product.id),
+    ).lines;
+  }
   const catalogQuery = catalogSearch.trim().toLocaleLowerCase();
   const matchingCatalogRows = catalogRows.filter((product) => {
     if (!catalogQuery) return true;
@@ -2142,21 +2154,12 @@ function Offline() {
     const intent = "adjust:" + productId + ":1";
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل حفظ مسودة سلة مرتبطة بحسابك.");
-      const catalog = sanitizePublicCatalogCache(
-        JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
-      );
-      const legacy = readLegacyCartDraftForScope(
-        localStorage,
-        cartScopeKey,
-        catalog.map((product) => product.id),
-      );
-      const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
         id: pendingMutationId(intent),
         kind: "adjust",
         product_id: productId,
         delta: 1,
-      }, seedExists ? [] : legacy.lines);
+      }, initialOfflineCartLines());
       writeLegacyCartOwner(localStorage, cartScopeKey);
       finishLocalMutation(intent);
       setCartLines(next.lines);
@@ -2174,18 +2177,12 @@ function Offline() {
     const intent = "adjust:" + productId + ":" + delta;
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
-      const initialLines = (() => {
-        const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
-        if (seedExists) return [];
-        const catalog = sanitizePublicCatalogCache(JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"));
-        return readLegacyCartDraftForScope(localStorage, cartScopeKey, catalog.map((product) => product.id)).lines;
-      })();
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
         id: pendingMutationId(intent),
         kind: "adjust",
         product_id: productId,
         delta,
-      }, initialLines);
+      }, initialOfflineCartLines());
       writeLegacyCartOwner(localStorage, cartScopeKey);
       finishLocalMutation(intent);
       setCartLines(next.lines);
@@ -2246,12 +2243,54 @@ function Offline() {
     }
   }
   function retryLocalStorage() {
-    const recovered = refresh();
-    setMessage(
-      recovered
-        ? "تمت إعادة قراءة النسخة المحلية والتحقق من سجل السلة."
-        : "ما زال التحقق من التخزين المحلي متعذرًا؛ لم نحذف أي مسودة.",
-    );
+    if (!refresh()) {
+      setMessage("ما زال التحقق من التخزين المحلي متعذرًا؛ لم نحذف أي مسودة.");
+      return;
+    }
+    try {
+      // Replay uncertain mutations using the same ID. Existing records are idempotent;
+      // missing records are written once. Only clear the intent after reconciliation succeeds.
+      for (const [intent, id] of pendingLocalMutationIds.current.entries()) {
+        if (intent === "clear") {
+          appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id,
+            kind: "clear",
+          }, initialOfflineCartLines());
+        } else if (intent.startsWith("remove:")) {
+          appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id,
+            kind: "remove",
+            product_id: intent.slice("remove:".length),
+          }, initialOfflineCartLines());
+        } else if (intent.startsWith("adjust:")) {
+          const separator = intent.lastIndexOf(":");
+          const productId = intent.slice("adjust:".length, separator);
+          const delta = Number(intent.slice(separator + 1));
+          if (!productId || (delta !== 1 && delta !== -1)) {
+            throw new Error("تعذر استعادة نوع تعديل السلة المحفوظ بأمان.");
+          }
+          appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id,
+            kind: "adjust",
+            product_id: productId,
+            delta,
+          }, initialOfflineCartLines());
+        } else {
+          throw new Error("تعذر استعادة حركة سلة محلية غير معروفة.");
+        }
+        finishLocalMutation(intent);
+      }
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, initialOfflineCartLines());
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(ledger.lines);
+      setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setStorageError("");
+      setMessage("تم التحقق من التخزين وتسوية الحركات غير المحسومة دون تكرارها.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذرت تسوية الحركات المحلية.";
+      setStorageError(detail + " أعد المحاولة قبل تعديل المسودة.");
+      setMessage(detail);
+    }
   }
   return (
     <WorkspaceShell

@@ -856,15 +856,10 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    const recoveredAddButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
-      button.textContent?.includes("إضافة إلى المسودة المحلية"),
-    );
-    await act(async () => {
-      recoveredAddButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
     expect(readOfflineCartLedger(window.localStorage, scope).lines)
       .toEqual([{ product_id: "offline-idempotency-product", quantity: 1 }]);
+    expect(host?.textContent).toContain("تسوية الحركات غير المحسومة دون تكرارها");
+    expect(host?.querySelector('[role="alert"]')).toBeNull();
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     writeSpy.mockRestore();
   });
