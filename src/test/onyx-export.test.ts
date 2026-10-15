@@ -122,7 +122,7 @@ describe('Onyx order workbook draft', () => {
       items: [{ ...order.items[0], approved_unit_price: null }],
     })).toThrow('قيمة سعر الوحدة غير صالحة');
 
-    expect(() => buildOnyxDetailRows({
+    expect(buildOnyxDetailRows({
       ...order,
       items: [{ ...order.items[0], approved_unit_price: 0 }],
     })[1][6]).toBe(0);
