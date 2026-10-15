@@ -1,5 +1,14 @@
 # Aghbari Commerce — Latest Execution State
 
+## Verified pricing-privacy RPC subgate
+
+- **Code SHA:** `fe6a993e8ba809d6117c553314ddbc49b9c256db`.
+- **Exact-SHA CI:** [run 38697134660](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697134660) **SUCCESS** for unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
+- `scripts/test-database-migrations.mjs` now verifies authenticated customers cannot directly SELECT tier rows in `public.product_prices`, cannot execute `public.customer_product_unit_price(...)`, and cannot call `public.preview_order_pricing(jsonb)`. Existing checkout validation still omits line prices and order totals. The direct table read regression initially exposed a real defect; `20261015120000_customer_tier_price_read_boundary.sql` fixes it by revoking table SELECT from `PUBLIC, anon, authenticated` and checking for effective column/table privileges.
+- The actual `/admin/quotes` route tests also pass: a customer is denied before tenant/table/RPC reads; active staff can load the staff quote workspace. These remain mocked jsdom tests and isolated database evidence, not a live browser or production deployment.
+- **Remaining gate:** `AGH-SEC-BROWSER-E2E-001` OPEN and `AGH-PRICE-PRIVACY-001` PARTIAL pending full API/RPC/cache/export channel coverage and live authenticated browser proof. Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible in the connected integration; no production migration was applied.
+
+---
 ## Latest verified route-role subgate — customer denied, staff allowed
 
 - Exact-SHA CI at `c19c0b0516194d309fdf183690b8ceb1ee7a595f` [run 38696894239](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696894239) **SUCCESS** across unit tests, isolated PostgreSQL 17, lint, build and port-5173 smoke.
