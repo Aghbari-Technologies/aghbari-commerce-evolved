@@ -111,7 +111,7 @@ BEGIN
     INTO v_settings
   FROM public.admin_settings AS s
   WHERE s.organization_id = public.public_storefront_organization_id()
-    AND s.key IN ('theme_primary', 'theme_accent', 'hero_title', 'hero_subtitle');
+    AND s.key IN ('theme_primary', 'theme_accent', 'hero_title', 'hero_subtitle', 'store_name', 'store_tagline', 'store_phone', 'store_email', 'store_address', 'ticker_enabled', 'ticker_messages');
 
   RETURN v_settings;
 END
