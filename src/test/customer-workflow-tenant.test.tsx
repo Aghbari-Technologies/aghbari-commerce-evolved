@@ -778,6 +778,14 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).not.toContain("لا توجد أصناف محفوظة على هذا الجهاز");
     expect(host?.textContent).toContain("Stored Flour");
     expect(host?.querySelector('[role="alert"]')?.textContent).toContain("لم تُرسل أي عملية");
+    const unsafeMutationButtons = Array.from(host?.querySelectorAll("button") ?? []).filter((button) =>
+      button.textContent?.includes("إضافة إلى المسودة المحلية") ||
+      button.getAttribute("aria-label")?.startsWith("زيادة كمية ") ||
+      button.getAttribute("aria-label")?.startsWith("إنقاص كمية ") ||
+      button.getAttribute("aria-label")?.startsWith("إزالة "),
+    );
+    expect(unsafeMutationButtons.length).toBeGreaterThan(0);
+    expect(unsafeMutationButtons.every((button) => button.disabled)).toBe(true);
     const retryButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
       button.textContent?.includes("إعادة محاولة قراءة التخزين"),
     );

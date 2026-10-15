@@ -2262,7 +2262,7 @@ function Offline() {
                 <p style={quiet}>رمز الصنف: {product.item_code} · الوحدة: {product.unit}</p>
                 {product.category?.name && <p style={quiet}>التصنيف: {product.category.name}</p>}
                 <p style={quiet}>السعر والمخزون الحاليان يحتاجان مراجعة الخادم؛ لا نعتمد قيمًا محلية قديمة.</p>
-                <button style={secondary} onClick={() => addToLocalDraft(product.id, product.name)}>
+                <button style={secondary} disabled={Boolean(storageError)} onClick={() => addToLocalDraft(product.id, product.name)}>
                   إضافة إلى المسودة المحلية
                 </button>
               </article>
@@ -2291,9 +2291,9 @@ function Offline() {
                     <p style={quiet}>الكمية: {formatNumber(line.quantity)} · لا يوجد سعر معتمد دون الخادم</p>
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <button style={secondary} aria-label={"زيادة كمية " + label} onClick={() => adjustLocalDraft(line.product_id, 1)}>＋</button>
-                    <button style={secondary} aria-label={"إنقاص كمية " + label} onClick={() => adjustLocalDraft(line.product_id, -1)} disabled={line.quantity <= 0}>−</button>
-                    <button style={secondary} aria-label={"إزالة " + label} onClick={() => removeFromLocalDraft(line.product_id, label)}>إزالة</button>
+                    <button style={secondary} aria-label={"زيادة كمية " + label} disabled={Boolean(storageError)} onClick={() => adjustLocalDraft(line.product_id, 1)}>＋</button>
+                    <button style={secondary} aria-label={"إنقاص كمية " + label} onClick={() => adjustLocalDraft(line.product_id, -1)} disabled={Boolean(storageError) || line.quantity <= 0}>−</button>
+                    <button style={secondary} aria-label={"إزالة " + label} disabled={Boolean(storageError)} onClick={() => removeFromLocalDraft(line.product_id, label)}>إزالة</button>
                   </div>
                 </article>
               );
@@ -2306,7 +2306,7 @@ function Offline() {
           <RefreshCw size={16} />
           {syncing ? "جارٍ التحديث..." : "تحديث الكتالوج المحلي"}
         </button>
-        <button style={secondary} onClick={queue}>
+        <button style={secondary} disabled={Boolean(storageError)} onClick={queue}>
           <Save size={16} /> حفظ السلة كمسودة
         </button>
         <Link to="/" style={secondary as React.CSSProperties}>
