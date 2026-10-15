@@ -2109,7 +2109,9 @@ function Offline() {
           " صنف). هذه عملية محلية فقط؛ لن يُرسل الطلب أو يُعتمد السعر دون تحقق الخادم عند عودة الاتصال.",
       );
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "تعذر حفظ مسودة السلة المحلية بأمان.");
+      const detail = cause instanceof Error ? cause.message : "تعذر حفظ مسودة السلة المحلية بأمان.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
     }
   }
   function addToLocalDraft(productId: string, productName: string) {
@@ -2137,7 +2139,9 @@ function Offline() {
         "تمت إضافة " + productName + " إلى مسودة السلة المحلية فقط. لم يُرسل طلب؛ السعر والمخزون يحتاجان تحقق الخادم عند عودة الاتصال.",
       );
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "تعذر إضافة الصنف إلى المسودة المحلية.");
+      const detail = cause instanceof Error ? cause.message : "تعذر إضافة الصنف إلى المسودة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
     }
   }
   function adjustLocalDraft(productId: string, delta: 1 | -1) {
@@ -2160,7 +2164,9 @@ function Offline() {
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(delta > 0 ? "تمت زيادة الكمية في المسودة المحلية." : "تم إنقاص الكمية في المسودة المحلية.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "تعذر تعديل مسودة السلة المحلية.");
+      const detail = cause instanceof Error ? cause.message : "تعذر تعديل مسودة السلة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
     }
   }
   function removeFromLocalDraft(productId: string, productName: string) {
@@ -2176,7 +2182,9 @@ function Offline() {
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage("تمت إزالة " + productName + " من المسودة المحلية فقط.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "تعذر إزالة الصنف من المسودة المحلية.");
+      const detail = cause instanceof Error ? cause.message : "تعذر إزالة الصنف من المسودة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
     }
   }
   function retryLocalStorage() {

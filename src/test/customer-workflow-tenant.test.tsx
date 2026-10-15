@@ -743,6 +743,48 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
   });
 
+  it("blocks subsequent local cart edits after an operation write fails", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    const scope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    window.localStorage.setItem(getOfflineCatalogCacheKey(scope), JSON.stringify([{
+      id: "offline-failure-product",
+      name: "Storage Test",
+      item_code: "000901",
+      unit: "bag",
+      base_price: 0,
+    }]));
+    await mountQuoteWorkspace("/offline");
+
+    const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إضافة إلى المسودة المحلية"),
+    );
+    expect(addButton).toBeDefined();
+    const originalSetItem = Storage.prototype.setItem;
+    const writeSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (key.startsWith(getOfflineCartLedgerPrefix(scope) + "op:")) {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain("أعد التحقق من التخزين");
+    expect(addButton?.disabled).toBe(true);
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+    writeSpy.mockRestore();
+  });
+
   it("shows a storage error instead of a misleading empty-catalog state when the cart ledger is corrupt", async () => {
     mocks.user = {
       id: USER_ID,
