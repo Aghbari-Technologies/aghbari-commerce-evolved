@@ -3,7 +3,7 @@ import { useBlocker } from '@tanstack/react-router';
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
-  X, ExternalLink, Save,
+  X, ExternalLink, Save, Download,
 } from 'lucide-react';
 import {
   fetchAiAlerts, fetchAiTasks, fetchNotifications, fetchOrders, fetchOrderItems,
@@ -14,6 +14,7 @@ import {
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber, timeAgo } from '@/lib/format';
 import type { AiAlert, AiTask, Notification, Supplier, AdminSetting, OrderItem } from '@/lib/types';
+import { buildOnyxOrderWorkbook, onyxOrderWorkbookFilename } from '@/lib/onyx-export';
 
 import type { LucideIcon } from 'lucide-react';
 import { supabase, ORG_ID } from '@/lib/supabase';
@@ -48,6 +49,10 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
   const { data: orders, refetch: refetchOrders } = useFetch(fetchOrders);
   const { data: items, loading, error, refetch } = useFetch(() => fetchOrderItems(orderId), [orderId]);
   const order = orders?.find((o) => o.id === orderId);
+  const canExportOnyxOrder = Boolean(
+    order && ['confirmed', 'processing', 'shipped', 'delivered'].includes(order.status) &&
+    !order.quantity_review_required && !loading && !error && items?.length,
+  );
   const [drafts, setDrafts] = useState<Record<string, OrderReviewDraft>>({});
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -246,9 +251,51 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
     onBack();
   }
 
+  function downloadOnyxWorkbook() {
+    if (!order || !items?.length || !canExportOnyxOrder) {
+      onNotice('لا يمكن تصدير هذا الطلب للمحاسبة قبل اكتمال الاعتماد وتحميل البنود.');
+      return;
+    }
+    try {
+      const bytes = buildOnyxOrderWorkbook({
+        orderId: order.id,
+        orderNumber: order.order_number,
+        orderStatus: order.status,
+        orderCreatedAt: order.created_at,
+        customerCode: order.customer?.customer_code ?? '',
+        customerName: order.customer?.business_name ?? '',
+        items,
+      });
+      const blob = new Blob([new Uint8Array(bytes).buffer as ArrayBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = onyxOrderWorkbookFilename(order.order_number);
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      onNotice('تم إنشاء ملف XLSX بترتيب الأعمدة المرجعي. لم يُثبت بعد توافقه مع إصدار أونكس المستهدف.');
+    } catch (cause) {
+      onNotice(cause instanceof Error ? cause.message : 'تعذر إنشاء ملف XLSX للطلب.');
+    }
+  }
+
   return <AdminPage eyebrow="المبيعات والعملاء" title={'الطلب #' + (order?.order_number ?? '')}
     description="راجع البنود والكميات والأسعار، ثم احفظ المسودة واعتمدها في معاملة واحدة قبل تأكيد الطلب."
-    icon={Package} note="" toolbar={<Button variant="secondary" onClick={goBack} disabled={blocked || busy}><ChevronLeft size={16} /> رجوع</Button>}>
+    icon={Package} note="" toolbar={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <Button variant="secondary" onClick={goBack} disabled={blocked || busy}><ChevronLeft size={16} /> رجوع</Button>
+      <Button disabled={!canExportOnyxOrder} onClick={downloadOnyxWorkbook}><Download size={16} /> تنزيل XLSX للأونكس</Button>
+    </div>}>
+    {order && !canExportOnyxOrder && <p className="privacy-note" role="status" style={{ marginTop: 12 }}>
+      تصدير المحاسبة متاح بعد اعتماد الطلب وإكمال مراجعة الكميات والأسعار. لا تُصدّر المسودة غير المعتمدة كمستند محاسبي.
+    </p>}
+    {order && canExportOnyxOrder && <p className="privacy-note" role="note" style={{ marginTop: 12 }}>
+      يحتوي الملف على ورقة تفاصيل ذات 27 عمودًا بالترتيب المرجعي وورقة مستقلة لرأس المستند والعميل. الحقول غير المتاحة تُترك فارغة. لم يُختبر الملف على إصدار أونكس الفعلي، كما أن تسجيل حدث التنزيل في سجل تدقيق مركزي لم يُنفذ بعد؛ يلزم اختبار قبول قبل الاعتماد المحاسبي.
+    </p>}
     {order && <div className="order-detail-grid">
       <div className="order-info-panel">
         <div className="order-info-row"><span>العميل</span><strong>{order.customer?.business_name ?? '—'}</strong></div>
