@@ -61,6 +61,22 @@ type InvoiceLine = {
   unit_price?: number | string;
   line_total?: number | string;
 };
+type InvoiceFinancialSummary = {
+  currency: string;
+  subtotal: number | string;
+  tax_amount: number | string;
+  total_amount: number | string;
+};
+
+function formatInvoiceMoney(value: number | string | undefined, currency: string): string {
+  const amount = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim()
+      ? Number(value)
+      : Number.NaN;
+  if (!Number.isFinite(amount) || amount < 0) return "غير متاح";
+  return `${new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 2 }).format(amount)} ${currency}`;
+}
 type Product = {
   id: string;
   name: string;
@@ -290,6 +306,7 @@ function Invoices() {
     status: string;
   } | null>(null);
   const [items, setItems] = useState<InvoiceLine[]>([]);
+  const [chosenFinancials, setChosenFinancials] = useState<InvoiceFinancialSummary | null>(null);
   const [busy, setBusy] = useState(true);
   const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState("");
@@ -313,17 +330,10 @@ function Invoices() {
   async function open(i: Invoice) {
     setChosen(i);
     setDetailBusy(true);
-    const [r, customerResult, orderResult] = await Promise.all([
-      supabase
-        .from("customer_invoice_items")
-        .select("id,item_code,description,unit,quantity")
-        .eq("invoice_id", i.id)
-        .order("created_at"),
-      supabase
-        .from("customers")
-        .select("customer_code,business_name,contact_name")
-        .eq("id", i.customer_id)
-        .maybeSingle(),
+    setChosenFinancials(null);
+    setItems([]);
+    const [invoicePayloadResult, orderResult] = await Promise.all([
+      supabase.rpc("get_customer_invoice_pdf", { p_invoice_id: i.id }),
       supabase
         .from("orders")
         .select(
@@ -332,20 +342,42 @@ function Invoices() {
         .eq("id", i.order_id)
         .maybeSingle(),
     ]);
-    if (r.error || customerResult.error || orderResult.error) {
-      setError("تعذر تحميل تفاصيل الفاتورة أو بيانات الطلب والعميل.");
+    const payload = invoicePayloadResult.data as {
+      invoice?: InvoiceFinancialSummary & { id?: string };
+      lines?: InvoiceLine[];
+      customer?: {
+        customer_code?: string | null;
+        business_name?: string | null;
+        contact_name?: string | null;
+      };
+    } | null;
+    const payloadValid = Boolean(
+      payload?.invoice &&
+      payload.invoice.id === i.id &&
+      Array.isArray(payload.lines) &&
+      payload.customer,
+    );
+    if (invoicePayloadResult.error || orderResult.error || !payloadValid || !payload) {
+      setError("تعذر تحميل تفاصيل الفاتورة ومبالغها المصرح بها. تحقق من صلاحية الفاتورة ونشر مخطط المالية.");
       setChosen(null);
       setChosenCustomer(null);
+      setChosenFinancials(null);
+      setItems([]);
       setInvoiceOrder(null);
     } else {
-      setItems((r.data ?? []) as InvoiceLine[]);
-      setChosenCustomer(
-        customerResult.data as {
-          customer_code: string;
-          business_name: string;
-          contact_name: string | null;
-        } | null,
-      );
+      setError("");
+      setItems(payload.lines ?? []);
+      setChosenCustomer({
+        customer_code: payload.customer?.customer_code ?? "",
+        business_name: payload.customer?.business_name ?? "",
+        contact_name: payload.customer?.contact_name ?? null,
+      });
+      setChosenFinancials({
+        currency: payload.invoice.currency,
+        subtotal: payload.invoice.subtotal,
+        tax_amount: payload.invoice.tax_amount,
+        total_amount: payload.invoice.total_amount,
+      });
       setInvoiceOrder(
         orderResult.data as {
           quantity_review_required: boolean;
@@ -546,6 +578,8 @@ function Invoices() {
                   <th style={{ textAlign: "right", padding: 10 }}>الصنف</th>
                   <th>الرمز</th>
                   <th>الكمية</th>
+                  <th>سعر الوحدة</th>
+                  <th>الإجمالي</th>
                 </tr>
               </thead>
               <tbody>
@@ -553,13 +587,20 @@ function Invoices() {
                   <tr key={l.id} style={{ borderTop: "1px solid #edf2f3" }}>
                     <td style={{ padding: 10 }}>{l.description}</td>
                     <td>{l.item_code ?? "—"}</td>
-                    <td>
-                      {formatNumber(Number(l.quantity))} {l.unit ?? ""}
-                    </td>
+                    <td>{formatNumber(Number(l.quantity))} {l.unit ?? ""}</td>
+                    <td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td>
+                    <td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+          {!detailBusy && chosenFinancials && (
+            <div style={{ ...card, marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+              <div><span style={quiet}>الإجمالي الفرعي</span><strong style={{ display: "block", marginTop: 6 }}>{formatInvoiceMoney(chosenFinancials.subtotal, chosenFinancials.currency)}</strong></div>
+              <div><span style={quiet}>الضريبة</span><strong style={{ display: "block", marginTop: 6 }}>{formatInvoiceMoney(chosenFinancials.tax_amount, chosenFinancials.currency)}</strong></div>
+              <div><span style={quiet}>الإجمالي المستحق</span><strong style={{ display: "block", marginTop: 6 }}>{formatInvoiceMoney(chosenFinancials.total_amount, chosenFinancials.currency)}</strong></div>
+            </div>
           )}
           {invoiceOrder?.quantity_review_required && (
             <p role="alert" style={{ marginTop: 14, fontWeight: 800, color: "#9a5b13" }}>
