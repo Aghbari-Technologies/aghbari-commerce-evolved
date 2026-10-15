@@ -87,8 +87,8 @@ jobs:
           npx wrangler dev --config .output/server/wrangler.json --local --ip 127.0.0.1 --port 4173 > /tmp/aghbari-preview.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
-          if [ ! -f .output/server/index.mjs ] || [ ! -f .output/server/wrangler.json ] || [ ! -f .output/public/manifest.webmanifest ]; then
-            echo "Expected Nitro/Cloudflare production artifacts are missing after build."
+          if [ ! -f .output/server/index.mjs ] || [ ! -f .output/server/wrangler.json ] || [ ! -f .output/public/manifest.webmanifest ] || [ ! -f .output/public/aghbari-192.png ] || [ ! -f .output/public/aghbari-512.png ]; then
+            echo "Expected production server, manifest, or PWA launcher icon artifacts are missing after build."
             find .output -maxdepth 3 -type f | sort | head -n 200
             exit 1
           fi
@@ -112,7 +112,7 @@ jobs:
           fi
           for route in \
             /login /cart /checkout /orders /invoices /statement /quotes /assistant \
-            /admin /admin/orders /admin/products /admin/finance /manifest.webmanifest /sw.js; do
+            /admin /admin/orders /admin/products /admin/finance /manifest.webmanifest /sw.js /aghbari-192.png /aghbari-512.png; do
             status=$(curl --silent --connect-timeout 2 --max-time 5 --output /tmp/aghbari-preview-route.html --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
             if [ "$status" != "200" ]; then
               echo "Production preview expected HTTP 200 from $route, received $status"
@@ -159,6 +159,23 @@ jobs:
             cat /tmp/aghbari-preview-manifest.json
             exit 1
           }
+          for icon_spec in \
+            "/aghbari-192.png|192" \
+            "/aghbari-512.png|512"; do
+            route="${icon_spec%%|*}"
+            expected_size="${icon_spec#*|}"
+            curl --connect-timeout 2 --max-time 5 --fail --silent --show-error "http://127.0.0.1:4173$route" -o /tmp/aghbari-preview-icon.png
+            node --input-type=module - /tmp/aghbari-preview-icon.png "$expected_size" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const [path, sizeText] = process.argv.slice(2);
+          const size = Number(sizeText);
+          const png = readFileSync(path);
+          const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+          if (!png.subarray(0, 8).equals(signature) || png.readUInt32BE(16) !== size || png.readUInt32BE(20) !== size) {
+            throw new Error(`Expected a ${size}x${size} PNG at ${path}`);
+          }
+          NODE
+          done
 
       - name: Dev server smoke test on port 5173
         env:
@@ -196,7 +213,7 @@ jobs:
             /orders /invoices /statement /quotes /reorder /assistant /barcode /offline \
             /admin /admin/orders /admin/products /admin/customers /admin/pricing \
             /admin/operations /admin/finance /admin/reports /admin/settings \
-            /manifest.webmanifest /sw.js; do
+            /manifest.webmanifest /sw.js /aghbari-192.png /aghbari-512.png; do
             status=$(curl --silent --output /dev/null --write-out "%{http_code}" "http://127.0.0.1:5173$route")
             if [ "$status" != "200" ]; then
               echo "Expected HTTP 200 from $route, received $status"
