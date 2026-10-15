@@ -33,7 +33,18 @@ export type OnyxOrderWorkbookInput = {
 type CellValue = string | number | null | undefined;
 
 function xmlEscape(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  // Imported business text can contain XML 1.0-forbidden control code points.
+  // Remove them before escaping so one dirty cell cannot invalidate the XLSX package.
+  const xmlSafe = Array.from(value).filter((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (
+      codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d ||
+      (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+      (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+      (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+    );
+  }).join('');
+  return xmlSafe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
