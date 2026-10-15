@@ -73,14 +73,17 @@ function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: strin
     : metrics?.sales_total !== null && metrics?.sales_total !== undefined
       ? { label: 'المبيعات المسجلة', value: metrics.sales_total }
       : { label: 'الإيراد/المبيعات', value: null };
-  const numericQualityNotices = [
-    metrics?.quantity_total === null
-      ? `الكمية غير متاحة: ${metrics.quantity_missing_rows} صفوف بلا قيمة و${metrics.quantity_invalid_rows} بقيمة غير رقمية.`
+  const numericQualityNotices = metrics ? [
+    metrics.metric_quality.quantity !== 'COMPLETE'
+      ? `الكمية ${metrics.metric_quality.quantity === 'UNAVAILABLE' ? 'غير متاحة' : 'غير مكتملة'}: ${metrics.quantity_missing_rows} صفوف بلا قيمة و${metrics.quantity_invalid_rows} بقيمة غير رقمية.`
       : '',
-    primaryAmountMetric.value === null
-      ? `الإيراد والمبيعات غير متاحين: إيراد مفقود ${metrics?.revenue_missing_rows ?? 0}، غير صالح ${metrics?.revenue_invalid_rows ?? 0}؛ مبيعات مفقودة ${metrics?.sales_missing_rows ?? 0}، غير صالحة ${metrics?.sales_invalid_rows ?? 0}.`
+    metrics.metric_quality.revenue !== 'COMPLETE'
+      ? `الإيراد ${metrics.metric_quality.revenue === 'UNAVAILABLE' ? 'غير متاح' : 'غير مكتمل'}: ${metrics.revenue_missing_rows} صفوف بلا قيمة و${metrics.revenue_invalid_rows} بقيمة غير رقمية.`
       : '',
-  ].filter(Boolean).join(' ');
+    metrics.metric_quality.sales !== 'COMPLETE'
+      ? `المبيعات ${metrics.metric_quality.sales === 'UNAVAILABLE' ? 'غير متاحة' : 'غير مكتملة'}: ${metrics.sales_missing_rows} صفوف بلا قيمة و${metrics.sales_invalid_rows} بقيمة غير رقمية.`
+      : '',
+  ].filter(Boolean).join(' ') : '';
 
   async function reconcileNow() {
     if (!selectedId || reconciling) return;
