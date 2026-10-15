@@ -48,3 +48,11 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 - Progress history/evidence: `ops/AGHBARI-DEVELOPMENT-PROGRESS.md`.
 - Full user master specification: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 - Continuation prompt: `ops/AGHBARI-SESSION-RESUME.md`.
+
+## Latest source checkpoint — 2026-10-15
+
+- PR #26 (server-derived tenant context and restrictive RLS) merged to `main`; merge SHA before this memory/ledger update: `fe22af0424947b56ae80e0679621cf0df333e284`.
+- Exact PR head `c117b0eee5b19411c1fa3bf5162dbef1e939455f` passed [CI 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672). Main merge SHA passed [CI 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295). These runs include unit tests, isolated PostgreSQL 17 applying all migrations and cross-tenant denial tests, lint, build and port 5173 route/PWA smoke.
+- Changed files: `src/lib/supabase.ts`, `src/lib/api.ts`, `src/components/CustomerWorkflows.tsx`, `src/components/AdminPages.tsx`, `supabase/migrations/20261015090000_server_derived_tenant_context.sql`, `scripts/test-database-migrations.mjs`.
+- Status remains **PARTIAL, not production-certified**. Client constants were removed; authenticated scope is server-derived and restrictive RLS is covered by isolated CI. No live migration was applied because intended Supabase project `ffxxjaolfntzbapmfbuv` is inaccessible. Authenticated browser E2E, public/anonymous tenant routing, and all price-tier privacy channels remain open.
+- Lovable editor access/sync is unverified; no Lovable points were spent. Never infer sync/deploy from Git push or CI alone.

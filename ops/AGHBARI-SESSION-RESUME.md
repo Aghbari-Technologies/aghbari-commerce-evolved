@@ -40,3 +40,12 @@
 - An XLSX draft exporter was added to approved order details. Keep it classified PARTIAL until the actual Onyx import profile is tested and a central export audit event is recorded.
 - Production Supabase and Lovable runtime remain blocked/unverified; do not apply migrations to a different Supabase project and do not spend Lovable points on speculative prompts. The public deep-route/PWA 404 and Lovable editor 403 are documented in latest state/progress.
 - Always verify current HEAD after any documentation follow-up commit; the code-proof SHA above is not automatically the current HEAD.
+
+## Latest security checkpoint — 2026-10-15 (supersedes earlier fixed-ID status)
+
+- Current code merge recorded before this documentation update: `fe22af0424947b56ae80e0679621cf0df333e284`; PR #26 is merged: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/26
+- Exact tested PR head `c117b0eee5b19411c1fa3bf5162dbef1e939455f`: CI [38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) **PASS**. Exact merge SHA `fe22af0424947b56ae80e0679621cf0df333e284`: CI [38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) **PASS**.
+- Files changed: `src/lib/supabase.ts`, `src/lib/api.ts`, `src/components/CustomerWorkflows.tsx`, `src/components/AdminPages.tsx`, `supabase/migrations/20261015090000_server_derived_tenant_context.sql`, `scripts/test-database-migrations.mjs`.
+- Source evidence: client fixed tenant ID exports were removed; active profile, organization and default warehouse now come from `get_current_tenant_context()`; restrictive authenticated-user RLS boundaries and cross-tenant SELECT/INSERT negative checks pass on isolated PostgreSQL 17.
+- Do not overstate closure: expected production Supabase project ref `ffxxjaolfntzbapmfbuv` is not accessible. No production migration was applied. Authenticated browser E2E, full pricing-tier privacy and anonymous storefront domain-to-tenant scoping remain open. Lovable sync remains unverified and points remain unused.
+- At any resumption, read this checkpoint and the latest state/registry/progress, then re-check live `main` and latest exact-SHA CI before changing files.

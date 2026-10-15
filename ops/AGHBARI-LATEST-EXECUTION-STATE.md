@@ -2,7 +2,7 @@
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`
 - Branch: `main`
-- Main SHA before this documentation-pointer update: `971a49d75b546ccba0a05d8829c8d9c38cae085a`
+- Main SHA before this documentation-pointer update: `fe22af0424947b56ae80e0679621cf0df333e284`
 - Full owner-supplied spec: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`
 - Enduring mandate: `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`
 - Single requirement registry: `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`
@@ -25,7 +25,7 @@
 
 ## Remaining blockers / high-priority gaps
 1. Supabase project `ffxxjaolfntzbapmfbuv` is not accessible via the currently connected Supabase integration. Do not apply migrations to a different project.
-2. `src/lib/supabase.ts` still exports fixed organization/warehouse IDs. Production tenant isolation is not certified until the scope is server-derived and cross-tenant denial is proven.
+2. Fixed browser organization/warehouse constants have been removed from the scoped API and customer/admin consumers. A server-derived tenant-context RPC and restrictive policies for authenticated users are merged and pass isolated PostgreSQL CI. Production isolation remains **unproven** until the correct Supabase project is accessible, its migration is authorized/applied, authenticated browser E2E passes, and anonymous storefront tenant routing is verified.
 3. Authenticated customer/staff browser E2E, three-tier price privacy over API/RPC/cache/export, production migrations, server-generated invoice PDF and Onyx workbook compatibility are not proven.
 4. AI provider registry/secret-backed test connection/budgeting/privacy sanitization, deployed workers and official WhatsApp delivery remain partial or externally blocked.
 5. Public preview loads home/login/admin/order pages but external extraction returned 404 for several deep route/PWA URLs; reproduce in an authenticated real browser. Lovable editor returned 403 through external inspection. Exact sync is not proven.
@@ -42,3 +42,15 @@ Read `PROJECT_MEMORY.md` and `ops/AGHBARI-SESSION-RESUME.md`; then verify live `
 - Exact-head CI run [38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670) completed **SUCCESS**: unit tests, isolated PostgreSQL migration/workflow acceptance, ESLint, build, and expanded customer/admin/PWA smoke tests.
 - Important limit: no XLSX viewer or actual Onyx sandbox was accessible; this is a code-verified workbook draft, not a certified Onyx import template. Central audit logging for exports is still open.
 - Release blockers unchanged: intended Supabase ref `ffxxjaolfntzbapmfbuv` unavailable through current connection; public Lovable preview still returns 404 for several deep routes and `/manifest.webmanifest`; Lovable editor probe is 403 and exact deployed SHA remains unproven.
+
+## 2026-10-15 — Server-derived tenant scope and restrictive RLS
+
+- **PR #26 merged to main:** https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/26
+- Merge SHA: `fe22af0424947b56ae80e0679621cf0df333e284`.
+- Tested PR head: `c117b0eee5b19411c1fa3bf5162dbef1e939455f`; exact-head CI [run 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) = **PASS**.
+- Merge commit CI [run 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) on exact SHA `fe22af0424947b56ae80e0679621cf0df333e284` = **PASS**.
+- Files: `src/lib/supabase.ts`, `src/lib/api.ts`, `src/components/CustomerWorkflows.tsx`, `src/components/AdminPages.tsx`, `supabase/migrations/20261015090000_server_derived_tenant_context.sql`, `scripts/test-database-migrations.mjs`.
+- CI gates actually passed: `npm test`; `npm run test:db` against isolated PostgreSQL 17 applying all migrations; `npm run lint -- --rule=prettier/prettier:off`; `npm run build`; dev-server smoke on port 5173 including customer/admin routes and PWA assets.
+- New isolated DB checks verify `get_current_tenant_context()` resolves the authenticated profile/organization, foreign-organization products/customers are not visible to staff, and a foreign-organization product insert is denied by restrictive RLS. An earlier exact-head build failed because two components still imported `ORG_ID`; those consumers were corrected and the subsequent exact-head and main CI runs passed.
+- **Scope of proof:** these results prove the migration and denial cases in CI’s isolated PostgreSQL 17 environment. No migration was applied to production. The expected Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible in the current integration; authenticated real-browser E2E, comprehensive price-tier channel privacy, and public/anonymous storefront tenant routing are not certified.
+- Lovable sync remains unverified; do not spend Lovable points or assert deployment based solely on a Git merge/green CI.

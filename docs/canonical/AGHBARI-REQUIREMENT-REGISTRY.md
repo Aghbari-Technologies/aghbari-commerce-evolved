@@ -3,7 +3,7 @@
 **Product:** متجر الأغبري | Aghbari Commerce  
 **Repository:** `Aghbari-Technologies/aghbari-commerce-evolved`  
 **Branch:** `main`  
-**Last reviewed main before this documentation pointer update:** `971a49d75b546ccba0a05d8829c8d9c38cae085a`  
+**Last reviewed main before this documentation pointer update:** `fe22af0424947b56ae80e0679621cf0df333e284`  
 **Canonical specification:** [AGHBARI-MASTER-PROJECT-SPECIFICATION.md](./AGHBARI-MASTER-PROJECT-SPECIFICATION.md)  
 **Technical supplement:** [Platform Intelligence requirements](../specs/PLATFORM-INTELLIGENCE-PRODUCTION-REQUIREMENTS-2026-10-09.md)
 
@@ -22,9 +22,9 @@ This is an execution index, not proof that every feature is complete. A route, c
 
 | Area | Status | Evidence and required closure |
 |---|---|---|
-| Build gate | **FIXED ON VERIFIED SHA; NEWEST CI MUST BE CHECKED** | The lint fix passed unit, isolated PostgreSQL, lint, build and port 5173 smoke on [SHA f75dcb7, run 38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037). Expanded route/PWA smoke passed on [SHA 05fcacb, run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412). Run [38687897943](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687897943) for docs SHA `971a49d` was in progress at last observation; always inspect the latest run for the live `main` SHA. |
+| Build gate | **PASS ON CODE MERGE SHA; CHECK EVERY NEW HEAD** | Tenant-scope PR head `c117b0eee5b19411c1fa3bf5162dbef1e939455f` passed [run 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672); merged `main` SHA `fe22af0424947b56ae80e0679621cf0df333e284` passed [run 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295), including unit tests, isolated PostgreSQL 17 migration acceptance, lint, build and port 5173 route/PWA smoke. Evidence is SHA-specific; inspect CI after every later commit. |
 | Production Supabase | **BLOCKED EXTERNALLY** | Repo references project `ffxxjaolfntzbapmfbuv`; connected Supabase account cannot access it. Never apply migrations to another project. |
-| Tenant isolation | **NOT PROVEN / HIGH PRIORITY** | `src/lib/supabase.ts` exports fixed `ORG_ID` / `WAREHOUSE_ID`; replace with authenticated server-derived scope and prove cross-tenant denial. |
+| Tenant isolation | **PARTIAL — AUTHENTICATED SCOPE PROVEN IN ISOLATED CI; PRODUCTION AND ANON ROUTING NOT PROVEN** | PR #26 merged at `fe22af0424947b56ae80e0679621cf0df333e284`. `getCurrentTenantScope()` resolves from `get_current_tenant_context()`; restrictive RLS covers all `public` base tables with `organization_id` for authenticated sessions and key relation tables; CI tests foreign-organization staff SELECT/INSERT denial on isolated PostgreSQL 17. [PR-head CI](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) and [main CI](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) pass. | Correct production Supabase access and authorized migration; authenticated customer/staff browser E2E; review public-read policies/domain-to-tenant selection and verify three-tier privacy. Never call tenant isolation production-certified yet. |
 | Orders / checkout | **PARTIAL / isolated DB tested** | Atomic staff-order creation, server pricing, idempotency and state/stock rules have isolated PostgreSQL evidence; target DB and authenticated browser E2E are unproven. |
 | Three pricing tiers | **PARTIAL / SECURITY CRITICAL** | Verify distinct tier outputs and deny alternate-tier values at DB/API/RPC/cache/export; tier must be derived server-side. |
 | Addresses / company users | **OPEN** | Customer address book and company-member administration remain open roadmap items. |
@@ -52,7 +52,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 ## Next execution order
 1. Check latest exact-head CI and keep unit → isolated PostgreSQL acceptance → lint → build → expanded route/PWA smoke green.
 2. Resolve intended Supabase access; verify migrations before any live writes.
-3. Replace fixed tenant assumptions with a server-derived contract and add cross-tenant negative tests.
+3. The fixed client tenant assumptions and authenticated cross-tenant RLS gap are addressed in source/isolated CI. Next, verify intended Supabase access and migration plan, then run authorized production-schema review and authenticated browser E2E. Treat anonymous catalog/domain-to-tenant isolation as open until the public storefront has a verified tenant-resolution contract.
 4. Prove three-tier privacy and full checkout E2E.
 5. Run an owner-authorized import-acceptance test for the XLSX workbook against the actual Onyx version, add a server-backed export audit event, and complete invoice PDF.
 6. Complete company onboarding/addresses/users, inventory movements and fine-grained permissions.
@@ -67,3 +67,12 @@ Protocol: `INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX 
 - Export button is only enabled for confirmed/processing/shipped/delivered orders with no pending quantity review. This prevents exporting an unapproved order as a finalized accounting document.
 - Code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c`, CI [38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670): **PASS** for unit tests, isolated PostgreSQL acceptance, lint, build, route/PWA smoke. This proves workbook generation structure and order mapping tests, not Excel application parsing or actual Onyx import acceptance.
 - Export audit event and target-system compatibility test remain open; the UI reports that limitation explicitly.
+
+## Tenant-scope implementation evidence — 2026-10-15
+
+- **Source merge:** PR #26 merged into `main` as `fe22af0424947b56ae80e0679621cf0df333e284`.
+- **Exact tested source:** `c117b0eee5b19411c1fa3bf5162dbef1e939455f`; CI [38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) **PASS**. Main merge SHA CI [38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) **PASS**.
+- **Changed files:** `src/lib/supabase.ts`, `src/lib/api.ts`, `src/components/CustomerWorkflows.tsx`, `src/components/AdminPages.tsx`, `supabase/migrations/20261015090000_server_derived_tenant_context.sql`, `scripts/test-database-migrations.mjs`.
+- **Implementation:** removes fixed browser `ORG_ID`/`WAREHOUSE_ID`/`ADMIN_PROFILE_ID` exports; reads profile, organization and default active warehouse from the authenticated session via server RPC; adds restrictive tenant policies for authenticated role on organization-owned tables plus relation-based policies; tests that foreign-organization staff reads and inserts are denied.
+- **Commands/gates that passed:** `npm test`; `npm run test:db` (all migrations + workflows on isolated PostgreSQL 17); `npm run lint -- --rule=prettier/prettier:off`; `npm run build`; `npm run dev -- --host 127.0.0.1 --port 5173` with route/PWA probes.
+- **Limit:** no production migration was applied. Expected Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible through the current connection. These CI results are not authenticated browser E2E proof and do not resolve anonymous/public storefront tenant routing or all three-tier privacy channels.
