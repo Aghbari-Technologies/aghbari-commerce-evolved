@@ -162,6 +162,7 @@ async function main() {
   await db.unsafe(
     `insert into public.admin_settings(organization_id,key,value,category)
       values ($1,'hero_title',to_jsonb('CI public hero'::text),'storefront'),
+             ($1,'store_name',to_jsonb('CI public store'::text),'storefront'),
              ($1,'internal_provider_secret',to_jsonb('must-not-leak'::text),'ai')
       on conflict (organization_id,key) do update set value=excluded.value`,
     [organizationId],
@@ -199,6 +200,7 @@ async function main() {
   const publicSettingsRows = await db.unsafe("select public.get_public_storefront_settings() as settings");
   const publicSettings = publicSettingsRows[0].settings;
   assert.equal(publicSettings.hero_title, "CI public hero", "public storefront settings must include only explicit display keys");
+  assert.equal(publicSettings.store_name, "CI public store", "public storefront settings must include whitelisted public branding keys");
   assert.equal(Object.hasOwn(publicSettings, "internal_provider_secret"), false, "public storefront settings must not leak private administration settings");
   await expectFailure(
     "anonymous users cannot query private admin settings directly",
