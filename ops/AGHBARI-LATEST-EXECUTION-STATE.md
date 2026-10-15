@@ -1,6 +1,19 @@
 # Aghbari Commerce — Latest Execution State
 
-## Current implementation pointer — 2026-10-15 (storefront empty-catalog truth state)
+## Current implementation pointer — 2026-10-15 (invoice privacy + cart-count hardening)
+
+- **Active PR:** [#72 — default-hidden customer invoice amounts](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72), branch fix/acceptance-hardening-cart-finance-20261015.
+- **Code checkpoint:** initial PR head 0e46fff358487fe49ab38c7c5e5b9abbfe9cbf2f; an additional database acceptance-test/documentation commit is being added, so CI must be checked against the final new head and PASS must not be inherited from this SHA.
+- **Implemented in the branch:** additive migration 20261015240000_customer_invoice_display_privacy.sql makes invoice subtotal/tax/total and line unit_price/line_total NULL in get_customer_invoice_pdf unless admin_settings.customer_invoice_amounts_visible is explicitly true. Customer UI and generated PDF use the same RPC policy; Admin → Settings → Storefront now includes a toggle. Missing setting defaults to false. Cart badge shows distinct product lines and total units separately, with utility tests.
+- **Acceptance coverage:** the isolated PostgreSQL script now asserts both default-deny JSON fields and explicit organization opt-in. Final result awaits exact-head CI.
+- **Deployment/data boundary:** no production migration or Lovable publish was performed. Target Supabase ref ffxxjaolfntzbapmfbuv remains permission-denied; do not substitute mrcyqezbhpncuvaehwgf. Published routes and authenticated production E2E remain externally blocked/unverified.
+- **next_task_id = AGH-PRICE-PRIVACY-001 — OPEN.** Complete exact-head CI for PR #72 and review migration/RPC assertions; then add independent customer display policies for cart/order screens and full-scope account statement aggregation.
+- **blocked_task_id = AGH-EXT-SUPABASE-001 — EXTERNAL.** Requires owner-authorized access to the exact intended production Supabase project.
+- **Rule:** never enable customer financial amounts by default, and never claim production acceptance based on source or isolated CI alone.
+
+---
+
+## Previous implementation pointer — 2026-10-15 (storefront empty-catalog truth state)
 
 - **Latest source change:** PR [#50](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/50) merged to `main` at `fffa5035f6b3ee3f55f4a2456b515aa0814e4899`, tested PR head `ced57138b68515b581fcc988271a1b9a1c847ed9`. Exact PR-head CI [38776511699](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776511699) **SUCCESS**. The separate main merge-SHA run is [38776814715](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776814715); read its live conclusion before transferring the PR-head result.
 - **Storefront behavior:** when the live/cached catalog has zero products, the page now says no active products are published; when products exist but search/category filters match none, it retains the filter-specific empty message. Regression test lives in `src/test/storefront-discovery.test.tsx`. No sample products were inserted.

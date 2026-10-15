@@ -969,18 +969,46 @@ async function main() {
   assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
   assert.equal(Number(statement.payments[0].amount), 100000);
 
-  // The invoice PDF RPC returns amounts only for the signed-in customer's own invoice.
-  const ownInvoicePdfResult = await db.unsafe(
+  // Privacy-by-default: when no setting exists, monetary amounts must not leave the server RPC.
+  await db.unsafe("reset role");
+  await db.unsafe(
+    "delete from public.admin_settings where organization_id=$1 and key='customer_invoice_amounts_visible'",
+    [organizationId],
+  );
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const hiddenInvoicePdfResult = await db.unsafe(
     "select public.get_customer_invoice_pdf($1::uuid) as result",
     [invoice.id],
   );
-  const ownInvoicePdf = ownInvoicePdfResult[0].result;
-  assert.equal(ownInvoicePdf.invoice.id, invoice.id);
-  assert.equal(Number(ownInvoicePdf.invoice.total_amount), 370000);
-  assert.equal(ownInvoicePdf.lines.length, 1);
-  assert.equal(Number(ownInvoicePdf.lines[0].unit_price), 37000);
-  assert.equal(Number(ownInvoicePdf.lines[0].line_total), 370000);
-  assert.equal(ownInvoicePdf.customer.id, undefined, "PDF customer projection should not return an internal customer primary key");
+  const hiddenInvoicePdf = hiddenInvoicePdfResult[0].result;
+  assert.equal(hiddenInvoicePdf.amounts_visible, false, "invoice amounts must default to hidden");
+  assert.equal(hiddenInvoicePdf.invoice.id, invoice.id);
+  assert.equal(hiddenInvoicePdf.invoice.total_amount, null, "hidden invoice total must be null at the RPC boundary");
+  assert.equal(hiddenInvoicePdf.invoice.subtotal, null);
+  assert.equal(hiddenInvoicePdf.invoice.tax_amount, null);
+  assert.equal(hiddenInvoicePdf.lines.length, 1);
+  assert.equal(hiddenInvoicePdf.lines[0].unit_price, null, "hidden unit price must not leak through JSON");
+  assert.equal(hiddenInvoicePdf.lines[0].line_total, null, "hidden line total must not leak through JSON");
+  assert.equal(hiddenInvoicePdf.customer.id, undefined, "PDF customer projection should not return an internal customer primary key");
+
+  // An explicit organization-level opt-in unlocks amounts for the authorized customer only.
+  await db.unsafe("reset role");
+  await db.unsafe(
+    "insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_invoice_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+    [organizationId],
+  );
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const visibleInvoicePdfResult = await db.unsafe(
+    "select public.get_customer_invoice_pdf($1::uuid) as result",
+    [invoice.id],
+  );
+  const visibleInvoicePdf = visibleInvoicePdfResult[0].result;
+  assert.equal(visibleInvoicePdf.amounts_visible, true);
+  assert.equal(Number(visibleInvoicePdf.invoice.total_amount), 370000);
+  assert.equal(Number(visibleInvoicePdf.lines[0].unit_price), 37000);
+  assert.equal(Number(visibleInvoicePdf.lines[0].line_total), 370000);
 
   // A second customer in the same organization must never receive the first customer's statement.
   await db.unsafe("reset role");

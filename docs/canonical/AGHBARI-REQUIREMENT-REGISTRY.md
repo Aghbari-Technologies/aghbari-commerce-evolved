@@ -85,3 +85,12 @@ Protocol: `INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX 
 - **Implementation:** removes fixed browser `ORG_ID`/`WAREHOUSE_ID`/`ADMIN_PROFILE_ID` exports; reads profile, organization and default active warehouse from the authenticated session via server RPC; adds restrictive tenant policies for authenticated role on organization-owned tables plus relation-based policies; tests that foreign-organization staff reads and inserts are denied.
 - **Commands/gates that passed:** `npm test`; `npm run test:db` (all migrations + workflows on isolated PostgreSQL 17); `npm run lint -- --rule=prettier/prettier:off`; `npm run build`; `npm run dev -- --host 127.0.0.1 --port 5173` with route/PWA probes.
 - **Limit:** no production migration was applied. Expected Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible through the current connection. These CI results are not authenticated browser E2E proof and do not resolve anonymous/public storefront tenant routing or all three-tier privacy channels.
+
+## 2026-10-15 — PR #72: invoice privacy default and basket counter
+
+- **Implementation branch:** fix/acceptance-hardening-cart-finance-20261015; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72).
+- **Changes:** new migration 20261015240000_customer_invoice_display_privacy.sql enforces organization setting customer_invoice_amounts_visible server-side. Missing-setting default is false; invoice subtotal/tax/total, unit prices and line totals return JSON null unless explicitly enabled. Customer invoice UI and generated PDF use the same returned amounts_visible flag; an admin toggle was added. Cart badge differentiates unique product lines from total units.
+- **Acceptance being strengthened:** scripts/test-database-migrations.mjs tests both default-hidden and explicit opt-in behavior on isolated PostgreSQL, including each monetary JSON field. Unit tests cover the two cart counts.
+- **Exact-head CI status:** pending for the final commit in PR #72. Do not label PASS before the final run is green.
+- **Production status:** no production migration/deploy was performed; exact intended Supabase access and Lovable publish/readback are still external gates. Recheck PR head, CI URL, migration diff, RPC behavior and PDF/UI together after Lovable sync.
+- **Follow-on scope:** independent cart/order display policies and full-scope account statement totals remain OPEN; this invoice toggle does not close all customer financial privacy requirements.
