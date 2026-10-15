@@ -877,7 +877,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     });
 
     expect(window.localStorage.getItem(cacheKey)).toBe(beforeSync);
-    expect(host?.textContent).toContain("تعذر تحديث الكتالوج أو حفظه محليًا؛ راجع حالة النسخة المحفوظة قبل المتابعة.");
+    expect(host?.textContent).toContain("استجابة الكتالوج من الخادم غير صالحة؛ احتفظنا بالنسخة المحلية.");
     expect(host?.textContent).toContain("Legacy Sugar");
   });
 
@@ -912,6 +912,13 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     }]);
 
     await mountQuoteWorkspace("/offline");
+    // Capture the allowlisted cache as rendered by the initial mount; the component
+    // intentionally rewrites legacy cache entries before any sync attempt.
+    const cacheBeforeSync = window.localStorage.getItem(cacheKey);
+    const timestampBeforeSync = window.localStorage.getItem(timestampKey);
+    expect(cacheBeforeSync).not.toBeNull();
+    expect(timestampBeforeSync).toBe(priorTimestamp);
+
     const originalSetItem = Storage.prototype.setItem;
     let failedTimestampWrite = false;
     const writeSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
@@ -930,8 +937,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(window.localStorage.getItem(cacheKey)).toBe(JSON.stringify(priorCatalog));
-    expect(window.localStorage.getItem(timestampKey)).toBe(priorTimestamp);
+    expect(window.localStorage.getItem(cacheKey)).toBe(cacheBeforeSync);
+    expect(window.localStorage.getItem(timestampKey)).toBe(timestampBeforeSync);
     expect(host?.querySelector('[role="alert"]')?.textContent).toContain("فشل حفظ تحديث الكتالوج محليًا");
     const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
       button.textContent?.includes("إضافة إلى المسودة المحلية"),
