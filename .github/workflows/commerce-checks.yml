@@ -119,6 +119,21 @@ jobs:
               exit 1
             fi
           done
+          # A 200 alone can be a generic SPA fallback or not-found shell. Assert route-specific
+          # SSR document metadata so a missing file-based route cannot silently pass this probe.
+          for route_spec in \
+            "/invoices|الفواتير" \
+            "/statement|كشف الحساب"; do
+            route="${route_spec%%|*}"
+            expected_title="${route_spec#*|}"
+            curl --fail --silent --show-error "http://127.0.0.1:5173$route" -o /tmp/aghbari-route-contract.html
+            if ! grep -Fq "$expected_title" /tmp/aghbari-route-contract.html; then
+              echo "Expected route-specific Arabic title '$expected_title' for $route, but the document did not contain it."
+              cat /tmp/aghbari-route-contract.html
+              cat /tmp/aghbari-vite-dev.log
+              exit 1
+            fi
+          done
           # PDF endpoints must exist but refuse unauthenticated access before looking up finance data.
           for route in \
             /api/statement-pdf \
