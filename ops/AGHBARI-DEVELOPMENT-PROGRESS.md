@@ -132,3 +132,10 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Added `src/test/customer-addresses.test.ts` and isolated PostgreSQL regressions in `scripts/test-database-migrations.mjs` for data projection, invalid input, false-success prevention, direct write denial, cross-customer isolation, default promotion and audit trail.
 - Added `prefers-reduced-motion: reduce` global policy and included `/addresses` in the CI dev-server smoke matrix.
 - Exact-SHA CI for this feature is pending. No production migration or live authenticated browser test was performed; checkout address snapshots and company-member screens remain open.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: implementation CI verified
+
+- Implementation head `64a7056274a7b24324c53f9020ec1b710133a724`; exact-head PR CI [run 38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) completed **SUCCESS**.
+- Passed gates: `npm test`; `npm run test:db` applying all migrations/workflow assertions on isolated PostgreSQL 17; lint excluding the repository-wide Prettier rule; production build; dev-server port-5173 smoke including `/addresses`.
+- The first attempt found the invalid PostgreSQL column privilege name `DELETE`; it was corrected to verify INSERT/UPDATE at column level and DELETE at table level. The fixed exact SHA passed all gates.
+- Evidence is repository code + isolated CI only. No production migration or live authenticated browser test; checkout order-address snapshots and company contact/member management remain open.

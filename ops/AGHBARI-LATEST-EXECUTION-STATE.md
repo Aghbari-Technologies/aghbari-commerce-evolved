@@ -6,8 +6,8 @@
 - Added `supabase/migrations/20261015130000_customer_address_book.sql`: identity and organization are server-derived, RLS limits rows to the owner or same-organization staff, direct client writes are revoked, RPC mutations are audited, and a lock plus partial unique index enforces one default address.
 - Added data-contract tests and isolated PostgreSQL regressions for direct-write denial, same-organization cross-customer isolation, RPC ownership, default replacement, deletion promotion and audit events. Added the route to the actual port-5173 smoke matrix.
 - Added global `prefers-reduced-motion: reduce` rules for animation, transitions and smooth scrolling.
-- **Exact-SHA CI is pending for this batch.** No production database was changed. Intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible; no live browser or Lovable editor sync is claimed. Checkout delivery-address snapshots and company contacts/users remain open.
-- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. Check exact-SHA CI and fix any failure, then connect delivery-address snapshots to checkout/orders and implement company contacts/users. Keep `AGH-SEC-BROWSER-E2E-001` separately OPEN for real authenticated browser and production evidence.
+- **Exact-SHA CI:** implementation SHA `64a7056274a7b24324c53f9020ec1b710133a724`, [run 38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) **SUCCESS** for unit tests, isolated PostgreSQL 17 migrations/workflow acceptance, lint, build, and port-5173 route smoke. No production database was changed. Intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible; no live browser or Lovable editor sync is claimed. Checkout delivery-address snapshots and company contacts/users remain open.
+- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. CI passes on the implementation SHA; record this source/isolated-CI subgate as verified, then connect delivery-address snapshots to checkout/orders and implement company contacts/users. Keep `AGH-SEC-BROWSER-E2E-001` separately OPEN for real authenticated browser and production evidence.
 
 ---
 
