@@ -115,6 +115,18 @@ jobs:
               exit 1
             fi
           done
+          # PDF endpoints must exist but refuse unauthenticated access before looking up finance data.
+          for route in \
+            /api/statement-pdf \
+            /api/invoice-pdf/11111111-1111-4111-8111-111111111111; do
+            status=$(curl --silent --output /tmp/aghbari-pdf-auth.json --write-out "%{http_code}" "http://127.0.0.1:5173$route")
+            if [ "$status" != "401" ]; then
+              echo "Expected unauthenticated PDF route $route to return 401, received $status"
+              cat /tmp/aghbari-pdf-auth.json
+              cat /tmp/aghbari-vite-dev.log
+              exit 1
+            fi
+          done
           curl --fail --silent --show-error http://127.0.0.1:5173/manifest.webmanifest -o /tmp/aghbari-manifest.json
           grep -q "Aghbari Commerce" /tmp/aghbari-manifest.json || {
             echo "PWA manifest is missing the canonical Aghbari Commerce identity."
