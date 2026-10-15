@@ -1,11 +1,21 @@
 /* Aghbari offline shell. Financial data, auth responses and Supabase traffic are never cached. */
-const CACHE_NAME = 'aghbari-shell-v1';
+const CACHE_NAME = 'aghbari-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.ico'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(SHELL).catch(() => undefined))
+      .then(async (cache) => {
+        // Precache each asset independently: a missing optional manifest must not
+        // cancel caching the usable offline document and favicon.
+        await Promise.all(SHELL.map(async (url) => {
+          try {
+            await cache.add(url);
+          } catch {
+            // A missing shell asset is non-fatal; other assets remain cached.
+          }
+        }));
+      })
       .then(() => self.skipWaiting()),
   );
 });
@@ -52,7 +62,13 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       });
-      return cached || network;
+      if (cached) {
+        // The network promise is a background refresh; handle failure without
+        // turning an offline refresh into an unhandled rejection.
+        void network.catch(() => undefined);
+        return cached;
+      }
+      return network.catch(() => Response.error());
     }),
   );
 });
