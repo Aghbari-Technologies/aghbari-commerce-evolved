@@ -102,3 +102,8 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Exact-head CI `aff2a30dadf5d977a82f2c8b5458da46f100cc98` / [run 38696635586](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696635586) **SUCCESS** for customer denial on `/admin/quotes` before any tenant or data access.
 - Added the staff-side companion to `src/test/customer-workflow-tenant.test.tsx`: an active staff identity must be able to load the actual `/admin/quotes` route, receive the quote list from the mock DB boundary, and use only the enumerated non-financial quote columns. Exact-SHA CI pending.
 - This remains jsdom route acceptance, not an authenticated real-browser session. `AGH-SEC-BROWSER-E2E-001` remains OPEN.
+## 2026-10-15 — Direct tier-price RPC denial checks
+
+- Verified route-role CI at SHA `c19c0b0516194d309fdf183690b8ceb1ee7a595f`, Actions [38696894239](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696894239) **SUCCESS**. Customer sessions are denied from the real `/admin/quotes` route before any tenant/table/RPC read; active staff sessions load the quotes workspace using the explicit non-financial quote projection.
+- Added two regression assertions in `scripts/test-database-migrations.mjs`: authenticated customers must be denied direct execution of `public.customer_product_unit_price(uuid,uuid,text,numeric)` and `public.preview_order_pricing(jsonb)`. This complements the existing direct `product_prices` table read test and the customer cart response field exclusions.
+- Exact-SHA CI for the new RPC checks is pending. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN until all-channel and real-browser proof exists.

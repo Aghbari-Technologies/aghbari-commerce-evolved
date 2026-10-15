@@ -1,5 +1,13 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest verified route-role subgate — customer denied, staff allowed
+
+- Exact-SHA CI at `c19c0b0516194d309fdf183690b8ceb1ee7a595f` [run 38696894239](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696894239) **SUCCESS** across unit tests, isolated PostgreSQL 17, lint, build and port-5173 smoke.
+- The actual `/admin/quotes` route now has a passing customer-denial test (zero tenant/table/RPC calls) and a passing active-staff test (staff quote workspace loads with the explicit non-financial column projection). These are jsdom route tests, not live browser auth.
+- Added further database regression checks to deny authenticated customers direct calls to `customer_product_unit_price(...)` and `preview_order_pricing(jsonb)`, in addition to the now-proven direct `product_prices` table boundary. Exact-SHA CI for these new RPC denial checks is pending.
+- `AGH-SEC-BROWSER-E2E-001` and `AGH-PRICE-PRIVACY-001` remain OPEN/PARTIAL respectively; production Supabase and live browser evidence remain unavailable.
+
+---
 ## Latest verified admin-role boundary — customer denial
 
 - Exact-SHA CI at `aff2a30dadf5d977a82f2c8b5458da46f100cc98` [run 38696635586](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696635586) **SUCCESS**. The customer identity visiting `/admin/quotes` is rejected with `لا تملك صلاحية الإدارة` before `getCurrentTenantScope`, `supabase.from`, or `supabase.rpc` is called.

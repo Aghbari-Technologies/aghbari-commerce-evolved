@@ -230,6 +230,22 @@ async function main() {
     directTierReadDenied || directlyReadableTierRows.length === 0,
     "authenticated customers must not enumerate wholesale/retail tier prices directly",
   );
+  await expectFailure(
+    "authenticated customers cannot execute the internal unit-price resolver directly",
+    () => db.unsafe(
+      "select public.customer_product_unit_price($1::uuid,$2::uuid,'wholesale',1) as price",
+      [productId, organizationId],
+    ),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "authenticated customers cannot call the full monetary order preview directly",
+    () => db.unsafe(
+      "select public.preview_order_pricing($1::jsonb)",
+      [db.json([{ product_id: productId, quantity: 1 }])],
+    ),
+    /permission denied/i,
+  );
 
   const previewInput10 = db.json([{ product_id: productId, quantity: 10 }]);
   const payloadCheck = await db.unsafe(
