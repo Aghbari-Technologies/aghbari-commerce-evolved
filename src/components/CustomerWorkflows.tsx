@@ -602,6 +602,11 @@ export function CustomerStatementPage() {
     </Gate>
   );
 }
+function formatAccountMoney(value: number | string, currency: string): string {
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return "غير متاح";
+  return `${new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 2 }).format(amount)} ${currency}`;
+}
 function Statement() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<(PaymentAmount & { paid_at?: string })[]>([]);
@@ -739,7 +744,7 @@ function Statement() {
                               color: label === "المتبقي المستحق" ? "#9b4e22" : "#087f8d",
                             }}
                           >
-                            {formatInvoiceMoney(value, currencyBalance.currency)}
+                            {formatAccountMoney(value, currencyBalance.currency)}
                           </strong>
                         </article>
                       ))}
@@ -772,9 +777,9 @@ function Statement() {
                       <td>
                         <strong>{i.invoice_number}</strong>
                       </td>
-                      <td>{balance.valid ? formatInvoiceMoney(balance.total, balance.currency) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatInvoiceMoney(balance.paid, balance.currency) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatInvoiceMoney(balance.outstanding, balance.currency) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatAccountMoney(balance.total, balance.currency) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatAccountMoney(balance.paid, balance.currency) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatAccountMoney(balance.outstanding, balance.currency) : "غير متاح"}</td>
                       <td>
                         {i.status === "paid"
                           ? "مدفوعة"
