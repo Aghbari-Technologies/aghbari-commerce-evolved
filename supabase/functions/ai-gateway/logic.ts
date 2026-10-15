@@ -113,6 +113,23 @@ export function isSafeProviderBaseUrl(value: unknown, provider?: AiProvider): va
   }
 }
 
+/** Keep Gemini credentials in the request header, never in a URL/query string. */
+export function buildGeminiRequestConfig(baseUrl: string, model: string, apiKey: string): {
+  url: URL;
+  headers: Record<string, string>;
+} {
+  if (!isSafeProviderBaseUrl(baseUrl, "gemini") || !model.trim() || model.length > 160 || !apiKey.trim()) {
+    throw new Error("invalid_gemini_provider_config");
+  }
+  const url = new URL(baseUrl.replace(/\\/+$/, "") + "/models/" + encodeURIComponent(model.trim()) + ":generateContent");
+  return {
+    url,
+    headers: {
+      "content-type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+  };
+}
 export function parseProviderResponse(provider: AiProvider, value: unknown): ParsedProviderResponse {
   if (!isRecord(value)) throw new Error("provider_response_invalid");
   if (provider === "openai_compatible") {
