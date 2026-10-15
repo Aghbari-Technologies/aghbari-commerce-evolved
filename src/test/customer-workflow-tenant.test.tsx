@@ -490,6 +490,34 @@ describe("customer quote workspace tenant boundary", () => {
     expect(mocks.queries.some((query) => query.table === "customers")).toBe(false);
   });
 
+  it("warns when the customer invoice list reaches its 100-row read cap", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-customer@example.test",
+      name: "CI Customer",
+      roles: ["customer"],
+      isStaff: false,
+    };
+    mocks.responses = {
+      customer_invoices: Array.from({ length: 100 }, (_, index) => ({
+        id: `invoice-${index + 1}`,
+        invoice_number: `INV-${String(index + 1).padStart(3, "0")}`,
+        order_id: `order-${index + 1}`,
+        customer_id: "44444444-4444-4444-8444-444444444444",
+        status: "issued",
+        issued_at: "2026-10-15T09:00:00.000Z",
+        due_at: null,
+        currency: "YER",
+      })),
+    };
+
+    await mountQuoteWorkspace("/invoices");
+
+    expect(host?.textContent).toContain("فواتيري");
+    expect(host?.textContent).toContain("عرض هذه الصفحة أحدث 100 فاتورة فقط");
+  });
+
   it("fails closed when the authenticated server scope cannot be resolved", async () => {
     mocks.user = {
       id: USER_ID,
