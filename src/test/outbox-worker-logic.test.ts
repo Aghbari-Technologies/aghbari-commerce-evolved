@@ -102,6 +102,8 @@ describe("outbox worker logical RPC result handling", () => {
     expect(source).not.toMatch(/\(claimedRows \?\? \[\]\) as/);
     expect(source).toContain("outbox_process_transport_error");
     expect(source).toContain("outbox_failure_transport_error");
+    expect(source).toContain("claim_transport_failed");
+    expect(source).toMatch(/catch\\s*\\(cause\\)[\\s\\S]*claim_transport_failed/);
     expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_process_transport_error/);
     expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_failure_transport_error/);
     expect(source).not.toMatch(/\bsafeErrorMessage\s*\(/);

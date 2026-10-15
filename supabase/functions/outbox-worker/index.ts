@@ -71,11 +71,22 @@ if (runtime) {
     const client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-    const { data: claimedRows, error: claimError } = await client.rpc("claim_outbox_events", {
-      p_worker: workerId,
-      p_limit: Number(batchSize),
-      p_lease_seconds: 300,
-    });
+    let claimedRows: unknown = null;
+    let claimError: { code?: string; message?: string } | null = null;
+    try {
+      const result = await client.rpc("claim_outbox_events", {
+        p_worker: workerId,
+        p_limit: Number(batchSize),
+        p_lease_seconds: 300,
+      });
+      claimedRows = result.data;
+      claimError = result.error;
+    } catch (cause) {
+      console.error("outbox claim transport failed", {
+        error: sanitizeOutboxErrorMessage(cause),
+      });
+      return json({ error: "claim_transport_failed" }, 503);
+    }
     if (claimError) {
       console.error("outbox claim failed", { code: claimError.code ?? "unknown" });
       return json({ error: "claim_failed" }, 500);
