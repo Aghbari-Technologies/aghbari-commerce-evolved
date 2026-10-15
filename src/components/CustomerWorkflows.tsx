@@ -1938,12 +1938,9 @@ function Offline() {
   const catalogQuery = catalogSearch.trim().toLocaleLowerCase();
   const matchingCatalogRows = catalogRows.filter((product) => {
     if (!catalogQuery) return true;
-    return [
-      product.name,
-      product.item_code,
-      product.barcode ?? "",
-      product.category?.name ?? "",
-    ].some((value) => String(value).toLocaleLowerCase().includes(catalogQuery));
+    // Share storefront Arabic normalization, SKU/barcode prefixes and name typo tolerance.
+    return matchesArabicCatalogSearch(product, catalogSearch) ||
+      matchesArabicCatalogSearch({ name: product.category?.name }, catalogSearch);
   });
   const visibleCatalogRows = matchingCatalogRows.slice(0, 100);
   const refresh = useCallback(() => {

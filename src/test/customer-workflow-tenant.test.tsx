@@ -598,6 +598,14 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     mocks.fetchProducts.mockResolvedValueOnce([
       unsafeRow,
       { ...unsafeRow, id: "product-offline-2", name: "Rice", item_code: "000126" },
+      {
+        ...unsafeRow,
+        id: "product-offline-3",
+        name: "سُكَّر أبيض",
+        item_code: "000127",
+        barcode: "628127",
+        category: { id: "category-food", name: "مَوَادّ غِذَائِيَّة" },
+      },
     ]);
 
     await mountQuoteWorkspace("/offline");
@@ -617,7 +625,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
 
     const syncedSafe = JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(catalogScope)) || "[]");
     expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
-    expect(syncedSafe).toHaveLength(2);
+    expect(syncedSafe).toHaveLength(3);
     expect(syncedSafe[0].base_price).toBe(0);
     expect(syncedSafe[0]).not.toHaveProperty("display_price");
     expect(syncedSafe[0]).not.toHaveProperty("cost_price");
@@ -638,6 +646,26 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     });
     expect(host?.textContent).toContain("Rice");
     expect(host?.textContent).not.toContain("Sugar");
+    await act(async () => {
+      if (searchInput) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(searchInput, "سُكَر");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    expect(host?.textContent).toContain("سُكَّر أبيض");
+    expect(host?.textContent).not.toContain("Sugar");
+
+    await act(async () => {
+      if (searchInput) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(searchInput, "غذائية");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    expect(host?.textContent).toContain("سُكَّر أبيض");
+    expect(host?.textContent).not.toContain("Rice");
+
     await act(async () => {
       if (searchInput) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
