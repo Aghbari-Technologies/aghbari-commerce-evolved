@@ -50,6 +50,7 @@ import {
   appendOfflineCartMutation,
   compactOfflineCartLedger,
   createOfflineCartMutationId,
+  createStableOfflineCartMutationId,
   createOfflineCartScopeKey,
   getOfflineCartLedgerPrefix,
   getOfflineCatalogCacheKey,
@@ -1942,6 +1943,7 @@ function Offline() {
   // Keep an idempotency ID for an intent until the caller confirms its outcome.
   // If storage wrote the record and then threw, retrying the same intent must not double-apply it.
   const pendingLocalMutationIds = useRef(new Map<string, string>());
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   function pendingMutationId(intent: string): string {
     const existing = pendingLocalMutationIds.current.get(intent);
     if (existing) return existing;
@@ -2214,6 +2216,89 @@ function Offline() {
       setMessage(detail);
     }
   }
+  async function restoreLocalDraftBackup(file: File) {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل استعادة مسودة مرتبطة بحسابك.");
+      if (file.size > 512 * 1024) throw new Error("حجم ملف النسخة الاحتياطية يتجاوز 512 كيلوبايت.");
+      const source = await file.text();
+      if (source.length > 512 * 1024) throw new Error("حجم ملف النسخة الاحتياطية بعد القراءة يتجاوز الحد المسموح.");
+      let payload: unknown;
+      try {
+        payload = JSON.parse(source) as unknown;
+      } catch {
+        throw new Error("ملف النسخة الاحتياطية ليس JSON صالحًا.");
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new Error("بنية النسخة الاحتياطية غير صالحة.");
+      }
+      const record = payload as Record<string, unknown>;
+      if (record.schema !== "aghbari.offline-cart-draft" || record.version !== 1 || !Array.isArray(record.lines)) {
+        throw new Error("نوع النسخة أو إصدارها غير مدعوم.");
+      }
+      if (record.lines.length < 1 || record.lines.length > 200) {
+        throw new Error("يجب أن تحتوي النسخة على صنف واحد إلى 200 صنف.");
+      }
+
+      const catalog = sanitizePublicCatalogCache(
+        JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+      );
+      const products = new Set(catalog.map((product) => product.id));
+      const seen = new Set<string>();
+      const lines: { product_id: string; quantity: number }[] = [];
+      for (const item of record.lines) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          throw new Error("تتضمن النسخة بندًا غير صالح؛ لم تُغيّر المسودة.");
+        }
+        const line = item as Record<string, unknown>;
+        if (
+          typeof line.product_id !== "string" ||
+          !products.has(line.product_id) ||
+          !Number.isSafeInteger(line.quantity) ||
+          Number(line.quantity) < 1 ||
+          Number(line.quantity) > 10000 ||
+          seen.has(line.product_id)
+        ) {
+          throw new Error("يتضمن الملف صنفًا غير موجود في كتالوج الحساب الحالي أو كمية غير صالحة؛ لم تُغيّر المسودة.");
+        }
+        seen.add(line.product_id);
+        // Deliberately retain only product ID and quantity; imported names, prices,
+        // inventory fields, notes and other untrusted properties are never persisted.
+        lines.push({ product_id: line.product_id, quantity: Number(line.quantity) });
+      }
+      lines.sort((left, right) => left.product_id.localeCompare(right.product_id));
+      const totalUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
+      const approved = window.confirm(
+        "سيتم دمج " + lines.length + " صنفًا (" + formatNumber(totalUnits) +
+        " وحدة) مع مسودة السلة المحلية الحالية. لن تُستورد أسعار ولن يُرسل طلب. هل تريد المتابعة؟",
+      );
+      if (!approved) {
+        setMessage("أُلغيت استعادة النسخة الاحتياطية؛ لم تتغير المسودة.");
+        return;
+      }
+
+      const mutationId = createStableOfflineCartMutationId("backup-restore", lines);
+      let next: ReturnType<typeof readOfflineCartLedger>;
+      try {
+        next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+          id: mutationId,
+          kind: "merge",
+          lines,
+        }, initialOfflineCartLines());
+        writeLegacyCartOwner(localStorage, cartScopeKey);
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : "تعذر حفظ المسودة المستعادة محليًا.";
+        setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+        setMessage(detail);
+        return;
+      }
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setStorageError("");
+      setMessage("تم دمج النسخة الاحتياطية في المسودة المحلية بعد التحقق من الأصناف؛ لم تُستورد أسعار ولم يُرسل طلب.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "تعذر قراءة النسخة الاحتياطية.");
+    }
+  }
   function exportLocalDraftBackup() {
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل تصدير مسودة مرتبطة بحسابك.");
@@ -2431,12 +2516,33 @@ function Offline() {
         <h2 id="offline-draft-heading" style={{ marginTop: 0, fontSize: 18 }}>مسودة السلة المحلية</h2>
         <p style={quiet}>هذه كميات محفوظة على الجهاز فقط؛ لا تظهر أسعار ولا تُرسل طلبات من هذه الشاشة.</p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <input
+            ref={backupFileInputRef}
+            id="offline-cart-backup-input"
+            type="file"
+            accept=".json,application/json"
+            aria-label="اختر نسخة احتياطية لمسودة السلة"
+            style={{ display: "none" }}
+            disabled={Boolean(storageError)}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file) void restoreLocalDraftBackup(file);
+            }}
+          />
           <button
             style={secondary}
             disabled={Boolean(storageError) || cartLines.length === 0}
             onClick={exportLocalDraftBackup}
           >
             تنزيل نسخة احتياطية للمسودة
+          </button>
+          <button
+            style={secondary}
+            disabled={Boolean(storageError)}
+            onClick={() => backupFileInputRef.current?.click()}
+          >
+            استعادة من نسخة JSON
           </button>
           {cartLines.length > 0 && (
             <button

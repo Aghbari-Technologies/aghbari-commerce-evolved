@@ -815,6 +815,53 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("تم تفريغ مسودة السلة المحلية فقط");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     confirmSpy.mockRestore();
+
+    // Restore an allowlisted JSON backup with hostile extra fields, then import it
+    // again to prove the stable restore mutation ID prevents duplicate quantities.
+    const backupPayload = JSON.stringify({
+      schema: "aghbari.offline-cart-draft",
+      version: 1,
+      exported_at: "2026-10-16T00:00:00.000Z",
+      lines: [{
+        product_id: "product-offline-2",
+        item_code: "000126",
+        name: "Rice",
+        unit: "carton",
+        quantity: 3,
+        base_price: 999999,
+        cost_price: 888888,
+        internal_notes: "must not be imported",
+      }],
+    });
+    const fakeBackupFile = {
+      name: "backup.json",
+      size: backupPayload.length,
+      text: async () => backupPayload,
+    } as File;
+    const restoreConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const restoreInput = host?.querySelector<HTMLInputElement>("#offline-cart-backup-input");
+    expect(restoreInput).toBeDefined();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      Object.defineProperty(restoreInput, "files", {
+        configurable: true,
+        value: [fakeBackupFile],
+      });
+      await act(async () => {
+        restoreInput?.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+    expect(host?.textContent).toContain("تم دمج النسخة الاحتياطية في المسودة المحلية");
+    const storedLedgerRows = Array.from({ length: window.localStorage.length }, (_, index) => {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(getOfflineCartLedgerPrefix(catalogScope) + "op:")) return "";
+      return window.localStorage.getItem(key) || "";
+    }).join("\n");
+    expect(storedLedgerRows).not.toMatch(/base_price|cost_price|internal_notes|888888|999999/i);
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+    restoreConfirm.mockRestore();
   });
 
   it("blocks subsequent local cart edits after an operation write fails", async () => {
