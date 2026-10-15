@@ -44,7 +44,21 @@ jobs:
       - name: Unit tests
         run: npm test
       - name: Apply all migrations to isolated PostgreSQL 17 and verify core workflows
-        run: npm run test:db
+        shell: bash
+        run: |
+          set +e
+          npm run test:db 2>&1 | tee /tmp/aghbari-db-migration.log
+          db_status=${PIPESTATUS[0]}
+          if [ "$db_status" -ne 0 ]; then
+            echo "::error title=Database migration diagnostic::The isolated migration/workflow command failed; structured error follows."
+            grep -E '^(MIGRATION_FAILED|MIGRATION_DIAGNOSTIC|DATABASE_ACCEPTANCE_FAILED) ' /tmp/aghbari-db-migration.log | tail -n 4 | while IFS= read -r line; do
+              echo "::error title=Database root cause::$line"
+            done
+            grep -E 'Error:|error:|AssertionError:|not ok|FAIL|ERROR' /tmp/aghbari-db-migration.log | tail -n 20 | while IFS= read -r line; do
+              echo "::error title=Database test failure::$line"
+            done
+          fi
+          exit "$db_status"
       # The repository-wide Prettier rule currently reports thousands of pre-existing formatting errors.
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
       - name: Lint (excluding repository-wide Prettier formatting rule)
@@ -89,7 +103,7 @@ jobs:
           # Probe the client and admin workspaces plus PWA assets. Route-unit tests alone
           # don't prove the dev server can serve each URL.
           for route in \
-            /cart /checkout /compare /wishlist /addresses /company/contacts /product/ci-route-smoke-test \
+            /cart /checkout /compare /wishlist /addresses /company/contacts /company/members /company/accept-invitation /product/ci-route-smoke-test \
             /orders /invoices /statement /quotes /reorder /assistant /barcode /offline \
             /admin /admin/orders /admin/products /admin/customers /admin/pricing \
             /admin/operations /admin/finance /admin/reports /admin/settings \

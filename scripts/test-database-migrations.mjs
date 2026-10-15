@@ -60,7 +60,19 @@ async function main() {
 
   for (const name of migrations) {
     const contents = await readFile(resolve(migrationDir, name), "utf8");
-    await db.unsafe(contents);
+    try {
+      await db.unsafe(contents);
+    } catch (cause) {
+      const error = cause && typeof cause === "object" ? cause : { message: String(cause) };
+      const diagnostic = Object.fromEntries(
+        ["name", "message", "code", "severity", "detail", "hint", "position", "where", "schema", "table", "column", "constraint", "file", "line", "routine", "stack"]
+          .filter((key) => key in error)
+          .map((key) => [key, error[key]]),
+      );
+      process.stderr.write("MIGRATION_FAILED " + name + "\\n");
+      process.stderr.write("MIGRATION_DIAGNOSTIC " + JSON.stringify(diagnostic) + "\\n");
+      throw cause;
+    }
     process.stdout.write("APPLIED " + name + "\n");
   }
 
@@ -1296,11 +1308,119 @@ async function main() {
   await db.unsafe("delete from public.pricing_rules where id=$1", [submittedRule.id]);
   process.stdout.write("PASS pricing approval gate, protected approval state, audit rationale, shared customer-tier preview and role denial\n");
 
+
+  // AGH-CUSTOMER-360-MEMBERS-001: verified invitation, explicit company scope, permission matrix and revocation.
+  await db.unsafe("reset role");
+  const invitedProfileId="f8888888-8888-4888-8888-888888888888";
+  const invitedAuthUserId="88888888-8888-4888-8888-888888888888";
+  const financeProfileId="f9999999-9999-4999-8999-999999999999";
+  const financeAuthUserId="99999999-9999-4999-8999-999999999999";
+  await db.unsafe(
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Invited Buyer','ci-invited-buyer@example.test',true),($4,$5,$3,'CI Invited Finance','ci-invited-finance@example.test',true)",
+    [invitedProfileId,invitedAuthUserId,organizationId,financeProfileId,financeAuthUserId],
+  );
+  await db.unsafe("insert into public.user_roles(profile_id,role) values($1,'customer'),($2,'customer') on conflict(profile_id,role) do nothing",[invitedProfileId,financeProfileId]);
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const inviteRows=await db.unsafe("select public.create_customer_company_invitation($1::text,$2::text) as result",["ci-invited-buyer@example.test","buyer"]);
+  const invite=inviteRows[0].result;
+  assert.match(invite.invitation_token,/^[0-9a-f]{64}$/i,"owner receives a one-time random invitation token");
+  assert.equal(invite.invited_email,"ci-invited-buyer@example.test");
+  await expectFailure("authenticated users cannot enumerate invitation tokens",
+    ()=>db.unsafe("select id,token_hash from public.customer_company_invitations where id=$1",[invite.invitation_id]),/permission denied/i);
+  await expectFailure("authenticated users cannot read membership rows directly",
+    ()=>db.unsafe("select profile_id,member_role from public.customer_company_memberships"),/permission denied/i);
+  const ownerList=await db.unsafe("select public.list_customer_company_members() as result");
+  assert.ok(ownerList[0].result.invitations.some(row=>row.invitation_id===invite.invitation_id&&row.status==="pending"));
+  await db.unsafe("reset role");
+  const storedHash=await db.unsafe("select token_hash from public.customer_company_invitations where id=$1",[invite.invitation_id]);
+  assert.equal(storedHash[0].token_hash.length,32);
+  assert.notEqual(storedHash[0].token_hash,invite.invitation_token,"only a one-way hash is persisted");
+
+  await setIdentity(secondAuthUserId,"ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure("a different email cannot claim an invitation",
+    ()=>db.unsafe("select public.accept_customer_company_invitation($1::text)",[invite.invitation_token]),/البريد الإلكتروني الذي استلم/i);
+  await db.unsafe("reset role");
+  await setIdentity(invitedAuthUserId,"ci-invited-buyer@example.test");
+  await db.unsafe("set role authenticated");
+  const identityContext=await db.unsafe("select auth.uid() as auth_id,public.current_profile_id() as profile_id,public.current_organization_id() as current_org,(select p.organization_id from public.profiles p where p.auth_user_id=auth.uid()) as profile_org");
+  assert.equal(identityContext[0].auth_id,invitedAuthUserId,"the test JWT must resolve to the invited authentication ID");
+  assert.equal(identityContext[0].profile_id,invitedProfileId,"the invited identity must resolve to its intended profile");
+  await db.unsafe("reset role");
+  const invitationContext=await db.unsafe("select i.organization_id as invitation_org,c.organization_id as customer_org,p.organization_id as member_profile_org from public.customer_company_invitations i join public.customers c on c.id=i.customer_id cross join public.profiles p where i.id=$1 and p.id=$2",[invite.invitation_id,invitedProfileId]);
+  assert.equal(invitationContext[0].invitation_org,invitationContext[0].customer_org,"invitation must retain its owning customer's organization");
+  assert.equal(invitationContext[0].member_profile_org,invitationContext[0].invitation_org,"new member profile and invitation must share the same organization before acceptance");
+  await db.unsafe("set role authenticated");
+  const accepted=await db.unsafe("select public.accept_customer_company_invitation($1::text) as result",[invite.invitation_token]);
+  assert.equal(accepted[0].result.company_name,"CI Company One");
+  assert.equal(accepted[0].result.member_role,"buyer");
+  const companyScope=await db.unsafe("select public.current_customer_id() as customer_id,public.current_customer_can('orders.create') as can_order,public.current_customer_can('statement.read') as can_statement");
+  assert.equal(companyScope[0].customer_id,customerOneId,"member is bound to the invited customer, not a new company");
+  assert.equal(companyScope[0].can_order,true,"buyer is allowed to create company orders");
+  assert.equal(companyScope[0].can_statement,false,"buyer is not allowed to read finance statements");
+  assert.equal((await db.unsafe("select id from public.customers where id=$1",[customerOneId])).length,1);
+  assert.equal((await db.unsafe("select id from public.customers where profile_id=$1",[secondProfileId])).length,0,"member cannot read a different customer in the same organization");
+  assert.equal((await db.unsafe("select id from public.customer_addresses where id=$1",[firstId])).length,1,"buyer is scoped to the invited company's addresses");
+  assert.equal((await db.unsafe("select id from public.customer_company_contacts where id=$1",[firstContactId])).length,1,"buyer is scoped to the invited company's contacts");
+  const memberOrderRows=await db.unsafe(
+    "select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid) as result",
+    [db.json([{product_id:productId,quantity:1}]),"Member checkout test","CI Company One","Invited buyer","7771113333","cash_on_delivery","member-checkout-key-000001",null],
+  );
+  const memberOrderId=memberOrderRows[0].result.id;
+  const linkedOrder=await db.unsafe("select customer_id from public.orders where id=$1",[memberOrderId]);
+  assert.equal(linkedOrder[0].customer_id,customerOneId,"member checkout creates an order for the linked company");
+  await expectFailure("accepted invitation tokens cannot be replayed",
+    ()=>db.unsafe("select public.accept_customer_company_invitation($1::text)",[invite.invitation_token]),/استُخدمت|الدعوة غير موجودة/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const financeInviteRows=await db.unsafe("select public.create_customer_company_invitation($1::text,$2::text) as result",["ci-invited-finance@example.test","finance"]);
+  const financeInvite=financeInviteRows[0].result;
+  await db.unsafe("reset role");
+  await setIdentity(financeAuthUserId,"ci-invited-finance@example.test");
+  await db.unsafe("set role authenticated");
+  await db.unsafe("select public.accept_customer_company_invitation($1::text)",[financeInvite.invitation_token]);
+  const financeScope=await db.unsafe("select public.current_customer_id() as customer_id,public.current_customer_can('orders.create') as can_order,public.current_customer_can('statement.read') as can_statement");
+  assert.equal(financeScope[0].customer_id,customerOneId);
+  assert.equal(financeScope[0].can_order,false,"finance member cannot create orders");
+  assert.equal(financeScope[0].can_statement,true,"finance member can read company statements");
+  await expectFailure("finance member cannot bypass the order capability through checkout",
+    ()=>db.unsafe("select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid)",
+      [db.json([{product_id:productId,quantity:1}]),"Forbidden finance checkout","CI Company One","Finance member","7771114444","cash_on_delivery","finance-checkout-key-0001",null]),
+    /not allowed to place orders/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const memberList=await db.unsafe("select public.list_customer_company_members() as result");
+  assert.ok(memberList[0].result.members.some(row=>row.profile_id===invitedProfileId&&row.status==="active"));
+  const revoked=await db.unsafe("select public.revoke_customer_company_member($1::uuid) as result",[invitedProfileId]);
+  assert.equal(revoked[0].result,true,"company owner can revoke its active member");
+  await db.unsafe("reset role");
+  await setIdentity(invitedAuthUserId,"ci-invited-buyer@example.test");
+  await db.unsafe("set role authenticated");
+  const revokedScope=await db.unsafe("select public.current_customer_id() as customer_id,public.current_customer_can('orders.read') as can_read");
+  assert.equal(revokedScope[0].customer_id,null,"revocation removes active company scope");
+  assert.equal(revokedScope[0].can_read,false);
+  assert.equal((await db.unsafe("select id from public.orders where id=$1",[memberOrderId])).length,0,"revoked member loses order visibility");
+  process.stdout.write("PASS company membership: hash-only invitations, email-bound single-use acceptance, tenant isolation, buyer/finance capabilities, checkout linkage and revocation\n");
+
   process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle and pricing-rule CRUD semantics.\n");
 }
 
 try {
   await main();
+} catch (cause) {
+  const error = cause && typeof cause === "object" ? cause : { message: String(cause) };
+  const diagnostic = Object.fromEntries(
+    ["name", "message", "code", "severity", "detail", "hint", "position", "where", "schema", "table", "column", "constraint", "file", "line", "routine", "actual", "expected", "operator", "stack"]
+      .filter((key) => key in error)
+      .map((key) => [key, error[key]]),
+  );
+  process.stderr.write("DATABASE_ACCEPTANCE_FAILED " + JSON.stringify(diagnostic) + "\\n");
+  throw cause;
 } finally {
   await db.end({ timeout: 5 });
 }

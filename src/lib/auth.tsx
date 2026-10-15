@@ -88,7 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(), password,
-        options: { emailRedirectTo: `${window.location.origin}/login`, data: { full_name: fullName.trim() } },
+        options: {
+          // Keep the verified invitation token through email confirmation; redirects are limited to this fixed in-app path.
+          emailRedirectTo: window.location.pathname === '/company/accept-invitation' && new URLSearchParams(window.location.search).has('token')
+            ? `${window.location.origin}${window.location.pathname}${window.location.search}`
+            : `${window.location.origin}/login`,
+          data: { full_name: fullName.trim() },
+        },
       });
       if (error) throw new Error(translateAuthError(error.message));
       if (data.session) await refresh();
