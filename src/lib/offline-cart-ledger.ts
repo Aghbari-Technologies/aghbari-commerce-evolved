@@ -351,16 +351,21 @@ export function readOfflineCartLedger(
     .sort(compareRecords);
   const checkpoints = records.filter((record): record is CheckpointRecord => record.kind === "checkpoint");
   // Prefer the most advanced checkpoint if concurrent tabs produce the same logical timestamp.
+  // Prefer the checkpoint containing the largest incorporated journal set.
+  // A later but partial concurrent checkpoint must not hide a richer checkpoint.
   const checkpoint = checkpoints.sort((left, right) =>
-    right.created_at - left.created_at ||
     right.applied_ids.length - left.applied_ids.length ||
+    right.created_at - left.created_at ||
     right.id.localeCompare(left.id)
   )[0];
   let lines = checkpoint ? [...checkpoint.lines] : [...seed.lines];
   const applied = new Set<string>(checkpoint?.applied_ids ?? []);
   const signatures: Record<string, string> = { ...(checkpoint?.applied_signatures ?? {}) };
   let operationsSinceCheckpoint = 0;
-  let latestMutationAt = checkpoint?.created_at ?? 0;
+  let latestMutationAt = checkpoints.reduce(
+    (latest, item) => Math.max(latest, item.created_at),
+    checkpoint?.created_at ?? 0,
+  );
 
   for (const record of records) {
     if (record.kind === "seed" || record.kind === "checkpoint") continue;
@@ -502,14 +507,44 @@ export function compactOfflineCartLedger(
   };
   storage.setItem(operationKey(scopeKey, checkpoint.id), JSON.stringify(checkpoint));
 
-  const entries = listOperationRecords(storage, scopeKey);
-  for (const entry of entries) {
+  const currentIds = new Set(current.applied_mutation_ids);
+  const currentSignatures = current.applied_mutation_signatures;
+  const checkpointCoversCurrent = (candidate: CheckpointRecord): boolean => {
+    if (!candidate.applied_ids.every((id) => currentIds.has(id))) return false;
+    for (const [id, candidateSignature] of Object.entries(candidate.applied_signatures ?? {})) {
+      const currentSignature = currentSignatures[id];
+      if (currentSignature && currentSignature !== candidateSignature) return false;
+    }
+    return true;
+  };
+
+  // Concurrent tabs may leave partial checkpoints with different applied-ID sets.
+  // Keep any checkpoint not fully represented by our snapshot; removing it could lose
+  // the only surviving materialization of an operation whose journal record was removed.
+  for (const entry of listOperationRecords(storage, scopeKey)) {
     const record = entry.record;
-    if (!record || record.id === checkpoint.id || record.kind === "seed" || record.kind === "checkpoint") continue;
-    // Remove only operations proven to be incorporated into this checkpoint.
-    // Concurrent writes discovered after the snapshot must remain replayable regardless of timestamp.
-    if (current.applied_mutation_ids.includes(record.id)) storage.removeItem(entry.key);
+    if (!record || record.id === checkpoint.id || record.kind !== "checkpoint") continue;
+    if (checkpointCoversCurrent(record)) storage.removeItem(entry.key);
   }
+
+  // Re-read after checkpoint pruning. An operation is safe to delete only when every
+  // retained checkpoint includes its ID (and no available signature contradicts it).
+  const retainedCheckpoints = listOperationRecords(storage, scopeKey)
+    .map((entry) => entry.record)
+    .filter((record): record is CheckpointRecord => record?.kind === "checkpoint");
+  for (const entry of listOperationRecords(storage, scopeKey)) {
+    const record = entry.record;
+    if (!record || record.kind === "seed" || record.kind === "checkpoint") continue;
+    if (!currentIds.has(record.id)) continue;
+    const coveredByEveryCheckpoint = retainedCheckpoints.every((item) => {
+      if (!item.applied_ids.includes(record.id)) return false;
+      const checkpointSignature = item.applied_signatures?.[record.id];
+      const mutationSignatureValue = currentSignatures[record.id];
+      return !checkpointSignature || !mutationSignatureValue || checkpointSignature === mutationSignatureValue;
+    });
+    if (coveredByEveryCheckpoint) storage.removeItem(entry.key);
+  }
+
   const compacted = readOfflineCartLedger(storage, scopeKey, current.lines);
   return compacted;
 }

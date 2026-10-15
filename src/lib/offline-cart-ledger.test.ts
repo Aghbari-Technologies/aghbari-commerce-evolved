@@ -21,7 +21,7 @@ class MemoryStorage implements LocalStorageLike {
 }
 
 class RacingStorage extends MemoryStorage {
-  onCheckpoint: (() => void) | null = null;
+  onCheckpoint: ((checkpoint: Record<string, unknown>) => void) | null = null;
   private injected = false;
 
   setItem(key: string, value: string) {
@@ -31,7 +31,7 @@ class RacingStorage extends MemoryStorage {
     if (!this.injected && record && typeof record === "object" &&
         (record as { kind?: unknown }).kind === "checkpoint" && this.onCheckpoint) {
       this.injected = true;
-      this.onCheckpoint();
+      this.onCheckpoint(record as Record<string, unknown>);
     }
   }
 }
@@ -152,6 +152,56 @@ describe("scoped durable offline cart mutation journal", () => {
     const compacted = compactOfflineCartLedger(storage, scope);
     expect(compacted.lines).toEqual([{ product_id: "p1", quantity: 5 }]);
     expect(compacted.applied_mutation_ids).toContain("concurrent-adjust");
+  });
+
+  it("retains mutations represented by competing partial checkpoints during compaction", () => {
+    const storage = new RacingStorage();
+    const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
+    appendOfflineCartMutation(storage, scope, {
+      id: "initial-operation",
+      kind: "adjust",
+      product_id: "p1",
+      delta: 1,
+    });
+
+    storage.onCheckpoint = (checkpoint) => {
+      const checkpointTime = Number(checkpoint.created_at);
+      // A second tab finished a checkpoint from a different snapshot: this one contains
+      // only its own new operation. Its timestamp is later, but its applied-ID set is partial.
+      storage.setItem(
+        getOfflineCartLedgerPrefix(scope) + "op:" + encodeURIComponent("concurrent-operation"),
+        JSON.stringify({
+          version: 1,
+          scope_key: scope,
+          id: "concurrent-operation",
+          kind: "adjust",
+          product_id: "p2",
+          delta: 4,
+          created_at: checkpointTime,
+        }),
+      );
+      storage.setItem(
+        getOfflineCartLedgerPrefix(scope) + "op:" + encodeURIComponent("racing-checkpoint"),
+        JSON.stringify({
+          version: 1,
+          scope_key: scope,
+          id: "racing-checkpoint",
+          kind: "checkpoint",
+          created_at: checkpointTime + 10,
+          lines: [{ product_id: "p2", quantity: 4 }],
+          applied_ids: ["concurrent-operation"],
+        }),
+      );
+    };
+
+    const compacted = compactOfflineCartLedger(storage, scope);
+    expect(compacted.lines).toEqual([
+      { product_id: "p2", quantity: 4 },
+      { product_id: "p1", quantity: 1 },
+    ]);
+    expect(compacted.applied_mutation_ids).toContain("initial-operation");
+    expect(compacted.applied_mutation_ids).toContain("concurrent-operation");
+    expect(storage.getItem(getOfflineCartLedgerPrefix(scope) + "op:" + encodeURIComponent("initial-operation"))).not.toBeNull();
   });
 
   it("rejects reuse of a compacted mutation ID with a different payload", () => {
