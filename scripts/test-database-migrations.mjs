@@ -1344,6 +1344,14 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(invitedAuthUserId,"ci-invited-buyer@example.test");
   await db.unsafe("set role authenticated");
+  const identityContext=await db.unsafe("select auth.uid() as auth_id,public.current_profile_id() as profile_id,public.current_organization_id() as current_org,(select p.organization_id from public.profiles p where p.auth_user_id=auth.uid()) as profile_org");
+  assert.equal(identityContext[0].auth_id,invitedAuthUserId,"the test JWT must resolve to the invited authentication ID");
+  assert.equal(identityContext[0].profile_id,invitedProfileId,"the invited identity must resolve to its intended profile");
+  await db.unsafe("reset role");
+  const invitationContext=await db.unsafe("select i.organization_id as invitation_org,c.organization_id as customer_org,p.organization_id as member_profile_org from public.customer_company_invitations i join public.customers c on c.id=i.customer_id cross join public.profiles p where i.id=$1 and p.id=$2",[invite.invitation_id,invitedProfileId]);
+  assert.equal(invitationContext[0].invitation_org,invitationContext[0].customer_org,"invitation must retain its owning customer's organization");
+  assert.equal(invitationContext[0].member_profile_org,invitationContext[0].invitation_org,"new member profile and invitation must share the same organization before acceptance");
+  await db.unsafe("set role authenticated");
   const accepted=await db.unsafe("select public.accept_customer_company_invitation($1::text) as result",[invite.invitation_token]);
   assert.equal(accepted[0].result.company_name,"CI Company One");
   assert.equal(accepted[0].result.member_role,"buyer");
