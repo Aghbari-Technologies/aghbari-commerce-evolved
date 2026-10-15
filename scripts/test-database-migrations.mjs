@@ -1404,6 +1404,15 @@ async function main() {
 
 try {
   await main();
+} catch (cause) {
+  const error = cause && typeof cause === "object" ? cause : { message: String(cause) };
+  const diagnostic = Object.fromEntries(
+    ["name", "message", "code", "severity", "detail", "hint", "position", "where", "schema", "table", "column", "constraint", "file", "line", "routine", "actual", "expected", "operator", "stack"]
+      .filter((key) => key in error)
+      .map((key) => [key, error[key]]),
+  );
+  process.stderr.write("DATABASE_ACCEPTANCE_FAILED " + JSON.stringify(diagnostic) + "\\n");
+  throw cause;
 } finally {
   await db.end({ timeout: 5 });
 }
