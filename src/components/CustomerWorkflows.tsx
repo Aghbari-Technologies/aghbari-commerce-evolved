@@ -683,6 +683,7 @@ function Statement() {
     () => summarizeAccount(invoices as InvoiceAmount[], payments),
     [invoices, payments],
   );
+  const statementMayBePartial = invoices.length >= 200 || payments.length >= 500;
   return (
     <WorkspaceShell title="كشف الحساب" subtitle="ملخص من الفواتير والمدفوعات المسجلة فقط.">
       <div
@@ -705,6 +706,11 @@ function Statement() {
           {!totals.valid && (
             <p role="alert" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
               تعذر احتساب أرصدة الحساب بدقة؛ توجد قيمة مالية غير صالحة في البيانات. لم تُعرض كصفر.
+            </p>
+          )}
+          {statementMayBePartial && (
+            <p role="status" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
+              تنبيه اكتمال البيانات: يعرض هذا الملخص أحدث 200 فاتورة و500 دفعة كحد أقصى؛ قد لا تمثل الأرقام إجمالي السجل الكامل.
             </p>
           )}
           <div
