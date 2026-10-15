@@ -443,6 +443,7 @@ describe("customer quote workspace tenant boundary", () => {
       expect(args).toEqual({ p_invoice_id: invoiceId });
       return {
         data: {
+          amounts_visible: true,
           invoice: {
             id: invoiceId,
             invoice_number: "INV-UI-001",
