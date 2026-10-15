@@ -2233,8 +2233,13 @@ function Offline() {
         throw new Error("بنية النسخة الاحتياطية غير صالحة.");
       }
       const record = payload as Record<string, unknown>;
-      if (record.schema !== "aghbari.offline-cart-draft" || record.version !== 1 || !Array.isArray(record.lines)) {
-        throw new Error("نوع النسخة أو إصدارها غير مدعوم.");
+      if (record.schema !== "aghbari.offline-cart-draft" || record.version !== 2 ||
+          typeof record.scope_marker !== "string" || !Array.isArray(record.lines)) {
+        throw new Error("نوع النسخة أو إصدارها غير مدعوم؛ أعد تصدير المسودة من الحساب الحالي.");
+      }
+      const expectedScopeMarker = createStableOfflineCartMutationId("backup-scope", cartScopeKey);
+      if (record.scope_marker !== expectedScopeMarker) {
+        throw new Error("هذه النسخة الاحتياطية لا تنتمي إلى الحساب والمتجر الحاليين؛ لم تتغير المسودة.");
       }
       if (record.lines.length < 1 || record.lines.length > 200) {
         throw new Error("يجب أن تحتوي النسخة على صنف واحد إلى 200 صنف.");
@@ -2344,7 +2349,8 @@ function Offline() {
       );
       const payload = {
         schema: "aghbari.offline-cart-draft",
-        version: 1,
+        version: 2,
+        scope_marker: createStableOfflineCartMutationId("backup-scope", cartScopeKey),
         exported_at: new Date().toISOString(),
         line_count: ledger.lines.length,
         total_units: ledger.lines.reduce((sum, line) => sum + line.quantity, 0),

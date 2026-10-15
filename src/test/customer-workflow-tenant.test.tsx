@@ -18,6 +18,7 @@ import { createOfflineCartScopeKey,
   readOfflineCartLedger,
   getOfflineCartLedgerPrefix,
   getOfflineCatalogSyncTimestampKey,
+  createStableOfflineCartMutationId,
 } from "@/lib/offline-cart-ledger";
 
 const mocks = vi.hoisted(() => ({
@@ -775,7 +776,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       });
       const backup = JSON.parse(backupText);
       expect(backup.schema).toBe("aghbari.offline-cart-draft");
-      expect(backup.version).toBe(1);
+      expect(backup.version).toBe(2);
+      expect(backup.scope_marker).toBe(createStableOfflineCartMutationId("backup-scope", catalogScope));
       expect(backup.lines).toEqual([{
         product_id: "product-offline-2",
         item_code: "000126",
@@ -822,7 +824,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(restoreInput).toBeDefined();
     const invalidBackup = JSON.stringify({
       schema: "aghbari.offline-cart-draft",
-      version: 1,
+      version: 2,
+      scope_marker: createStableOfflineCartMutationId("backup-scope", catalogScope),
       lines: [{ product_id: "other-tenant-product", quantity: 5, base_price: 999999 }],
     });
     const fakeInvalidFile = {
@@ -843,7 +846,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     // again to prove the stable restore mutation ID prevents duplicate quantities.
     const backupPayload = JSON.stringify({
       schema: "aghbari.offline-cart-draft",
-      version: 1,
+      version: 2,
+      scope_marker: createStableOfflineCartMutationId("backup-scope", catalogScope),
       exported_at: "2026-10-16T00:00:00.000Z",
       lines: [{
         product_id: "product-offline-2",
