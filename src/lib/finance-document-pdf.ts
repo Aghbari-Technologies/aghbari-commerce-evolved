@@ -2,7 +2,6 @@ import fontkit from "@pdf-lib/fontkit";
 import { drawArabicText } from "naqqash/pdf-lib";
 import {
   PDFDocument,
-  StandardFonts,
   rgb,
   type PDFPage,
   type PDFFont,
