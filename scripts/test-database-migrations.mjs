@@ -369,6 +369,35 @@ async function main() {
   );
   await db.unsafe("reset role");
 
+  // AGH-PRICE-PRIVACY-001: finance-only accountant must not trigger the operational base-price branch.
+  const accountantPriceProductId = "a1000000-0000-0000-0000-000000000099";
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'Accountant tier-boundary fixture','CI-PRICE-ACCOUNTANT-01','unit',99000,'active') on conflict(id) do nothing",
+    [accountantPriceProductId,organizationId],
+  );
+  await db.unsafe(
+    "insert into public.product_prices(product_id,tier,price,min_quantity,is_active) values($1,'retail',1234,1,true) on conflict(product_id,tier,min_quantity) do update set price=excluded.price,is_active=true",
+    [accountantPriceProductId],
+  );
+  await setIdentity(accountantAuthUserId, "ci-accountant@example.test");
+  await db.unsafe("set role authenticated");
+  const accountantStaffCapability = await db.unsafe("select public.is_staff() as is_staff");
+  assert.equal(accountantStaffCapability[0].is_staff,false,"accountant is a finance-only role, not operational staff");
+  const accountantTierPrice = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[accountantPriceProductId],1],
+  );
+  assert.equal(accountantTierPrice.length,1,"an active accountant can still see the allowed storefront unit price");
+  assert.equal(accountantTierPrice[0].product_id,accountantPriceProductId);
+  assert.equal(Number(accountantTierPrice[0].unit_price),1234,
+    "accountant receives the server-resolved retail price, not the product's 99,000 base price");
+  await expectFailure(
+    "accountant cannot invoke operational customer tier price preview",
+    () => db.unsafe("select public.preview_customer_tier_price($1::uuid,$2::uuid,$3::numeric)", [customerOneId,accountantPriceProductId,1]),
+    /active staff role required/i,
+  );
+  await db.unsafe("reset role");
+
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
 
