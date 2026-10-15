@@ -233,9 +233,6 @@ async function main() {
   await db.unsafe("set role authenticated");
   const staffCompanyContacts=await db.unsafe("select public.list_customer_contacts($1::uuid) as contacts",[customerOneId]);
   assert.equal(staffCompanyContacts[0].contacts.length,1,"active staff can read contacts for a selected customer in the same organization");
-  await expectFailure("staff cannot read contacts for a foreign organization",
-    ()=>db.unsafe("select public.list_customer_contacts($1::uuid)",[foreignProfileId]),
-    /outside the current organization|customer is outside|42501/i);
   await db.unsafe("reset role");
 
   const accountantProfileId = "f5555555-5555-4555-8555-555555555555";
@@ -262,6 +259,19 @@ async function main() {
     "insert into public.user_roles(profile_id,role) values($1,'customer') on conflict(profile_id,role) do nothing",
     [foreignProfileId],
   );
+  await db.unsafe(
+    \`insert into public.customers(
+       organization_id,profile_id,customer_code,business_name,contact_name,phone,email,tier,credit_limit,current_balance,status,approved_at
+     ) values($1,$2,'CI-CUST-FOREIGN','Foreign CI Customer','Foreign Contact','7773333333','foreign-ci-customer@example.test','retail',0,0,'approved',now())
+     on conflict (organization_id,customer_code) do nothing\`,
+    [otherOrganizationId, foreignProfileId],
+  );
+  const foreignCustomerRows = await db.unsafe(
+    "select id from public.customers where organization_id=$1 and profile_id=$2",
+    [otherOrganizationId, foreignProfileId],
+  );
+  assert.equal(foreignCustomerRows.length,1,"foreign customer fixture must be available for tenant boundary checks");
+  const foreignCustomerId = foreignCustomerRows[0].id;
   await db.unsafe(
     `insert into public.products(id,organization_id,name,item_code,unit,base_price,status)
       values($1,$2,'Foreign product','CI-FOREIGN-01','unit',1,'active')
@@ -294,6 +304,14 @@ async function main() {
       on conflict (organization_id,key) do update set value=excluded.value`,
     [organizationId],
   );
+
+  await db.unsafe("reset role");
+  await setIdentity(operationsStaffAuthUserId,"ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure("staff cannot read contacts for a foreign organization",
+    ()=>db.unsafe("select public.list_customer_contacts($1::uuid)",[foreignCustomerId]),
+    /outside the current organization|customer is outside|42501/i);
+  await db.unsafe("reset role");
 
   await db.unsafe("set role anon");
   const publicScopeRows = await db.unsafe("select public.get_public_storefront_context() as scope");
