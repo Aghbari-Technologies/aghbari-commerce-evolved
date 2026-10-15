@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   classifyOutboxProcessResult,
@@ -5,6 +7,16 @@ import {
 } from "../../supabase/functions/outbox-worker/logic";
 
 describe("outbox worker logical RPC result handling", () => {
+  it("keeps the Edge worker retry failure path connected to the tested sanitizer", async () => {
+    const source = await readFile(
+      resolve(process.cwd(), "supabase/functions/outbox-worker/index.ts"),
+      "utf8",
+    );
+    expect(source).toMatch(/import\s*\{[^}]*sanitizeOutboxErrorMessage[^}]*\}\s*from\s*["']\.\/logic\.ts["']/s);
+    expect(source).toContain("sanitizeOutboxErrorMessage(error)");
+    expect(source).not.toMatch(/\bsafeErrorMessage\s*\(/);
+  });
+
   it.each([
     [{ status: "processed" }, "processed"],
     [{ status: "already_processed" }, "processed"],
