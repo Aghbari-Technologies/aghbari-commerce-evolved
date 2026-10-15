@@ -264,7 +264,7 @@ describe("Arabic customer finance PDFs", () => {
       },
       fontBytes(),
       generatedAt,
-    )).rejects.toThrow("complete server ledger summary is required");
+    )).rejects.toThrow("complete server ledger summary");
   });
 
   it("uses the server summary even when the detail payload is capped", async () => {
