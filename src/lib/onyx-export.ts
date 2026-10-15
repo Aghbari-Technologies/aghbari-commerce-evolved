@@ -59,8 +59,18 @@ function columnName(index: number): string {
   return result;
 }
 
-function finiteNonNegative(value: number): number | '' {
-  return Number.isFinite(value) && value >= 0 ? value : '';
+function finiteNonNegative(value: unknown, fieldLabel: string): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error('لا يمكن تصدير أونكس: قيمة ' + fieldLabel + ' غير صالحة.');
+  }
+  return parsed;
+}
+
+function positiveQuantity(value: unknown): number {
+  const quantity = finiteNonNegative(value, 'الكمية');
+  if (quantity <= 0) throw new Error('لا يمكن تصدير أونكس: يجب أن تكون كمية كل بند أكبر من صفر.');
+  return quantity;
 }
 
 function cellXml(reference: string, value: CellValue): string {
@@ -189,8 +199,8 @@ export function buildOnyxDetailRows(input: OnyxOrderWorkbookInput): CellValue[][
   return [
     [...ONYX_ORDER_COLUMNS],
     ...input.items.map((item) => {
-      const quantity = finiteNonNegative(Number(item.approved_quantity ?? item.quantity));
-      const price = finiteNonNegative(Number(item.approved_unit_price ?? item.unit_price_snapshot));
+      const quantity = positiveQuantity(item.approved_quantity ?? item.quantity);
+      const price = finiteNonNegative(item.approved_unit_price ?? item.unit_price_snapshot, 'سعر الوحدة');
       return [
         String(item.item_code ?? ''),
         String(item.product_name_snapshot ?? ''),

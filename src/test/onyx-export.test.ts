@@ -91,6 +91,28 @@ describe('Onyx order workbook draft', () => {
     expect(detailXml).toContain('سكر برازيلي');
   });
 
+  it('rejects invalid quantities and prices instead of emitting blank accounting cells', () => {
+    expect(() => buildOnyxDetailRows({
+      ...order,
+      items: [{ ...order.items[0], approved_quantity: -1 }],
+    })).toThrow('قيمة الكمية غير صالحة');
+
+    expect(() => buildOnyxDetailRows({
+      ...order,
+      items: [{ ...order.items[0], approved_quantity: 0 }],
+    })).toThrow('كمية كل بند أكبر من صفر');
+
+    expect(() => buildOnyxDetailRows({
+      ...order,
+      items: [{ ...order.items[0], approved_unit_price: Number.NaN }],
+    })).toThrow('قيمة سعر الوحدة غير صالحة');
+
+    expect(() => buildOnyxDetailRows({
+      ...order,
+      items: [{ ...order.items[0], approved_unit_price: -0.01 }],
+    })).toThrow('قيمة سعر الوحدة غير صالحة');
+  });
+
   it('rejects empty exports and sanitizes filenames', () => {
     expect(() => buildOnyxOrderWorkbook({ ...order, items: [] })).toThrow('بلا أصناف');
     expect(onyxOrderWorkbookFilename('ORD/001 2026')).toBe('Aghbari-Onyx-ORD-001-2026.xlsx');
