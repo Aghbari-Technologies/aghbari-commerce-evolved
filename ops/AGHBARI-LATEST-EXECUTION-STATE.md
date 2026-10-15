@@ -1,5 +1,13 @@
 # Aghbari Commerce — Latest Execution State
 
+## Verified offline catalog cache privacy subgate
+
+- **Code SHA:** `fc7e44c9fc55b191ea4b9aad5ca9b5063ca51be1`.
+- **Exact-SHA CI:** [run 38698194334](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38698194334) **SUCCESS**, including unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
+- `OfflineWorkspacePage` now runs `sanitizePublicCatalogCache()` both when loading/re-writing an existing `aghbari:catalog:v1` cache and before saving fresh `fetchProducts()` sync results. The new route regression seeds unsafe legacy staff cache data and a fresh broad staff product response, then verifies cost/tier prices, reserved/threshold stock fields and internal notes are absent from localStorage.
+- This is cache route/jsdom + exact-SHA CI evidence; not production/live-browser proof. Keep `AGH-SEC-BROWSER-E2E-001` OPEN and `AGH-PRICE-PRIVACY-001` PARTIAL pending real-browser and complete channel proof.
+
+---
 ## Active subgate — sanitize the offline catalog cache on read and write
 
 - At verified base SHA `950174047f0ef34f53cd7cc4ccec0f0599bade46`, exact-SHA CI [38697641746](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697641746) passed all gates.
