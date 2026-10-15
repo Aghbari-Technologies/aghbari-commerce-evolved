@@ -66,6 +66,16 @@ describe("outbox worker logical RPC result handling", () => {
   });
 
   it("rejects oversized and malformed declared content lengths before reading", async () => {
+    const validDeclaredLength = new Request("https://worker.example", {
+      method: "POST",
+      body: "json",
+      headers: { "content-length": "4" },
+    });
+    await expect(readBoundedRequestBody(validDeclaredLength, 4)).resolves.toEqual({
+      ok: true,
+      text: "json",
+    });
+
     const tooLarge = {
       headers: new Headers({ "content-length": "4097" }),
       body: null,
