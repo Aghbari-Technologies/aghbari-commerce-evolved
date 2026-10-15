@@ -129,41 +129,77 @@ describe('commerce completion utilities', () => {
 
   it('calculates totals only from persisted invoice and payment records', () => {
     expect(summarizeAccount(
-      [{ id: 'i1', total_amount: '125.50' }, { id: 'i2', total_amount: 50 }],
+      [
+        { id: 'i1', total_amount: '125.50', currency: 'YER' },
+        { id: 'i2', total_amount: 50, currency: 'YER' },
+      ],
       [{ invoice_id: 'i1', amount: '25.50' }, { invoice_id: 'i1', amount: 10 }],
-    )).toEqual({ valid: true, invoiced: 175.5, paid: 35.5, outstanding: 140 });
+    )).toEqual({
+      valid: true,
+      currencies: [{ currency: 'YER', invoiced: 175.5, paid: 35.5, outstanding: 140 }],
+    });
   });
 
   it('excludes void invoices from the account balance', () => {
     expect(summarizeAccount(
-      [{ id: 'live', total_amount: 100 }, { id: 'void', total_amount: 500, status: 'void' }],
+      [
+        { id: 'live', total_amount: 100, currency: 'YER' },
+        { id: 'void', total_amount: 500, currency: 'YER', status: 'void' },
+      ],
       [{ invoice_id: 'live', amount: 20 }, { invoice_id: 'void', amount: 500 }],
-    )).toEqual({ valid: true, invoiced: 100, paid: 20, outstanding: 80 });
+    )).toEqual({
+      valid: true,
+      currencies: [{ currency: 'YER', invoiced: 100, paid: 20, outstanding: 80 }],
+    });
+  });
+
+  it('groups mixed-currency invoice balances separately instead of adding unlike currencies', () => {
+    expect(summarizeAccount(
+      [
+        { id: 'yer-1', total_amount: '100.00', currency: 'YER' },
+        { id: 'usd-1', total_amount: '20.00', currency: 'USD' },
+      ],
+      [
+        { invoice_id: 'yer-1', amount: '30.00' },
+        { invoice_id: 'usd-1', amount: '5.00' },
+      ],
+    )).toEqual({
+      valid: true,
+      currencies: [
+        { currency: 'USD', invoiced: 20, paid: 5, outstanding: 15 },
+        { currency: 'YER', invoiced: 100, paid: 30, outstanding: 70 },
+      ],
+    });
   });
 
   it('uses exact minor-unit arithmetic across many decimal payments', () => {
     const payments = Array.from({ length: 100 }, () => ({ invoice_id: 'i1', amount: '0.10' }));
-    expect(summarizeAccount([{ id: 'i1', total_amount: '10.00' }], payments)).toEqual({
-      valid: true, invoiced: 10, paid: 10, outstanding: 0,
+    expect(summarizeAccount([{ id: 'i1', total_amount: '10.00', currency: 'YER' }], payments)).toEqual({
+      valid: true,
+      currencies: [{ currency: 'YER', invoiced: 10, paid: 10, outstanding: 0 }],
     });
     expect(summarizeInvoiceAmounts(
-      { id: 'i1', total_amount: '10.00' }, payments,
-    )).toEqual({ valid: true, total: 10, paid: 10, outstanding: 0 });
+      { id: 'i1', total_amount: '10.00', currency: 'YER' }, payments,
+    )).toEqual({ valid: true, currency: 'YER', total: 10, paid: 10, outstanding: 0 });
   });
 
-  it('marks malformed monetary fields unavailable rather than treating them as zero', () => {
+  it('marks malformed money or currency unavailable rather than treating it as zero or YER', () => {
     expect(summarizeAccount(
-      [{ id: 'i1', total_amount: 'not-a-number' }],
+      [{ id: 'i1', total_amount: 'not-a-number', currency: 'YER' }],
       [],
-    )).toEqual({ valid: false, invoiced: 0, paid: 0, outstanding: 0 });
+    )).toEqual({ valid: false, currencies: [] });
     expect(summarizeAccount(
-      [{ id: 'i1', total_amount: '10.00' }],
+      [{ id: 'i1', total_amount: '10.00', currency: 'YER' }],
       [{ invoice_id: 'i1', amount: '' }],
-    )).toEqual({ valid: false, invoiced: 0, paid: 0, outstanding: 0 });
+    )).toEqual({ valid: false, currencies: [] });
+    expect(summarizeAccount(
+      [{ id: 'i1', total_amount: '10.00', currency: '' }],
+      [],
+    )).toEqual({ valid: false, currencies: [] });
     expect(summarizeInvoiceAmounts(
-      { id: 'i1', total_amount: '10.00' },
+      { id: 'i1', total_amount: '10.00', currency: 'YER' },
       [{ invoice_id: 'i1', amount: 'NaN' }],
-    )).toEqual({ valid: false, total: 0, paid: 0, outstanding: 0 });
+    )).toEqual({ valid: false, currency: '', total: 0, paid: 0, outstanding: 0 });
   });
 
   it('rejects malformed, duplicate, fractional, and unbounded offline cart lines', () => {
