@@ -51,6 +51,11 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import { routeTree } from "@/routeTree.gen";
+import {
+  appendOfflineCartMutation,
+  createOfflineCartScopeKey,
+  readOfflineCartLedger,
+} from "@/lib/offline-cart-ledger";
 
 type Mount = { root: Root; host: HTMLDivElement; active: boolean };
 const mounts: Mount[] = [];
@@ -114,6 +119,43 @@ describe("customer storefront saved discovery", () => {
     expect(empty.host.textContent).toContain("لا توجد أصناف منشورة حالياً");
     expect(empty.host.textContent).toContain("لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً");
     expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
+  });
+
+  it("isolates durable cart drafts by profile after the legacy cart is claimed", async () => {
+    mocks.user = { profileId: "profile-a", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    const first = await mountAt("/cart");
+    expect(first.host.textContent).toContain("Rice");
+    const owner = window.localStorage.getItem("aghbari:cart-owner:v1");
+    expect(owner).toContain("profile-a");
+    await unmount(first);
+
+    mocks.user = { profileId: "profile-b", roles: ["customer"], name: "Other Buyer" };
+    const second = await mountAt("/cart");
+    expect(second.host.textContent).not.toContain("Rice");
+    expect(second.host.textContent).toContain("سلتك فارغة");
+  });
+
+  it("keeps unavailable scoped draft lines visible and blocks checkout instead of silently dropping them", async () => {
+    mocks.user = { profileId: "profile-a", roles: ["customer"], name: "CI Buyer" };
+    const scope = createOfflineCartScopeKey("profile-a", window.location.origin);
+    readOfflineCartLedger(window.localStorage, scope, []);
+    appendOfflineCartMutation(window.localStorage, scope, {
+      id: "known-and-unresolved",
+      kind: "merge",
+      lines: [
+        { product_id: "product-1", quantity: 2 },
+        { product_id: "missing-offline-product", quantity: 3 },
+      ],
+    });
+    const cart = await mountAt("/cart");
+    expect(cart.host.textContent).toContain("صنف محفوظ غير متاح");
+    expect(cart.host.textContent).toContain("missing-offline-product");
+    expect(cart.host.textContent).toContain("لن يُرسل طلب جزئي");
+    const checkoutButton = Array.from(cart.host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("راجع الأصناف غير المتاحة"));
+    expect(checkoutButton).toBeDefined();
+    expect(checkoutButton?.disabled).toBe(true);
   });
 
   it("keeps cart amounts hidden when the server policy is off", async () => {

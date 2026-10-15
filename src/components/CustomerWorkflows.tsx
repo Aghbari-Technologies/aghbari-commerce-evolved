@@ -34,6 +34,17 @@ import {
   type PaymentAmount,
 } from "@/lib/commerce-utils";
 import { fetchProducts, fetchResolvedProductPrices } from "@/lib/api";
+import {
+  appendOfflineCartMutation,
+  compactOfflineCartLedger,
+  createOfflineCartMutationId,
+  createOfflineCartScopeKey,
+  getOfflineCartLedgerPrefix,
+  getOfflineCatalogCacheKey,
+  readLegacyCartDraftForScope,
+  readOfflineCartLedger,
+  writeLegacyCartOwner,
+} from "@/lib/offline-cart-ledger";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
 
@@ -1269,6 +1280,11 @@ export function ReorderWorkspacePage() {
 }
 function Reorder() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === "undefined" ? "server-render" : window.location.origin,
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [templates, setTemplates] = useState<ReorderTemplate[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -1367,10 +1383,16 @@ function Reorder() {
       return;
     }
     try {
-      localStorage.setItem("aghbari:cart-restore:v1", JSON.stringify(draft));
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل نقل قالب إعادة الطلب إلى السلة.");
+      appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "merge",
+        lines: draft,
+      }, []);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
       void navigate({ to: "/" });
-    } catch {
-      setError("تعذر حفظ السلة على هذا الجهاز.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "تعذر حفظ مسودة إعادة الطلب على هذا الجهاز.");
     }
     setBusy(false);
   }
@@ -1495,6 +1517,11 @@ export function BarcodeWorkspacePage() {
   );
 }
 function Barcode() {
+  const { user } = useAuth();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === "undefined" ? "server-render" : window.location.origin,
+  );
   const [value, setValue] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
   const [error, setError] = useState("");
@@ -1616,13 +1643,17 @@ function Barcode() {
   async function add() {
     if (!product) return;
     try {
-      localStorage.setItem(
-        "aghbari:cart-restore:v1",
-        JSON.stringify([{ product_id: product.id, quantity: 1 }]),
-      );
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل إضافة الصنف إلى سلتك.");
+      appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "adjust",
+        product_id: product.id,
+        delta: 1,
+      }, []);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
       void navigate({ to: "/" });
-    } catch {
-      setError("تعذر حفظ الصنف في السلة على هذا الجهاز.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "تعذر حفظ الصنف في سجل السلة المحلي.");
     }
   }
   return (
@@ -1879,6 +1910,11 @@ export function OfflineWorkspacePage() {
   );
 }
 function Offline() {
+  const { user } = useAuth();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === "undefined" ? "server-render" : window.location.origin,
+  );
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [cached, setCached] = useState(0);
   const [cartCount, setCartCount] = useState(0);
@@ -1889,25 +1925,24 @@ function Offline() {
       let safeCatalog = [];
       try {
         safeCatalog = sanitizePublicCatalogCache(
-          JSON.parse(localStorage.getItem("aghbari:catalog:v1") || "[]"),
+          JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
         );
       } catch {
-        localStorage.removeItem("aghbari:catalog:v1");
+        localStorage.removeItem(getOfflineCatalogCacheKey(cartScopeKey));
       }
       // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
-      localStorage.setItem("aghbari:catalog:v1", JSON.stringify(safeCatalog));
+      localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
       setCached(safeCatalog.length);
-      setCartCount(
-        normalizeCartDraft(JSON.parse(localStorage.getItem("aghbari:cart:v1") || "[]")).reduce(
-          (s, l) => s + l.quantity,
-          0,
-        ),
-      );
+      const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, safeCatalog.map((product) => product.id));
+      const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
     } catch {
       setCached(0);
       setCartCount(0);
     }
-  }, []);
+  }, [cartScopeKey]);
   useEffect(() => {
     const on = () => setOnline(true),
       off = () => setOnline(false);
@@ -1928,7 +1963,7 @@ function Offline() {
     setMessage("");
     try {
       const rows = sanitizePublicCatalogCache(await fetchProducts());
-      localStorage.setItem("aghbari:catalog:v1", JSON.stringify(rows));
+      localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(rows));
       refresh();
       setMessage(
         "تم تحديث نسخة الكتالوج المحلية من الخادم: " +
@@ -1943,19 +1978,20 @@ function Offline() {
   }
   function queue() {
     try {
-      const lines = normalizeCartDraft(JSON.parse(localStorage.getItem("aghbari:cart:v1") || "[]"));
-      if (!lines.length) {
-        setMessage("السلة فارغة.");
-        return;
-      }
-      localStorage.setItem("aghbari:cart:v1", JSON.stringify(lines));
+      const catalog = sanitizePublicCatalogCache(JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"));
+      const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, catalog.map((product) => product.id));
+      const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
+      const compacted = compactOfflineCartLedger(localStorage, cartScopeKey, ledger.lines);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartCount(compacted.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(
-        "تم حفظ مسودة السلة على هذا الجهاز (" +
-          lines.length +
-          " صنف). لن يُرسل الطلب أو يؤكد السعر قبل عودة الاتصال.",
+        "تم حفظ ومراجعة مسودة السلة المحلية (" +
+          compacted.lines.length +
+          " صنف). هذه عملية محلية فقط؛ لن يُرسل الطلب أو يُعتمد السعر دون تحقق الخادم عند عودة الاتصال.",
       );
-    } catch {
-      setMessage("تعذر حفظ مسودة السلة المحلية.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "تعذر حفظ مسودة السلة المحلية بأمان.");
     }
   }
   return (
