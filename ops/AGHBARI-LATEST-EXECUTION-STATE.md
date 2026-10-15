@@ -1,15 +1,17 @@
 # Aghbari Commerce — Latest Execution State
 
-## Active batch — AGH-FINANCE-DOCS-001: payment over-limit UI regression coverage (PR #34; verification pending)
+## Verified batch — AGH-FINANCE-DOCS-001: payment over-limit UI regression coverage (PR #34)
 
-- **Starting main SHA:** `aa71dc4ee9f17fcbae2197f6f9c29b3f3fd123e8` (PR #34 base SHA).
-- **Implementation/test SHA:** `0376356722511f6da38a29e29f1684ea43978575`; PR [#34](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/34) is open and not merged.
-- **Changed path:** `src/components/CustomerWorkflows.finance.test.tsx`.
-- **Assertions added:** an entered payment of 75.01 is rejected when the remaining invoice balance is 75.00 and `record_customer_payment` must not be called; a payment equal to 75.00 is allowed to reach that RPC.
-- **Verification status:** the GitHub connector returned no combined-status entries and no PR-triggered workflow runs for `0376356722511f6da38a29e29f1684ea43978575` at checkpoint time. Therefore the new test, lint and build are **PENDING**, not PASS. Do not merge this branch or transfer earlier SHA evidence to it until Actions for this exact SHA is visible and successful.
-- **Important distinction:** existing isolated PostgreSQL acceptance already contains server-side overpayment rejection assertions in `scripts/test-database-migrations.mjs`; the new test is a jsdom component regression test, not real authenticated-browser or production evidence.
-- **Still open in AGH-FINANCE-DOCS-001:** exact-SHA CI, server-generated Arabic invoice PDF, authorized real-browser test and production Supabase verification. Current UI `window.print()` is not server-generated PDF. No production database was changed and Lovable sync is not proven.
-- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL**. Keep this task open and continue its uncompleted PDF/browser gates; do not open a duplicate ledger.
+- **Main base SHA:** `aa71dc4ee9f17fcbae2197f6f9c29b3f3fd123e8`.
+- **Exact tested PR SHA:** `2835e1b7be5b2271cc3ce2d68dedc06ae10f8bca`; PR [#34](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/34) remains open pending merge.
+- **Exact-SHA Actions:** [run 38747410147](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38747410147) **SUCCESS** on `2835e1b7be5b2271cc3ce2d68dedc06ae10f8bca`: Unit tests, isolated PostgreSQL 17 migrations/workflow acceptance, lint, build and dev-server smoke test on port 5173 all completed successfully.
+- **Changed path:** `src/components/CustomerWorkflows.finance.test.tsx` plus this checkpoint, `ops/AGHBARI-DEVELOPMENT-PROGRESS.md`, and `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+- **Regression covered:** payment greater than the remaining balance is rejected before `record_customer_payment`; payment equal to the remaining balance is submitted to the RPC. Test uses React DOM APIs and does not introduce an undeclared testing-library dependency.
+- **Scope limit:** this is a component/jsdom regression test, not authenticated live-browser or production finance proof. Existing isolated PostgreSQL acceptance separately rejects overpayment. Current invoice/statement buttons call `window.print()`; this is browser print-to-PDF, not server-generated Arabic PDF.
+- **Still open under AGH-FINANCE-DOCS-001:** server-generated Arabic PDF, authenticated live-browser proof, and the intended production database verification. No production DB was changed. Public Lovable root and login routes respond; direct `/invoices`, `/statement`, and `/admin/finance` currently return 404 from external fetch, so deployed deep-route availability/synchronization requires follow-up verification.
+- **Lovable synchronization:** repository says pushes to the connected branch synchronize; this test run proves GitHub branch CI only, not the live editor/deployment SHA. Do not mark sync proven without direct evidence.
+- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL**; continue the server-PDF/browser gaps without creating a parallel ledger.
+
 
 ---
 
