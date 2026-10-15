@@ -29,12 +29,8 @@ import {
   matchesArabicCatalogSearch,
   normalizeCartDraft,
   sanitizePublicCatalogCache,
-  summarizeAccount,
-  summarizeInvoiceAmounts,
-  isCustomerStatementPossiblyPartial,
   summarizeCustomerInvoiceStatuses,
   summarizeCustomerOrderStatuses,
-  type InvoiceAmount,
   type PaymentAmount,
 } from "@/lib/commerce-utils";
 import { fetchProducts, fetchResolvedProductPrices } from "@/lib/api";
@@ -53,7 +49,101 @@ type Invoice = {
   subtotal?: number | string;
   tax_amount?: number | string;
   total_amount?: number | string;
+  paid_amount?: number | string;
+  outstanding_amount?: number | string;
 };
+type AccountStatementCurrencyTotal = {
+  currency: string;
+  invoiced: number | string;
+  paid: number | string;
+  outstanding: number | string;
+  invoice_count: number;
+};
+type AccountStatementSummary = {
+  invoice_count: number;
+  payment_count: number;
+  totals_by_currency: AccountStatementCurrencyTotal[];
+};
+type AccountStatementPayload = {
+  invoices: Invoice[];
+  payments: (PaymentAmount & { id?: string; paid_at: string })[];
+  summary: AccountStatementSummary;
+};
+function isAccountStatementMoney(value: unknown): value is number | string {
+  if (typeof value !== "number" && typeof value !== "string") return false;
+  const raw = typeof value === "number" ? String(value) : value.trim();
+  if (!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)) return false;
+  return Number.isFinite(Number(raw)) && Number(raw) >= 0;
+}
+function validateAccountStatementPayload(payload: unknown): AccountStatementPayload {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("استجابة كشف الحساب غير صالحة.");
+  }
+  const candidate = payload as Partial<AccountStatementPayload>;
+  const invoices = candidate.invoices;
+  const payments = candidate.payments;
+  const summary = candidate.summary;
+  if (
+    !Array.isArray(invoices) ||
+    !Array.isArray(payments) ||
+    invoices.length > 200 ||
+    payments.length > 500 ||
+    !summary ||
+    !Number.isSafeInteger(summary.invoice_count) ||
+    summary.invoice_count < invoices.length ||
+    !Number.isSafeInteger(summary.payment_count) ||
+    summary.payment_count < payments.length ||
+    !Array.isArray(summary.totals_by_currency)
+  ) {
+    throw new Error("تعذر التحقق من إجماليات كشف الحساب الكامل. تحقق من تطبيق ترحيل المالية الأخير.");
+  }
+
+  const currencies = new Set<string>();
+  for (const total of summary.totals_by_currency) {
+    if (
+      !total ||
+      typeof total.currency !== "string" ||
+      !/^[A-Za-z]{3}$/.test(total.currency) ||
+      !Number.isSafeInteger(total.invoice_count) ||
+      total.invoice_count < 0 ||
+      !isAccountStatementMoney(total.invoiced) ||
+      !isAccountStatementMoney(total.paid) ||
+      !isAccountStatementMoney(total.outstanding)
+    ) {
+      throw new Error("تحتوي إجماليات كشف الحساب على قيمة غير صالحة؛ لم تُعرض كصفر.");
+    }
+    const currency = total.currency.toUpperCase();
+    if (currencies.has(currency)) throw new Error("تكرر رمز العملة في إجماليات كشف الحساب.");
+    currencies.add(currency);
+  }
+  for (const invoice of invoices) {
+    if (
+      !invoice ||
+      typeof invoice.id !== "string" ||
+      typeof invoice.invoice_number !== "string" ||
+      typeof invoice.status !== "string" ||
+      typeof invoice.issued_at !== "string" ||
+      typeof invoice.currency !== "string" ||
+      !/^[A-Za-z]{3}$/.test(invoice.currency) ||
+      !isAccountStatementMoney(invoice.total_amount) ||
+      !isAccountStatementMoney(invoice.paid_amount) ||
+      !isAccountStatementMoney(invoice.outstanding_amount)
+    ) {
+      throw new Error("تحتوي تفاصيل إحدى الفواتير على بيانات مالية ناقصة أو غير صالحة.");
+    }
+  }
+  for (const payment of payments) {
+    if (
+      !payment ||
+      typeof payment.invoice_id !== "string" ||
+      typeof payment.paid_at !== "string" ||
+      !isAccountStatementMoney(payment.amount)
+    ) {
+      throw new Error("تحتوي تفاصيل الدفعات على بيانات ناقصة أو غير صالحة.");
+    }
+  }
+  return { invoices, payments, summary };
+}
 type InvoiceLine = {
   id: string;
   item_code: string | null;
@@ -660,7 +750,8 @@ function formatAccountMoney(value: number | string, currency: string): string {
 }
 function Statement() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [payments, setPayments] = useState<(PaymentAmount & { paid_at?: string })[]>([]);
+  const [payments, setPayments] = useState<(PaymentAmount & { paid_at: string })[]>([]);
+  const [summary, setSummary] = useState<AccountStatementSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -668,17 +759,22 @@ function Statement() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const r = await supabase.rpc("get_customer_account_statement");
-    if (r.error) setError("تعذر قراءة كشف الحساب. تحقق من نشر مخطط المالية.");
-    else {
-      const payload = (r.data ?? {}) as {
-        invoices?: Invoice[];
-        payments?: (PaymentAmount & { id?: string; paid_at?: string })[];
-      };
-      setInvoices(payload.invoices ?? []);
-      setPayments(payload.payments ?? []);
+    setSummary(null);
+    try {
+      const r = await supabase.rpc("get_customer_account_statement");
+      if (r.error) throw new Error("تعذر قراءة كشف الحساب. تحقق من نشر مخطط المالية.");
+      const payload = validateAccountStatementPayload(r.data);
+      setInvoices(payload.invoices);
+      setPayments(payload.payments);
+      setSummary(payload.summary);
+    } catch (cause) {
+      setInvoices([]);
+      setPayments([]);
+      setSummary(null);
+      setError(cause instanceof Error ? cause.message : "تعذر التحقق من كشف الحساب.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
   const downloadStatementPdf = useCallback(async () => {
     setPdfBusy(true);
@@ -735,11 +831,9 @@ function Statement() {
   useEffect(() => {
     void load();
   }, [load]);
-  const totals = useMemo(
-    () => summarizeAccount(invoices as InvoiceAmount[], payments),
-    [invoices, payments],
+  const statementMayBePartial = Boolean(
+    summary && (summary.invoice_count > invoices.length || summary.payment_count > payments.length),
   );
-  const statementMayBePartial = isCustomerStatementPossiblyPartial(invoices.length, payments.length);
   return (
     <WorkspaceShell title="كشف الحساب" subtitle="ملخص من الفواتير والمدفوعات المسجلة فقط.">
       <div
@@ -759,20 +853,25 @@ function Statement() {
         <p role="status">جارٍ تحميل كشف الحساب...</p>
       ) : (
         <>
-          {!totals.valid && (
+          {!summary && (
             <p role="alert" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
-              تعذر احتساب أرصدة الحساب بدقة؛ توجد قيمة مالية غير صالحة في البيانات. لم تُعرض كصفر.
+              لا يمكن عرض أرصدة محسوبة من تفاصيل محدودة؛ لم يُعرض أي إجمالي حتى يُثبت ملخص الدفتر الكامل.
+            </p>
+          )}
+          {summary && (
+            <p role="status" style={{ ...quiet, marginBottom: 12 }}>
+              السجل الكامل: {formatNumber(summary.invoice_count)} فاتورة و{formatNumber(summary.payment_count)} دفعة.
             </p>
           )}
           {statementMayBePartial && (
             <p role="status" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
-              تنبيه اكتمال البيانات: يعرض هذا الملخص أحدث 200 فاتورة و500 دفعة كحد أقصى؛ قد لا تمثل الأرقام إجمالي السجل الكامل.
+              تفاصيل العرض محدودة بأحدث 200 فاتورة و500 دفعة. إجماليات الأرصدة أدناه محسوبة خادميًا من كامل دفتر العميل.
             </p>
           )}
-          {totals.valid ? (
-            totals.currencies.length ? (
+          {summary ? (
+            summary.totals_by_currency.length ? (
               <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
-                {totals.currencies.map((currencyBalance) => (
+                {summary.totals_by_currency.map((currencyBalance) => (
                   <section key={currencyBalance.currency} style={card}>
                     <h3 style={{ margin: "0 0 12px", color: "#087f8d" }}>
                       ملخص الرصيد بعملة {currencyBalance.currency}
@@ -821,16 +920,20 @@ function Statement() {
               </thead>
               <tbody>
                 {invoices.map((i) => {
-                  const balance = summarizeInvoiceAmounts(i as InvoiceAmount, payments);
+                  const rowValid =
+                    isAccountStatementMoney(i.total_amount) &&
+                    isAccountStatementMoney(i.paid_amount) &&
+                    isAccountStatementMoney(i.outstanding_amount) &&
+                    typeof i.currency === "string";
                   return (
                     <tr key={i.id} style={{ borderTop: "1px solid #edf2f3" }}>
                       <td style={{ padding: 12 }}>{formatDateShort(i.issued_at)}</td>
                       <td>
                         <strong>{i.invoice_number}</strong>
                       </td>
-                      <td>{balance.valid ? formatAccountMoney(balance.total, balance.currency) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatAccountMoney(balance.paid, balance.currency) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatAccountMoney(balance.outstanding, balance.currency) : "غير متاح"}</td>
+                      <td>{rowValid ? formatAccountMoney(i.total_amount!, i.currency) : "غير متاح"}</td>
+                      <td>{rowValid ? formatAccountMoney(i.paid_amount!, i.currency) : "غير متاح"}</td>
+                      <td>{rowValid ? formatAccountMoney(i.outstanding_amount!, i.currency) : "غير متاح"}</td>
                       <td>
                         {i.status === "paid"
                           ? "مدفوعة"
@@ -845,9 +948,11 @@ function Statement() {
                 })}
               </tbody>
             </table>
-            {!invoices.length && <p style={{ padding: 14 }}>لا توجد حركات مالية مسجلة.</p>}
+            {!invoices.length && <p style={{ padding: 14 }}>لا توجد فواتير ضمن أحدث التفاصيل المعادة.</p>}
           </section>
-          <p style={quiet}>عدد الدفعات المسجلة: {payments.length}.</p>
+          <p style={quiet}>
+            الدفعات المعروضة: {formatNumber(payments.length)} من أصل {formatNumber(summary?.payment_count ?? 0)} دفعة في السجل الكامل.
+          </p>
         </>
       )}
     </WorkspaceShell>
