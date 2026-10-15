@@ -15,6 +15,10 @@ import {
   Banknote,
   Wifi,
   WifiOff,
+  MapPin,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { Login } from "@/components/Login";
 import { useAuth } from "@/lib/auth";
@@ -32,6 +36,7 @@ import {
   type PaymentAmount,
 } from "@/lib/commerce-utils";
 import { fetchProducts } from "@/lib/api";
+import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 
 type Invoice = {
   id: string;
@@ -151,6 +156,7 @@ const secondary: React.CSSProperties = {
   cursor: "pointer",
 };
 const links = [
+  ["/addresses", "عناوين التوصيل"],
   ["/invoices", "الفواتير"],
   ["/statement", "كشف الحساب"],
   ["/quotes", "عروض الأسعار"],
@@ -2104,4 +2110,126 @@ export function StaffFinancePage() {
       )}
     </section>
   );
+}
+
+
+export function CustomerAddressesPage() {
+  const { user, ready } = useAuth();
+  if (!ready) return <WorkspaceShell title="عناوين التوصيل" subtitle="جارٍ التحقق من الحساب"><p role="status">جارٍ التحقق من جلسة الحساب...</p></WorkspaceShell>;
+  if (!user) return <Login />;
+  if (user.isStaff) return <WorkspaceShell title="عناوين التوصيل" subtitle="مساحة حساب العميل"><ErrorBox message="هذه الشاشة مخصصة لحساب العميل. استخدم ملف العميل في لوحة الإدارة للوصول إلى العناوين وفق صلاحيتك." /></WorkspaceShell>;
+  return <CustomerAddresses />;
+}
+
+const EMPTY_ADDRESS: CustomerAddressInput = {
+  id: null, label: "", recipient_name: "", phone: "", address_line1: "",
+  address_line2: "", city: "", region: "", postal_code: "", country: "YE",
+  delivery_instructions: "", is_default: false,
+};
+
+function CustomerAddresses() {
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [draft, setDraft] = useState<CustomerAddressInput>({ ...EMPTY_ADDRESS });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try { setAddresses(await fetchCustomerAddresses()); }
+    catch (e) { setError(e instanceof Error ? e.message : "تعذر تحميل عناوين التوصيل."); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  function edit(a: CustomerAddress) {
+    setError(""); setNotice("");
+    setDraft({ id:a.id,label:a.label,recipient_name:a.recipient_name,phone:a.phone,
+      address_line1:a.address_line1,address_line2:a.address_line2 ?? "",city:a.city,
+      region:a.region ?? "",postal_code:a.postal_code ?? "",country:a.country,
+      delivery_instructions:a.delivery_instructions ?? "",is_default:a.is_default });
+  }
+  function reset() { setDraft({ ...EMPTY_ADDRESS }); setError(""); }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || loading) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await saveCustomerAddress(draft);
+      setNotice(draft.id ? "تم تحديث العنوان في الحساب." : "تم حفظ عنوان التوصيل في الحساب.");
+      reset(); await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذر حفظ العنوان."); }
+    finally { setSaving(false); }
+  }
+  async function remove(a: CustomerAddress) {
+    if (deleting || saving || !window.confirm("هل تريد حذف العنوان «" + a.label + "»؟")) return;
+    setDeleting(a.id); setError(""); setNotice("");
+    try {
+      await deleteCustomerAddress(a.id);
+      setNotice("تم حذف العنوان وتعيين عنوان رئيسي بديل عند الحاجة.");
+      if (draft.id === a.id) reset();
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذر حذف العنوان."); }
+    finally { setDeleting(null); }
+  }
+
+  const inputStyle: React.CSSProperties = { ...field, marginTop: 6 };
+  const set = (key: keyof CustomerAddressInput, value: string | boolean) => setDraft(d => ({ ...d, [key]: value }));
+  return <WorkspaceShell title="عناوين التوصيل" subtitle="احفظ عناوين شركتك ومواقع الاستلام. يستخرج الخادم حساب العميل وصلاحياته ولا يقبل هوية العميل أو المؤسسة من المتصفح.">
+    {error && <ErrorBox message={error} retry={() => void load()} />}
+    {notice && <div role="status" style={{ ...card, borderColor:"#a8d7c0", color:"#17684d", marginBottom:14 }}>{notice}</div>}
+    <section style={{ ...card, marginBottom:18 }}>
+      <h2 style={{ margin:"0 0 14px",fontSize:19,display:"flex",alignItems:"center",gap:8 }}>
+        {draft.id ? <Pencil size={18}/> : <Plus size={18}/>} {draft.id ? "تعديل عنوان التوصيل" : "إضافة عنوان توصيل"}
+      </h2>
+      <form onSubmit={submit}>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12 }}>
+          <label>اسم العنوان<input style={inputStyle} value={draft.label} onChange={e=>set("label",e.target.value)} maxLength={50} required /></label>
+          <label>اسم المستلم<input style={inputStyle} value={draft.recipient_name} onChange={e=>set("recipient_name",e.target.value)} minLength={2} maxLength={120} autoComplete="name" required /></label>
+          <label>رقم الهاتف<input style={inputStyle} type="tel" dir="auto" value={draft.phone} onChange={e=>set("phone",e.target.value)} minLength={7} maxLength={32} autoComplete="tel" required /></label>
+          <label>المدينة<input style={inputStyle} value={draft.city} onChange={e=>set("city",e.target.value)} minLength={2} maxLength={100} autoComplete="address-level2" required /></label>
+          <label>العنوان التفصيلي<input style={inputStyle} value={draft.address_line1} onChange={e=>set("address_line1",e.target.value)} minLength={3} maxLength={180} autoComplete="street-address" required /></label>
+          <label>تفاصيل إضافية<input style={inputStyle} value={draft.address_line2 ?? ""} onChange={e=>set("address_line2",e.target.value)} maxLength={180} /></label>
+          <label>المحافظة / المنطقة<input style={inputStyle} value={draft.region ?? ""} onChange={e=>set("region",e.target.value)} maxLength={100} autoComplete="address-level1" /></label>
+          <label>الرمز البريدي<input style={inputStyle} value={draft.postal_code ?? ""} onChange={e=>set("postal_code",e.target.value)} maxLength={24} autoComplete="postal-code" /></label>
+          <label>رمز الدولة<input style={inputStyle} value={draft.country} onChange={e=>set("country",e.target.value)} minLength={2} maxLength={2} autoComplete="country" required /></label>
+          <label style={{ gridColumn:"1/-1" }}>تعليمات للمندوب (اختياري)<textarea style={{ ...inputStyle,minHeight:76,resize:"vertical" }} value={draft.delivery_instructions ?? ""} onChange={e=>set("delivery_instructions",e.target.value)} maxLength={1000} /></label>
+        </div>
+        <label style={{ display:"flex",alignItems:"center",gap:8,marginTop:14,fontWeight:750 }}>
+          <input type="checkbox" checked={draft.is_default} onChange={e=>set("is_default",e.target.checked)} /> اجعل هذا العنوان هو العنوان الرئيسي للتوصيل
+        </label>
+        <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:16 }}>
+          <button style={primary} type="submit" disabled={saving || loading}><Save size={16}/>{saving ? "جارٍ الحفظ..." : draft.id ? "حفظ التعديلات" : "حفظ العنوان"}</button>
+          {draft.id && <button style={secondary} type="button" disabled={saving} onClick={reset}>إلغاء التعديل</button>}
+        </div>
+      </form>
+    </section>
+    <section style={{ ...card,padding:0,overflow:"hidden" }}>
+      <header style={{ display:"flex",flexWrap:"wrap",alignItems:"center",justifyContent:"space-between",gap:12,padding:16,borderBottom:"1px solid #edf2f3" }}>
+        <h2 style={{ margin:0,fontSize:18 }}><MapPin size={18} style={{ verticalAlign:"middle",marginInlineEnd:6 }}/>العناوين المحفوظة</h2>
+        <button type="button" style={secondary} onClick={()=>void load()} disabled={loading}><RefreshCw size={15}/> تحديث</button>
+      </header>
+      {loading ? <p role="status" style={{ padding:18 }}>جارٍ تحميل العناوين...</p> :
+       addresses.length === 0 ? <EmptyBox><MapPin size={30}/><p>لا توجد عناوين محفوظة بعد.</p><p style={quiet}>أضف عنوانًا لتسهيل تجهيز الطلبات والتوصيل لاحقًا.</p></EmptyBox> :
+       <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:12,padding:14 }}>
+         {addresses.map(a=><article key={a.id} style={{ ...card,padding:16,borderColor:a.is_default ? "#83c8bc" : "#e0ecee" }}>
+           <div style={{ display:"flex",justifyContent:"space-between",gap:10 }}>
+             <div><h3 style={{ margin:0,fontSize:17 }}>{a.label}</h3>{a.is_default && <span style={{ display:"inline-block",marginTop:6,padding:"3px 8px",borderRadius:20,background:"#e8f7f1",color:"#17684d",fontSize:12,fontWeight:800 }}>العنوان الرئيسي</span>}</div><MapPin size={18} aria-hidden="true"/>
+           </div>
+           <p style={{ margin:"12px 0 4px",fontWeight:800 }}>{a.recipient_name}</p>
+           <p dir="auto" style={{ margin:"0 0 4px",color:"#516b70" }}>{a.phone}</p>
+           <p style={{ margin:"0 0 4px" }}>{a.address_line1}{a.address_line2 ? "، " + a.address_line2 : ""}</p>
+           <p style={{ margin:"0 0 4px",color:"#516b70" }}>{[a.city,a.region,a.postal_code].filter(Boolean).join("، ")}</p>
+           {a.delivery_instructions && <p style={{ ...quiet,margin:"8px 0 0" }}>تعليمات: {a.delivery_instructions}</p>}
+           <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:14 }}>
+             <button type="button" style={secondary} onClick={()=>edit(a)} disabled={saving || Boolean(deleting)}><Pencil size={14}/> تعديل</button>
+             <button type="button" style={{ ...secondary,color:"#9b2626" }} onClick={()=>void remove(a)} disabled={Boolean(deleting) || saving}><Trash2 size={14}/>{deleting === a.id ? "جارٍ الحذف..." : "حذف"}</button>
+           </div>
+         </article>)}
+       </div>}
+    </section>
+  </WorkspaceShell>;
 }

@@ -123,3 +123,12 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Code SHA `fc7e44c9fc55b191ea4b9aad5ca9b5063ca51be1`; exact-head CI [38698194334](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38698194334) **SUCCESS** across unit tests, isolated PostgreSQL 17 acceptance, lint, build and port-5173 smoke.
 - `OfflineWorkspacePage` uses the existing allowlist `sanitizePublicCatalogCache()` before writing fresh sync rows and whenever hydrating/re-writing the legacy cache. `src/test/customer-workflow-tenant.test.tsx` simulates unsafe prior staff cache and fresh staff results with cost/tier prices, reservation/reorder fields, and internal notes, asserting those fields do not persist.
 - Evidence remains route/jsdom + CI, not a live authenticated browser or production DB certification. `AGH-SEC-BROWSER-E2E-001` remains OPEN; price privacy remains PARTIAL until live browser and the remaining API/RPC/cache/export paths are reviewed.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: customer address book and motion preference
+
+- Added `src/routes/addresses.tsx` and the RTL-responsive customer account screen inside the existing `CustomerWorkflows` shell. Customers can list, add, edit and delete addresses; success notices require server RPC confirmation.
+- Added `src/lib/customer-addresses.ts` with field validation and RPC-only writes. Customer/tenant identifiers are intentionally not accepted from the browser.
+- Added migration `supabase/migrations/20261015130000_customer_address_book.sql`: owner-scoped RLS, direct-write revocation, server-derived identity, audited mutations, and serialized one-default behavior.
+- Added `src/test/customer-addresses.test.ts` and isolated PostgreSQL regressions in `scripts/test-database-migrations.mjs` for data projection, invalid input, false-success prevention, direct write denial, cross-customer isolation, default promotion and audit trail.
+- Added `prefers-reduced-motion: reduce` global policy and included `/addresses` in the CI dev-server smoke matrix.
+- Exact-SHA CI for this feature is pending. No production migration or live authenticated browser test was performed; checkout address snapshots and company-member screens remain open.
