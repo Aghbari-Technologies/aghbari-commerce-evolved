@@ -300,6 +300,38 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await db.unsafe("set role authenticated");
+
+  const scopeRows = await db.unsafe("select public.get_current_tenant_context() as scope");
+  const scope = scopeRows[0].scope;
+  assert.equal(scope.profile_id, staffProfileId, "tenant context must resolve the authenticated profile on the server");
+  assert.equal(scope.organization_id, organizationId, "tenant context must resolve the profile's organization on the server");
+  if (scope.warehouse_id) {
+    const scopedWarehouse = await db.unsafe(
+      "select id from public.warehouses where id=$1 and organization_id=$2",
+      [scope.warehouse_id, organizationId],
+    );
+    assert.equal(scopedWarehouse.length, 1, "default warehouse must belong to the authenticated organization");
+  }
+
+  const foreignProductsVisible = await db.unsafe(
+    "select id from public.products where id=$1",
+    [otherProductId],
+  );
+  assert.equal(foreignProductsVisible.length, 0, "staff must not read another organization's products even when legacy permissive policies exist");
+  const foreignCustomersVisible = await db.unsafe(
+    "select id from public.customers where organization_id=$1",
+    [otherOrganizationId],
+  );
+  assert.equal(foreignCustomersVisible.length, 0, "staff must not read another organization's customers");
+  await expectFailure(
+    "staff cannot create a product in another organization",
+    () => db.unsafe(
+      "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'Foreign staff insert','CI-STAFF-FOREIGN-01','unit',1,'active')",
+      ["a1111111-1111-4111-8111-111111111113", otherOrganizationId],
+    ),
+    /row-level security|policy/i,
+  );
+
   await db.unsafe(
     "select public.respond_to_sales_quote($1::uuid,$2::jsonb,$3,$4::timestamptz)",
     [firstQuoteId, db.json([{ item_id: firstQuoteItems[0].id, unit_price: 12345 }]), "CI quote priced", new Date(Date.now() + 86400000).toISOString()],
