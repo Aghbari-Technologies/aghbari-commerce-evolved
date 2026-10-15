@@ -82,7 +82,10 @@ describe("product write result verification", () => {
     });
     mocks.rpc.mockImplementation(async (name: string, args: { p_product_id: string | null }) => {
       if (name !== "fetch_staff_products") throw new Error("Unexpected RPC " + name);
-      return mocks.rpcResult.data.filter((product) => product.id === args.p_product_id);
+      return {
+        data: mocks.rpcResult.data.filter((product) => product.id === args.p_product_id),
+        error: null,
+      };
     });
   });
 
