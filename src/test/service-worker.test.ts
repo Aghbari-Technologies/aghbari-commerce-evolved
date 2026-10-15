@@ -285,11 +285,9 @@ describe("Aghbari PWA offline shell", () => {
     });
     const [response] = await Promise.all(pending);
     expect(await response.text()).toBe("new build asset");
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(worker.cacheDeleteAsset).toHaveBeenCalledTimes(2));
 
     expect(worker.cacheKeys).toHaveBeenCalled();
-    expect(worker.cacheDeleteAsset).toHaveBeenCalledTimes(2);
     expect((worker.cacheDeleteAsset.mock.calls[0][0] as { url: string }).url)
       .toBe("https://aghbari.example/assets/old-0.js");
   });
