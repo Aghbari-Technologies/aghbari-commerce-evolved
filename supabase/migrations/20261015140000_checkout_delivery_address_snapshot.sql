@@ -113,6 +113,11 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='تعذر التحقق من ملكية الطلب بعد الحفظ';
   END IF;
 
+  IF _delivery_address_id IS NOT NULL
+     AND v_address.customer_id IS DISTINCT FROM v_customer_id THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='عنوان التوصيل لا يتبع سجل العميل المرتبط بالطلب';
+  END IF;
+
   IF v_replay THEN
     -- An old no-address retry can be safely initialized; an existing addressed order may never be
     -- silently rebound to a different or edited address under the same idempotency key.
