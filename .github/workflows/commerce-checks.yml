@@ -84,9 +84,14 @@ jobs:
           SUPABASE_URL: https://ci-placeholder.supabase.co
           SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
         run: |
-          npx nitro preview --dir . --host 127.0.0.1 --port 4173 > /tmp/aghbari-preview.log 2>&1 &
+          npx wrangler dev --config .output/server/wrangler.json --local --ip 127.0.0.1 --port 4173 > /tmp/aghbari-preview.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          if [ ! -f .output/server/index.mjs ] || [ ! -f .output/server/wrangler.json ] || [ ! -f .output/public/manifest.webmanifest ]; then
+            echo "Expected Nitro/Cloudflare production artifacts are missing after build."
+            find .output -maxdepth 3 -type f | sort | head -n 200
+            exit 1
+          fi
           ready=0
           for attempt in $(seq 1 45); do
             status=$(curl --silent --connect-timeout 2 --max-time 5 --output /tmp/aghbari-preview-home.html --write-out "%{http_code}" http://127.0.0.1:4173/ || true)
