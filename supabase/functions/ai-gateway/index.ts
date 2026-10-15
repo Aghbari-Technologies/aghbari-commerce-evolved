@@ -16,7 +16,7 @@ function rates(provider:AiProvider):AiCostRates|null {
 }
 function candidate(provider:AiProvider,model:string,baseUrl:string,fallback:boolean):Candidate|null {
  const key=d?.env.get(provider==="gemini"?"AI_GEMINI_API_KEY":"AI_OPENAI_COMPATIBLE_API_KEY")?.trim(),r=rates(provider);
- if(!key||!r||!model.trim()||!isSafeProviderBaseUrl(baseUrl))return null;
+ if(!key||!r||!model.trim()||!isSafeProviderBaseUrl(baseUrl, provider))return null;
  return {provider,model,baseUrl:baseUrl.replace(/\/+$/,""),key,rates:r,fallback};
 }
 function cleanText(value:string){let out="";for(const c of value){const n=c.charCodeAt(0);if((n<32&&n!==9&&n!==10)||n===127)continue;out+=c;}return out.trim().slice(0,5000);}

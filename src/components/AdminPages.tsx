@@ -150,7 +150,7 @@ export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6 }}>المزود الأساسي
             <select style={field} value={draft.primary_provider} onChange={(e) => patchGateway({ primary_provider: e.target.value as AiGatewayDraft['primary_provider'], primary_base_url: e.target.value === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://api.openai.com/v1' })}>
-              <option value="openai_compatible">OpenAI Compatible / OpenRouter / مزود متوافق</option><option value="gemini">Google Gemini</option>
+              <option value="openai_compatible">OpenAI Compatible: OpenAI / OpenRouter / Groq / Together / DeepSeek / Mistral</option><option value="gemini">Google Gemini</option>
             </select>
           </label>
           <label style={{ display: 'grid', gap: 6 }}>معرف نموذج المزود الأساسي

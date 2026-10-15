@@ -75,12 +75,26 @@ export function estimateCost(inputTokens: number, outputTokens: number, rates: A
   return Number(((input * rates.inputPerThousand + output * rates.outputPerThousand) / 1000).toFixed(6));
 }
 
-/** Block plaintext, userinfo, local hosts and literal IP targets in configured provider endpoints. */
-export function isSafeProviderBaseUrl(value: unknown): value is string {
+/** Only known HTTPS provider hosts may receive server-side provider credentials. */
+const GEMINI_PROVIDER_HOSTS = new Set(["generativelanguage.googleapis.com"]);
+const OPENAI_COMPATIBLE_PROVIDER_HOSTS = new Set([
+  "api.openai.com",
+  "openrouter.ai",
+  "api.openrouter.ai",
+  "api.groq.com",
+  "api.together.xyz",
+  "api.deepseek.com",
+  "api.mistral.ai",
+  "api.perplexity.ai",
+  "api.fireworks.ai",
+  "api.cloudflare.com",
+]);
+
+export function isSafeProviderBaseUrl(value: unknown, provider?: AiProvider): value is string {
   if (typeof value !== "string" || value.length > 500) return false;
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password || url.search || url.hash || url.port) return false;
     const host = url.hostname.toLowerCase().replace(/\.$/, "");
     if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
         host.endsWith(".internal") || host.endsWith(".test") || host.endsWith(".invalid")) return false;
@@ -88,7 +102,12 @@ export function isSafeProviderBaseUrl(value: unknown): value is string {
     if (host.includes("..") || host.startsWith(".") || host.length > 253) return false;
     if (!/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host)) return false;
     if (host.split(".").some((label) => label.length < 1 || label.length > 63 || label.startsWith("-") || label.endsWith("-"))) return false;
-    return true;
+    const approved = provider === "gemini"
+      ? GEMINI_PROVIDER_HOSTS.has(host)
+      : provider === "openai_compatible"
+        ? OPENAI_COMPATIBLE_PROVIDER_HOSTS.has(host)
+        : GEMINI_PROVIDER_HOSTS.has(host) || OPENAI_COMPATIBLE_PROVIDER_HOSTS.has(host);
+    return approved;
   } catch {
     return false;
   }

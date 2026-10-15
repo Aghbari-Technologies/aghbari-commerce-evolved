@@ -40,12 +40,17 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
 
   it("blocks HTTP, userinfo, localhost and private IP provider endpoints", () => {
     for (const url of [
-      "http://api.example.com/v1", "https://user:secret@api.example.com/v1",
+      "http://api.example.com/v1", "https://user:secret@api.openai.com/v1",
       "https://localhost:8443/v1", "https://192.168.1.10/v1",
       "https://service.internal/v1", "https://api.example.com/v1?key=secret",
+      "https://api.example.com/v1", "https://api.openai.com:8443/v1",
     ]) expect(isSafeProviderBaseUrl(url)).toBe(false);
-    expect(isSafeProviderBaseUrl("https://api.openai.com/v1")).toBe(true);
-    expect(isSafeProviderBaseUrl("https://generativelanguage.googleapis.com/v1beta")).toBe(true);
+    expect(isSafeProviderBaseUrl("https://api.openai.com/v1", "openai_compatible")).toBe(true);
+    expect(isSafeProviderBaseUrl("https://openrouter.ai/api/v1", "openai_compatible")).toBe(true);
+    expect(isSafeProviderBaseUrl("https://api.groq.com/openai/v1", "openai_compatible")).toBe(true);
+    expect(isSafeProviderBaseUrl("https://generativelanguage.googleapis.com/v1beta", "gemini")).toBe(true);
+    expect(isSafeProviderBaseUrl("https://generativelanguage.googleapis.com/v1beta", "openai_compatible")).toBe(false);
+    expect(isSafeProviderBaseUrl("https://openrouter.ai/api/v1", "gemini")).toBe(false);
   });
 
   it("parses OpenAI-compatible content and measured token usage", () => {
