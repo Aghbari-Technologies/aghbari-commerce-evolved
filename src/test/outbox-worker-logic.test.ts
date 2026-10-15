@@ -212,6 +212,18 @@ describe("outbox worker logical RPC result handling", () => {
     expect(value).toContain("[secret redacted]");
   });
 
+  it("is idempotent when a transport failure message is sanitized more than once", () => {
+    const once = sanitizeOutboxErrorMessage(
+      "request failed Authorization: Bearer opaque-access-token sk-12345678901234567890 AIza123456789012345678901234567890",
+    );
+    const twice = sanitizeOutboxErrorMessage(once);
+    expect(twice).toBe(once);
+    expect(twice).not.toContain("opaque-access-token");
+    expect(twice).not.toContain("sk-12345678901234567890");
+    expect(twice).not.toContain("AIza123456789012345678901234567890");
+    expect(twice).toContain("[secret redacted]");
+  });
+
   it("provides a bounded, non-empty fallback for unknown worker errors", () => {
     expect(sanitizeOutboxErrorMessage(null)).toBe("Unclassified worker error");
     expect(sanitizeOutboxErrorMessage(new Error("x".repeat(700)))).toHaveLength(500);
