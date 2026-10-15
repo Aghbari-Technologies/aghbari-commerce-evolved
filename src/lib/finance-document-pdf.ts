@@ -76,7 +76,10 @@ function normalizeCurrency(value: unknown): string {
 
 function cleanLabel(value: unknown, maxLength = 70): string {
   if (typeof value !== "string") return "—";
-  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+  const cleaned = Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f ? " " : character;
+  }).join("").trim();
   return cleaned ? cleaned.slice(0, maxLength) : "—";
 }
 
