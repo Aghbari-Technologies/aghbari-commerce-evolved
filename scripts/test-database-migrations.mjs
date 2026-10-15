@@ -142,12 +142,63 @@ async function main() {
     [otherProductId, otherOrganizationId],
   );
 
-  // The original schema seeded one wholesale price break at 10; migration 600 adds a second break.
+  // Public storefront visibility is bound to one configured tenant and cannot expose costs, tiers, or private settings.
+  const foreignWarehouseId = "d1111111-1111-4111-8111-111111111111";
   await db.unsafe(
-    `insert into public.product_prices(product_id,tier,price,min_quantity,is_active)
-      values($1,'wholesale',35000,20,true)`,
-    [productId],
+    "insert into public.warehouses(id,organization_id,name,code,is_active) values($1,$2,'Foreign warehouse','CI-WH-FOREIGN',true) on conflict(id) do nothing",
+    [foreignWarehouseId, otherOrganizationId],
   );
+  await db.unsafe(
+    "insert into public.inventory_balances(product_id,warehouse_id,quantity_on_hand,quantity_reserved) values($1,$2,777,100) on conflict(product_id,warehouse_id) do nothing",
+    [otherProductId, foreignWarehouseId],
+  );
+  await db.unsafe(
+    \`insert into public.admin_settings(organization_id,key,value,category)
+      values ($1,'hero_title',to_jsonb('CI public hero'::text),'storefront'),
+             ($1,'internal_provider_secret',to_jsonb('must-not-leak'::text),'ai')
+      on conflict (organization_id,key) do update set value=excluded.value\`,
+    [organizationId],
+  );
+
+  await db.unsafe("set role anon");
+  const publicScopeRows = await db.unsafe("select public.get_public_storefront_context() as scope");
+  const publicScope = publicScopeRows[0].scope;
+  assert.equal(publicScope.organization_id, organizationId, "anonymous storefront scope must come from server-side publication config");
+  assert.equal(publicScope.warehouse_id, "d0000000-0000-0000-0000-000000000001", "anonymous storefront must use the configured active warehouse");
+
+  const publicProducts = await db.unsafe("select id,organization_id,name,base_price from public.products order by id");
+  assert.ok(publicProducts.some((p) => p.id === productId), "public storefront must read the canonical tenant catalog");
+  assert.ok(publicProducts.every((p) => p.organization_id === organizationId), "anonymous catalog cannot read another organization's products");
+  await expectFailure(
+    "anonymous product reads cannot expose purchase cost",
+    () => db.unsafe("select cost_price from public.products limit 1"),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "anonymous users cannot enumerate customer price tiers",
+    () => db.unsafe("select tier,price from public.product_prices limit 1"),
+    /permission denied/i,
+  );
+
+  const publicInventory = await db.unsafe("select product_id,warehouse_id,quantity_on_hand,quantity_available from public.inventory_balances");
+  assert.ok(publicInventory.every((row) => row.warehouse_id === publicScope.warehouse_id), "anonymous stock visibility must be limited to the configured storefront warehouse");
+  assert.ok(publicInventory.every((row) => row.product_id !== otherProductId), "anonymous stock queries cannot expose foreign products");
+  await expectFailure(
+    "anonymous inventory reads cannot expose reservations and reorder thresholds",
+    () => db.unsafe("select quantity_reserved,reorder_point from public.inventory_balances limit 1"),
+    /permission denied/i,
+  );
+
+  const publicSettingsRows = await db.unsafe("select public.get_public_storefront_settings() as settings");
+  const publicSettings = publicSettingsRows[0].settings;
+  assert.equal(publicSettings.hero_title, "CI public hero", "public storefront settings must include only explicit display keys");
+  assert.equal(Object.hasOwn(publicSettings, "internal_provider_secret"), false, "public storefront settings must not leak private administration settings");
+  await expectFailure(
+    "anonymous users cannot query private admin settings directly",
+    () => db.unsafe("select value from public.admin_settings limit 1"),
+    /permission denied/i,
+  );
+  await db.unsafe("reset role");
 
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
