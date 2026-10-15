@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { classifyOutboxProcessResult } from "./logic.ts";
 
 type WorkerRuntime = {
   env: { get(name: string): string | undefined };
@@ -102,17 +103,29 @@ if (runtime) {
         p_event_id: event.id,
         p_worker: workerId,
       });
-      if (!error) {
-        const result = data as RpcResult | null;
-        if (result?.status === "processed" || result?.status === "already_processed") processed++;
+      const processOutcome = error ? "unexpected" : classifyOutboxProcessResult(data);
+      if (processOutcome === "processed") {
+        processed++;
+        continue;
+      }
+      if (processOutcome === "retry") {
+        retryScheduled++;
+        continue;
+      }
+      if (processOutcome === "dead_letter") {
+        deadLettered++;
         continue;
       }
 
+      // A successful HTTP/RPC envelope with a missing or unknown status is not success.
+      // Persist it as a retry so the event does not remain leased until timeout unnoticed.
       const { data: failureData, error: failureError } = await client.rpc("fail_outbox_event", {
         p_event_id: event.id,
         p_worker: workerId,
-        p_error_class: error.code ?? "dispatch_failed",
-        p_error_message: safeErrorMessage(error.message),
+        p_error_class: error?.code ?? "unexpected_process_result",
+        p_error_message: error
+          ? safeErrorMessage(error.message)
+          : "process_outbox_event returned no recognized status",
       });
       if (failureError) {
         failures++;
