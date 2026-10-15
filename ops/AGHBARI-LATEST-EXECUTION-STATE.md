@@ -1,5 +1,18 @@
 # Aghbari Commerce — Latest Execution State
 
+## Current implementation pointer — 2026-10-15 (Gemini API-key transport hardening)
+
+- **Merged source:** PR [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49) merged to `main` at `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3` from the tested PR head `664d7b361f1ed8f001ef8bb5b53f8c307d5eb361`.
+- **Exact PR-head CI:** [run 38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** for the exact PR-head SHA, including unit tests, isolated PostgreSQL 17 migration/workflow assertions, lint, build, production-artifact smoke and dev-server smoke. Main merge-SHA Actions run [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) was still running at the time of this checkpoint; verify its final conclusion and do not transfer PR-head CI to the merge SHA.
+- **Security change:** Gemini requests now send credentials in `x-goog-api-key`, not the URL query; `buildGeminiRequestConfig` validates the approved Gemini HTTPS host and the model/key, and regression tests assert that no credential appears in URL/search. No real provider key was added or changed.
+- **Changed source paths:** `supabase/functions/ai-gateway/logic.ts`, `supabase/functions/ai-gateway/index.ts`, `src/test/ai-gateway-logic.test.ts`.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Read-only published preview check: the homepage returned the Arabic storefront but showed zero available products; `/invoices`, `/statement` and `/manifest.webmanifest` returned 404. Source/CI success does not prove the live Lovable snapshot has been published. Interactive Lovable session is still needed to publish and read back the deployed SHA; no login credentials are stored in Git or chat.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001` — EXTERNAL.** The intended production ref `ffxxjaolfntzbapmfbuv` remains permission-denied in the available integration. Do not substitute `mrcyqezbhpncuvaehwgf`; no production migrations or writes were performed.
+- **Persistent instructions:** root `AGENTS.md` and `.github/copilot-instructions.md` remain present on the remote branch. They document the repository-level resume contract; live editor/deployment SHA sync is separate and unverified.
+- **Execution host:** no checkout is mounted. The remote ref/files/Actions were read through GitHub APIs; local `git fetch`, `git status`, local branch and local `HEAD` were not executed and remain unavailable.
+
+---
+
 ## Current implementation pointer — 2026-10-15 (pricing boundary and XLSX integrity)
 
 - **Latest verified product-code SHA:** `8e5b706f0f3b17bbef2e5fd62aa96af823bd3b64`; exact main CI [38771897585](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38771897585) **SUCCESS**. Prior state-only HEAD `7585fd02e394fe6db464e3aa2f83303c8ed939c8` also passed exact CI [38772980004](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38772980004). The present state correction creates a new SHA and must be checked separately.

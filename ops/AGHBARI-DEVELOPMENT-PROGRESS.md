@@ -2,6 +2,17 @@
 
 Rule: tests and evidence apply only to the exact SHA recorded with them. The push and Lovable sync are separate acceptance events. The master spec, mandate, registry, project memory and resume prompt are now persisted on main.
 
+## 2026-10-15 — AGH-AI-GATEWAY-001: Gemini API-key URL leakage closed in source
+
+- **PR:** [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49), merged by squash at main SHA `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3`.
+- **Exact tested PR head:** `664d7b361f1ed8f001ef8bb5b53f8c307d5eb361`; Actions run [38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** across unit, isolated PostgreSQL 17 migration/workflow acceptance, lint, build, production-artifact smoke and dev-server smoke.
+- **Changed source paths:** `supabase/functions/ai-gateway/logic.ts`, `supabase/functions/ai-gateway/index.ts`, `src/test/ai-gateway-logic.test.ts`.
+- **Root cause and fix:** Gemini API keys were appended to the request URL. Requests now use `x-goog-api-key`; a shared builder validates the host and required model/key and regression tests confirm an empty URL query and header-only key transport. No real key or external service was contacted by the tests.
+- **Merge verification:** remote `main` was read back as `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3`. Exact main CI run [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) was still in progress at the time this ledger entry was prepared; verify its final result before treating the merge SHA as CI-certified.
+- **Not closed:** `AGH-AI-GATEWAY-001` remains PARTIAL because provider secrets/configuration and live provider connection are not proven. `AGH-SEC-BROWSER-E2E-001` remains the sole `next_task_id`: the published homepage currently shows an empty catalog and public `/invoices`, `/statement`, `/manifest.webmanifest` return 404 despite successful source CI; signed-in Lovable publishing/live SHA readback and authenticated browser checks remain open. `AGH-EXT-SUPABASE-001` remains externally blocked on permission to intended project ref `ffxxjaolfntzbapmfbuv`; no production database was changed.
+- **Host limitation:** the execution environment has no repository checkout, so local Git commands were unavailable; branch, remote SHA, files and Actions were checked through GitHub APIs.
+
+
 ## 2026-10-15 — Remote checkpoint reconciliation after PRs #41–#43
 
 - **Remote `main` before this documentation-only refresh:** `39d2dec8752e973e9661c5564d85309f6df6f73a` (merge PR #43). This metadata commit updates stale checkpoint pointers; fetch live `main` again in the next session.
