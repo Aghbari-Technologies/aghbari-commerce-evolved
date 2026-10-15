@@ -15,6 +15,7 @@ async function loadServiceWorker(overrides: {
   cacheNames?: string[];
   cacheMatch?: (request: Request | string) => Promise<Response | null>;
   cachePut?: (request: Request | string, response: Response) => Promise<void>;
+  cacheOpenFails?: boolean;
   fetcher?: (request: Request) => Promise<Response>;
 } = {}) {
   const source = await readFile(resolve(process.cwd(), "public/sw.js"), "utf8");
@@ -27,7 +28,10 @@ async function loadServiceWorker(overrides: {
   const cacheDelete = vi.fn(async () => true);
   const cacheNames = overrides.cacheNames ?? [];
   const cachesMock = {
-    open: vi.fn(async () => cache),
+    open: vi.fn(async () => {
+      if (overrides.cacheOpenFails) throw new Error("cache storage unavailable");
+      return cache;
+    }),
     keys: vi.fn(async () => cacheNames),
     delete: cacheDelete,
     match: vi.fn(async (request: Request | string) => overrides.cacheMatch?.(request) ?? null),
@@ -205,6 +209,42 @@ describe("Aghbari PWA offline shell", () => {
     });
     const responses = await Promise.all(pending);
     expect(await responses[0].text()).toBe("public build asset");
+  });
+
+  it("fetches a public asset from the network when Cache Storage cannot be opened", async () => {
+    const worker = await loadServiceWorker({
+      cacheOpenFails: true,
+      fetcher: async () => new Response("network asset", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const [response] = await Promise.all(pending);
+    expect(await response.text()).toBe("network asset");
+  });
+
+  it("returns a controlled error response when offline and Cache Storage cannot be opened", async () => {
+    const worker = await loadServiceWorker({
+      cacheOpenFails: true,
+      fetcher: async () => { throw new Error("offline"); },
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const [response] = await Promise.all(pending);
+    expect(response.type).toBe("error");
   });
 
   it("does not cache profile or arbitrary same-origin image URLs by extension", async () => {

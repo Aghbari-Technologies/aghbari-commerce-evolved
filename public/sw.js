@@ -49,8 +49,12 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(async () => {
-        const shellCache = await caches.open(CACHE_NAME);
-        return (await shellCache.match('/')) || Response.error();
+        try {
+          const shellCache = await caches.open(CACHE_NAME);
+          return (await shellCache.match('/')) || Response.error();
+        } catch {
+          return Response.error();
+        }
       }),
     );
     return;
@@ -75,6 +79,6 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
       return network.catch(() => Response.error());
-    }),
+    }).catch(() => fetch(request).catch(() => Response.error())),
   );
 });
