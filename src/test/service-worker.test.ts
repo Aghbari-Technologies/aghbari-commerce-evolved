@@ -13,18 +13,33 @@ type Listener = (event: WorkerEvent | FetchWorkerEvent) => void;
 async function loadServiceWorker(overrides: {
   cacheAdd?: (url: string) => Promise<void>;
   cacheNames?: string[];
+  cacheEntries?: string[];
   cacheMatch?: (request: Request | string) => Promise<Response | null>;
   cachePut?: (request: Request | string, response: Response) => Promise<void>;
+  cacheDeleteAsset?: (request: Request | string) => Promise<boolean>;
   cacheOpenFails?: boolean;
   fetcher?: (request: Request) => Promise<Response>;
 } = {}) {
   const source = await readFile(resolve(process.cwd(), "public/sw.js"), "utf8");
   const listeners = new Map<string, Listener>();
+  let cacheEntryUrls = [...(overrides.cacheEntries ?? [])];
   const cacheAdd = vi.fn(async (url: string) => overrides.cacheAdd?.(url));
-  const cachePut = vi.fn(async (request: Request | string, response: Response) =>
-    overrides.cachePut ? overrides.cachePut(request, response) : undefined);
+  const cachePut = vi.fn(async (request: Request | string, response: Response) => {
+    if (overrides.cachePut) return overrides.cachePut(request, response);
+    const url = typeof request === "string" ? new URL(request, "https://aghbari.example").href : request.url;
+    cacheEntryUrls = cacheEntryUrls.filter((entry) => entry !== url);
+    cacheEntryUrls.push(url);
+  });
   const cacheMatch = vi.fn(async (request: Request | string) => overrides.cacheMatch?.(request) ?? null);
-  const cache = { add: cacheAdd, put: cachePut, match: cacheMatch };
+  const cacheDeleteAsset = vi.fn(async (request: Request | string) => {
+    if (overrides.cacheDeleteAsset) return overrides.cacheDeleteAsset(request);
+    const url = typeof request === "string" ? new URL(request, "https://aghbari.example").href : request.url;
+    const initial = cacheEntryUrls.length;
+    cacheEntryUrls = cacheEntryUrls.filter((entry) => entry !== url);
+    return cacheEntryUrls.length !== initial;
+  });
+  const cacheKeys = vi.fn(async () => cacheEntryUrls.map((url) => ({ url }) as Request));
+  const cache = { add: cacheAdd, put: cachePut, match: cacheMatch, keys: cacheKeys, delete: cacheDeleteAsset };
   const cacheDelete = vi.fn(async () => true);
   const cacheNames = overrides.cacheNames ?? [];
   const cachesMock = {
@@ -57,7 +72,7 @@ async function loadServiceWorker(overrides: {
     console,
   });
 
-  return { listeners, cacheAdd, cachePut, cacheMatch, cachesMock, cacheDelete, skipWaiting, claim };
+  return { listeners, cacheAdd, cachePut, cacheMatch, cacheKeys, cacheDeleteAsset, cachesMock, cacheDelete, skipWaiting, claim };
 }
 
 describe("Aghbari PWA offline shell", () => {
@@ -245,6 +260,38 @@ describe("Aghbari PWA offline shell", () => {
     });
     const [response] = await Promise.all(pending);
     expect(response.type).toBe("error");
+  });
+
+  it("bounds retained public build assets and evicts the oldest entries first", async () => {
+    const entries = Array.from({ length: 121 }, (_, index) =>
+      "https://aghbari.example/assets/old-" + index + ".js",
+    );
+    const worker = await loadServiceWorker({
+      cacheEntries: entries,
+      fetcher: async () => {
+        const response = new Response("new build asset", { status: 200 });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      },
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/new.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const [response] = await Promise.all(pending);
+    expect(await response.text()).toBe("new build asset");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(worker.cacheKeys).toHaveBeenCalled();
+    expect(worker.cacheDeleteAsset).toHaveBeenCalledTimes(2);
+    expect((worker.cacheDeleteAsset.mock.calls[0][0] as { url: string }).url)
+      .toBe("https://aghbari.example/assets/old-0.js");
   });
 
   it("does not cache profile or arbitrary same-origin image URLs by extension", async () => {

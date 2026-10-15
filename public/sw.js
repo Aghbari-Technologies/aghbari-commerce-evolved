@@ -2,6 +2,29 @@
 const CACHE_NAME = 'aghbari-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.ico'];
 
+const MAX_CACHED_BUILD_ASSETS = 120;
+
+/** Cache writes are best-effort; keep hashed build assets bounded as deployments accumulate. */
+async function cachePublicBuildAsset(cache, request, response) {
+  try {
+    await cache.put(request, response);
+    const keys = await cache.keys();
+    const assets = keys.filter((key) => {
+      const cachedUrl = new URL(key.url);
+      return cachedUrl.origin === self.location.origin &&
+        cachedUrl.pathname.startsWith('/assets/') &&
+        /\\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(cachedUrl.pathname);
+    });
+    const excess = assets.length - MAX_CACHED_BUILD_ASSETS;
+    if (excess > 0) {
+      // Cache.keys() returns insertion order; evict the oldest public assets first.
+      await Promise.all(assets.slice(0, excess).map((key) => cache.delete(key)));
+    }
+  } catch {
+    // Storage quota/eviction failures must never break the online response.
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -68,7 +91,7 @@ self.addEventListener('fetch', (event) => {
           (url.pathname.startsWith('/assets/') && /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(url.pathname)) ||
           url.pathname === '/favicon.ico';
         if (response.ok && response.type === 'basic' && isPublicBuildAsset) {
-          void cache.put(request, response.clone()).catch(() => undefined);
+          void cachePublicBuildAsset(cache, request, response.clone());
         }
         return response;
       });
