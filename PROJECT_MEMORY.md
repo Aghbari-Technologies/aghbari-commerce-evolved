@@ -60,6 +60,12 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 - Full user master specification: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 - Continuation prompt: `ops/AGHBARI-SESSION-RESUME.md`.
 
+
+## Current implementation pointer — 2026-10-15
+
+PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) adds server-generated Arabic invoice/account-statement PDFs and a frozen `bun.lock` consistency gate. Implementation SHA `3f96b2b5aa5a28eabdbacf828ee5f09d66da0258` passed [exact-SHA CI 38750723505](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38750723505) including tests, PostgreSQL 17 isolated acceptance, lint, build and route smoke. This is code/CI evidence only: production authenticated-browser verification, production Supabase access and live Lovable editor/deployment SHA sync remain open. The sole active task cursor and next gate are recorded in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; do not create a parallel cursor here.
+
+
 ## Historical source checkpoint — 2026-10-15 (the live cursor is in ops/AGHBARI-LATEST-EXECUTION-STATE.md)
 
 - PR #26 (server-derived tenant context and restrictive RLS) merged to `main`; merge SHA before this memory/ledger update: `fe22af0424947b56ae80e0679621cf0df333e284`.

@@ -13,6 +13,17 @@
 
 المراجع المعتمدة: `PROJECT_MEMORY.md`، هذا الملف، `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`، `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`، و`docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 
+
+## Current resume checkpoint — 2026-10-15 (read before older history)
+
+- Active cursor is only `AGH-FINANCE-DOCS-001` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; its status is **PARTIAL**, not closed.
+- Server-generated Arabic invoice/account-statement PDF source on PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) passed exact implementation SHA `3f96b2b5aa5a28eabdbacf828ee5f09d66da0258` in [CI run 38750723505](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38750723505): frozen Bun lock check, unit tests, isolated PostgreSQL 17 acceptance, lint, build and route smoke.
+- Recheck the live PR head/merge state and Actions before resuming: a docs-only checkpoint commit may be newer than the source SHA above. Do not transfer PASS to another SHA.
+- Next actions: verify Actions for the latest PR head; merge only if that exact head is green; verify merged `main` SHA and its own CI; update the same canonical records; then perform authenticated browser/runtime and Lovable SHA-sync verification. No production DB was mutated.
+- The host has no working local Git network resolution; local `git fetch`/`git status`/`git rev-parse` were unavailable here. Remote refs, files and Actions were inspected through GitHub APIs; never describe that as a successful local Git command.
+- Lovable root `AGENTS.md` and `.github/copilot-instructions.md` provide persistent repository/agent entry points. Live editor sync of a particular SHA still requires direct evidence.
+
+
 ## الحالة المرجعية المحفوظة
 - المشروع الوحيد: متجر الأغبري | Aghbari Commerce.
 - المستودع: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved
@@ -65,7 +76,7 @@
 
 - Protocol implementation is present on remote `main` at exact SHA `90602f6deeba79a5d80efad38d83efec64be5173`: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/90602f6deeba79a5d80efad38d83efec64be5173.
 - Exact-SHA GitHub Actions run [38692264543](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692264543) completed **SUCCESS**. Unit tests, isolated PostgreSQL 17 migration/workflow tests, lint, build and the port 5173 smoke test passed on this SHA. Do not transfer that result to later SHAs.
-- Stable protocol task `AGH-OPS-RESUME-001` is closed as `DONE_VERIFIED` for the committed repository instructions and this exact-SHA CI. The next open implementation task is `AGH-SEC-BROWSER-E2E-001` in the latest execution-state file and requirement registry.
+- Stable protocol task `AGH-OPS-RESUME-001` is closed as `DONE_VERIFIED` for the committed repository instructions and this exact-SHA CI. This older protocol checkpoint predates the current invoice/PDF work; the live cursor is maintained only in `ops/AGHBARI-LATEST-EXECUTION-STATE.md` and currently remains `AGH-FINANCE-DOCS-001` until that parent requirement closes.
 - This host did not have a local checkout, so local `git fetch`/`git status`/local `HEAD` were not run. Remote metadata and CI were checked through GitHub API. GitHub reports `main` branch protection disabled; direct ref updates require expected-SHA lease and no force push.
 - Root `AGENTS.md` and `.github/copilot-instructions.md` are present on `main`. Lovable's official documentation explicitly confirms that root-level `AGENTS.md` is always read by its agent (see https://docs.lovable.dev/features/knowledge); this is the free persistent-instruction fallback. The separate Project Knowledge field was not edited directly, and live editor sync of the latest SHA remains **UNVERIFIED**.
 - External blocker to recheck before any production database action: `AGH-EXT-SUPABASE-001`, intended Supabase ref `ffxxjaolfntzbapmfbuv`. Never apply migration to a different project.

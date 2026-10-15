@@ -159,12 +159,14 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Next: connect company sub-users to the customer record using explicit membership and invitation lifecycles. The current customers.profile_id assumption means this must include all customer authorization/query/RLS paths, not just an invitation UI. Production Supabase remains inaccessible; no production migration/live-auth browser test is claimed.
 
 
-## Finance overpayment UI regression — 2026-10-15 (exact-SHA CI verified)
+## AGH-FINANCE-DOCS-001 — server-generated Arabic finance PDFs and dependency-lock integrity
 
-- PR [#34](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/34), tested PR SHA `2835e1b7be5b2271cc3ce2d68dedc06ae10f8bca`, based on main SHA `aa71dc4ee9f17fcbae2197f6f9c29b3f3fd123e8`.
-- Added `src/components/CustomerWorkflows.finance.test.tsx`: over-balance amount 75.01 against 75.00 remaining is refused before the payment RPC; exact-balance amount is allowed to reach the RPC.
-- Exact-SHA Actions [run 38747410147](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38747410147) **SUCCESS**: unit tests, isolated PostgreSQL 17 acceptance, lint, build and port-5173 dev smoke test passed for the exact PR SHA.
-- Evidence scope is component/jsdom + isolated DB, not authenticated live-browser or production DB proof. Invoice/statement UI still uses browser `window.print()`, not server-generated PDF. Production Supabase ref `ffxxjaolfntzbapmfbuv` remains externally inaccessible via the connected integration; do not substitute another project.
-- Live public root/login work; external fetch to `/invoices`, `/statement`, and `/admin/finance` returned 404 and needs deployment/deep-route verification. GitHub CI does not prove Lovable editor/deployment sync.
-- PR remains unmerged; no production DB mutations. `next_task_id = AGH-FINANCE-DOCS-001` remains PARTIAL until the server PDF and authorized authenticated-browser/production gates close.
+- **Verified implementation SHA:** `3f96b2b5aa5a28eabdbacf828ee5f09d66da0258`; exact-SHA [Actions 38750723505](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38750723505) **SUCCESS**.
+- **PR:** [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) (verify live state before acting on this historical checkpoint).
+- **Changed application paths:** `package.json`, `bun.lock`, `.github/workflows/commerce-checks.yml`, `src/lib/finance-document-pdf.ts`, `src/lib/finance-document-pdf.test.ts`, `src/lib/finance-pdf-server.ts`, `src/routes/api.statement-pdf.ts`, `src/routes/api.invoice-pdf.$invoiceId.ts`, `src/components/CustomerWorkflows.tsx`.
+- **Passing gates on the exact implementation SHA:** `bun install --frozen-lockfile --dry-run`; `npm test`; `npm run test:db` against isolated PostgreSQL 17; `npm run lint -- --rule=prettier/prettier:off`; `npm run build`; and dev server smoke including client/admin routes, static PWA assets and unauthenticated 401 responses from both PDF endpoints.
+- **Implemented:** authenticated statement PDF using the caller-scoped account statement RPC; invoice PDF from authorized customer-visible fields; embedded Noto Sans Arabic shaping; page numbering, separate currency totals and safe decimal handling; UI download controls while retaining explicit browser-print fallback.
+- **Privacy limit:** customer invoice PDF deliberately omits monetary amounts because the customer table/column grants prohibit reading them. No production DB write or migration was performed.
+- **Remaining gates:** latest PR-head CI and main merge proof; authenticated real-browser test; intended production Supabase access/schema proof; deployed deep-route availability; direct Lovable editor/deployment SHA readback. External fetch for `/invoices`, `/statement`, and `/admin/finance` returned 404 while local CI route smoke passed.
+- `AGH-FINANCE-DOCS-001` stays **PARTIAL**. `next_task_id` remains there until these external/runtime gates close; afterward resume the next open requirement rather than reopening closed work.
 
