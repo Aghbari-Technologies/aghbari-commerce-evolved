@@ -194,7 +194,7 @@ BEGIN
      OR pg_catalog.length(coalesce(v_email,''))>254
      OR v_contact_type NOT IN ('general','purchasing','finance','warehouse','management')
      OR (v_phone IS NULL AND v_email IS NULL)
-     OR (v_email IS NOT NULL AND (pg_catalog.position('@' in v_email)<2 OR pg_catalog.position('.' in pg_catalog.split_part(v_email,'@',2))<2))
+     OR (v_email IS NOT NULL AND (pg_catalog.strpos(v_email,'@')<2 OR pg_catalog.strpos(pg_catalog.split_part(v_email,'@',2),'.')<2))
      OR (coalesce(p_is_active,true)=false AND coalesce(p_is_primary,false)=true) THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer contact fields are invalid';
   END IF;
