@@ -52,19 +52,22 @@ describe('Onyx order workbook draft', () => {
   });
 
   it('removes XML 1.0-forbidden control characters from dirty imported cells', () => {
+    const control1 = String.fromCharCode(1);
+    const control2 = String.fromCharCode(2);
+    const control3 = String.fromCharCode(3);
     const dirty = {
       ...order,
-      orderNumber: 'ORD\\u0001-002',
-      customerName: 'شركة\\u0002 الاختبار',
+      orderNumber: 'ORD' + control1 + '-002',
+      customerName: 'شركة' + control2 + ' الاختبار',
       items: [{
         ...order.items[0],
-        product_name_snapshot: 'سكر\\u0003 برازيلي',
+        product_name_snapshot: 'سكر' + control3 + ' برازيلي',
       }],
     };
     const archiveText = new TextDecoder().decode(buildOnyxOrderWorkbook(dirty));
-    expect(archiveText).not.toContain('\\u0001');
-    expect(archiveText).not.toContain('\\u0002');
-    expect(archiveText).not.toContain('\\u0003');
+    expect(archiveText).not.toContain(control1);
+    expect(archiveText).not.toContain(control2);
+    expect(archiveText).not.toContain(control3);
     expect(archiveText).toContain('سكر برازيلي');
   });
 
