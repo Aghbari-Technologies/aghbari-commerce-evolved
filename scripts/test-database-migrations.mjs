@@ -1456,8 +1456,57 @@ async function main() {
   assert.equal(Number(onyxAnalytics[0].result.metrics.unique_keys), 2);
   assert.equal(Number(onyxAnalytics[0].result.metrics.quantity_total), 15, "quantity KPI must include every snapshot row");
   assert.equal(Number(onyxAnalytics[0].result.metrics.revenue_total), 600, "revenue KPI must include every snapshot row");
+  assert.equal(onyxAnalytics[0].result.metrics.metric_quality.quantity, "COMPLETE");
+  assert.equal(onyxAnalytics[0].result.metrics.metric_quality.revenue, "COMPLETE");
   assert.equal(onyxAnalytics[0].result.forecast_status, "Forecast Unavailable: Insufficient Historical Data");
-  process.stdout.write("PASS import profile, tenant-scoped synonyms, resumable chunk manifest, duplicate detection, DQS finalization and full-snapshot Onyx analytics\n");
+
+  // Missing/malformed numeric cells must not be silently aggregated as zero.
+  const analyticsRowsBefore = await db.unsafe(
+    "select id,row_number,data from public.onyx_snapshot_rows where snapshot_id=$1 order by row_number",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  assert.equal(analyticsRowsBefore.length, 2, "quality regression fixture must contain both import rows");
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=data || jsonb_build_object('quantity','not-a-number') where id=$1",
+    [analyticsRowsBefore[0].id],
+  );
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=data - 'revenue' where id=$1",
+    [analyticsRowsBefore[1].id],
+  );
+  const incompleteOnyxAnalytics = await db.unsafe(
+    "select public.get_onyx_snapshot_analytics($1::uuid) as result",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  const incompleteMetrics = incompleteOnyxAnalytics[0].result.metrics;
+  assert.equal(incompleteMetrics.quantity_total, null, "partial quantities must be unavailable rather than zero-filled");
+  assert.equal(Number(incompleteMetrics.quantity_invalid_rows), 1);
+  assert.equal(Number(incompleteMetrics.quantity_missing_rows), 0);
+  assert.equal(incompleteMetrics.revenue_total, null, "a missing revenue row must invalidate the full-snapshot total");
+  assert.equal(Number(incompleteMetrics.revenue_missing_rows), 1);
+  assert.equal(Number(incompleteMetrics.revenue_invalid_rows), 0);
+  assert.equal(incompleteMetrics.metric_quality.quantity, "PARTIAL");
+  assert.equal(incompleteMetrics.metric_quality.revenue, "PARTIAL");
+  assert.equal(incompleteMetrics.metric_quality.sales, "UNAVAILABLE");
+  const invalidItem = incompleteOnyxAnalytics[0].result.top_items.find((item) => item.item_code === "000125");
+  const missingRevenueItem = incompleteOnyxAnalytics[0].result.top_items.find((item) => item.item_code === "000126");
+  assert.equal(invalidItem.quantity, null, "top-item quantity should stay unavailable when one of its rows is malformed");
+  assert.equal(missingRevenueItem.revenue, null, "top-item revenue should stay unavailable when its row is missing the field");
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=$2::jsonb where id=$1",
+    [analyticsRowsBefore[0].id, db.json(analyticsRowsBefore[0].data)],
+  );
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=$2::jsonb where id=$1",
+    [analyticsRowsBefore[1].id, db.json(analyticsRowsBefore[1].data)],
+  );
+  const restoredOnyxAnalytics = await db.unsafe(
+    "select public.get_onyx_snapshot_analytics($1::uuid) as result",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  assert.equal(Number(restoredOnyxAnalytics[0].result.metrics.quantity_total), 15);
+  assert.equal(Number(restoredOnyxAnalytics[0].result.metrics.revenue_total), 600);
+  process.stdout.write("PASS import profile, tenant-scoped synonyms, resumable chunk manifest, duplicate detection, DQS finalization and Onyx metric completeness boundaries\n");
 
   // The rule UI must reuse the existing deterministic pricing engine and reset to base price
   // when its last applicable rule is deleted.
