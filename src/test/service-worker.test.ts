@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,7 +10,7 @@ async function loadServiceWorker(overrides: {
   cacheAdd?: (url: string) => Promise<void>;
   cacheNames?: string[];
 } = {}) {
-  const source = await readFile(new URL("../../public/sw.js", import.meta.url), "utf8");
+  const source = await readFile(resolve(process.cwd(), "public/sw.js"), "utf8");
   const listeners = new Map<string, Listener>();
   const cacheAdd = vi.fn(async (url: string) => overrides.cacheAdd?.(url));
   const cache = { add: cacheAdd };
