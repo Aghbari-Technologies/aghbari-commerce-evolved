@@ -1,5 +1,17 @@
 import type { ProductWithInventory } from './types';
 
+/** Distinguish unique cart lines from total units; invalid/empty quantities never inflate the badge. */
+export function summarizeCartCounts(items: readonly { quantity: number }[]): { uniqueItems: number; totalUnits: number } {
+  let uniqueItems = 0;
+  let totalUnits = 0;
+  for (const item of items) {
+    if (!Number.isFinite(item.quantity) || item.quantity <= 0) continue;
+    uniqueItems += 1;
+    totalUnits += item.quantity;
+  }
+  return { uniqueItems, totalUnits };
+}
+
 export type InvoiceAmount = {
   id: string;
   total_amount: number | string;

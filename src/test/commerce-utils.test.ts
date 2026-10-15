@@ -1,6 +1,6 @@
 import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, isCustomerStatementPossiblyPartial, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeInvoiceAmounts, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, isCustomerStatementPossiblyPartial, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeCartCounts, summarizeInvoiceAmounts, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
 function makeStoredZip(files: Record<string, string>): Blob {
   const encoder = new TextEncoder();
@@ -65,6 +65,11 @@ function makeStoredZip(files: Record<string, string>): Blob {
 }
 
 describe('commerce completion utilities', () => {
+  it('counts unique cart lines separately from total units and ignores invalid lines', () => {
+    expect(summarizeCartCounts([{ quantity: 2 }, { quantity: 1 }, { quantity: 4 }])).toEqual({ uniqueItems: 3, totalUnits: 7 });
+    expect(summarizeCartCounts([{ quantity: 0 }, { quantity: -2 }, { quantity: Number.NaN }, { quantity: Number.POSITIVE_INFINITY }])).toEqual({ uniqueItems: 0, totalUnits: 0 });
+  });
+
   it('marks account statements as possibly partial at or above either row cap', () => {
     expect(isCustomerStatementPossiblyPartial(0, 0)).toBe(false);
     expect(isCustomerStatementPossiblyPartial(199, 499)).toBe(false);

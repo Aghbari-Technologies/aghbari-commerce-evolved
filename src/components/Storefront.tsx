@@ -7,7 +7,7 @@ import {
 import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeCartCounts, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -117,7 +117,7 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
     try { window.localStorage.setItem('aghbari:cart:v1', JSON.stringify(cart.map(item => ({ product_id: item.product.id, quantity: item.quantity })))); } catch { /* the online shop still works without storage */ }
   }, [cart, cartRestored]);
 
-  const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const { uniqueItems: cartCount, totalUnits: cartUnitCount } = summarizeCartCounts(cart);
 
   function addToCart(product: ProductWithInventory) {
     setCart((prev) => {
@@ -202,7 +202,7 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
           <button className="sf-admin-btn" onClick={onExit}><Activity size={16} /> لوحة التحكم</button>
           <div className="sf-search"><Search size={17} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث عن منتج..." /></div>
           <div className="sf-header-links"><button onClick={() => void navigate({ to: '/wishlist' })}><Heart size={16} /> المفضلة <b>{wishlist.length}</b></button><button onClick={() => void navigate({ to: '/compare' })}><GitCompare size={16} /> مقارنة</button><button onClick={() => { setMatrixFeedback(null); setView('matrix'); }}><ClipboardList size={16} /> طلب سريع</button><Link to="/orders" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'inherit', textDecoration: 'none', fontSize: 11, fontWeight: 700 }}><FileText size={16} /> طلباتي</Link>{!user && <Link to="/login" style={{ color: '#0b97a5', fontWeight: 800, fontSize: 11 }}>دخول</Link>}</div>
-          <button className="sf-cart-btn" onClick={() => void navigate({ to: '/cart' })}><ShoppingCart size={20} /> {cartCount > 0 && <b>{cartCount}</b>}</button>
+          <button className="sf-cart-btn" aria-label={`السلة: ${cartCount} أصناف، ${formatNumber(cartUnitCount)} وحدة`} title={`${cartCount} أصناف فريدة · ${formatNumber(cartUnitCount)} وحدة`} onClick={() => void navigate({ to: '/cart' })}><ShoppingCart size={20} /> {cartCount > 0 && <><b aria-label="عدد الأصناف الفريدة">{cartCount}</b><small style={{ fontSize: 10, whiteSpace: "nowrap" }}>وحدات: {formatNumber(cartUnitCount)}</small></>}</button>
           <button className="sf-mobile-toggle" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={22} /></button>
         </div>
       </header>

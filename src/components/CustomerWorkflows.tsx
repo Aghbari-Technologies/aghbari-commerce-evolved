@@ -309,6 +309,7 @@ function Invoices() {
   } | null>(null);
   const [items, setItems] = useState<InvoiceLine[]>([]);
   const [chosenFinancials, setChosenFinancials] = useState<InvoiceFinancialSummary | null>(null);
+  const [amountsVisible, setAmountsVisible] = useState(false);
   const [busy, setBusy] = useState(true);
   const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState("");
@@ -333,6 +334,7 @@ function Invoices() {
     setChosen(i);
     setDetailBusy(true);
     setChosenFinancials(null);
+    setAmountsVisible(false);
     setItems([]);
     const [invoicePayloadResult, orderResult] = await Promise.all([
       supabase.rpc("get_customer_invoice_pdf", { p_invoice_id: i.id }),
@@ -352,6 +354,7 @@ function Invoices() {
         business_name?: string | null;
         contact_name?: string | null;
       };
+      amounts_visible?: boolean;
     } | null;
     const payloadValid = Boolean(
       payload?.invoice &&
@@ -369,17 +372,19 @@ function Invoices() {
     } else {
       setError("");
       setItems(payload.lines ?? []);
+      const showAmounts = payload.amounts_visible === true;
+      setAmountsVisible(showAmounts);
       setChosenCustomer({
         customer_code: payload.customer?.customer_code ?? "",
         business_name: payload.customer?.business_name ?? "",
         contact_name: payload.customer?.contact_name ?? null,
       });
-      setChosenFinancials({
+      setChosenFinancials(showAmounts ? {
         currency: payload.invoice.currency,
         subtotal: payload.invoice.subtotal,
         tax_amount: payload.invoice.tax_amount,
         total_amount: payload.invoice.total_amount,
-      });
+      } : null);
       setInvoiceOrder(
         orderResult.data as {
           quantity_review_required: boolean;
@@ -445,7 +450,7 @@ function Invoices() {
   return (
     <WorkspaceShell
       title="فواتيري"
-      subtitle="مستندات الفوترة الصادرة بعد اعتماد الإدارة. يعرض ملخص الفاتورة تفاصيل الأصناف والكميات، ويضم PDF الأسعار والإجماليات المسموح بها لصلاحية الحساب."
+      subtitle="مستندات الفوترة الصادرة بعد اعتماد الإدارة. يظهر السعر والإجمالي فقط إذا فعّلهما المدير في إعدادات الخصوصية."
     >
       <div
         style={{
@@ -585,8 +590,7 @@ function Invoices() {
                   <th style={{ textAlign: "right", padding: 10 }}>الصنف</th>
                   <th>الرمز</th>
                   <th>الكمية</th>
-                  <th>سعر الوحدة</th>
-                  <th>الإجمالي</th>
+                  {amountsVisible && <><th>سعر الوحدة</th><th>الإجمالي</th></>}
                 </tr>
               </thead>
               <tbody>
@@ -595,13 +599,13 @@ function Invoices() {
                     <td style={{ padding: 10 }}>{l.description}</td>
                     <td>{l.item_code ?? "—"}</td>
                     <td>{formatNumber(Number(l.quantity))} {l.unit ?? ""}</td>
-                    <td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td>
-                    <td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</td>
+                    {amountsVisible && <><td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td><td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</>}</>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          {!amountsVisible && !detailBusy && <p role="status" style={{ ...quiet, marginTop: 12 }}>المبالغ المالية مخفية وفق إعدادات خصوصية الحساب.</p>}
           {!detailBusy && chosenFinancials && (
             <div style={{ ...card, marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
               <div><span style={quiet}>الإجمالي الفرعي</span><strong style={{ display: "block", marginTop: 6 }}>{formatInvoiceMoney(chosenFinancials.subtotal, chosenFinancials.currency)}</strong></div>

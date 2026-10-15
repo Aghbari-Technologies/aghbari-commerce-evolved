@@ -40,6 +40,7 @@ export const Route = createFileRoute("/api/invoice-pdf/$invoiceId")({
           invoice?: unknown;
           lines?: unknown;
           customer?: unknown;
+          amounts_visible?: boolean;
         } | null;
         if (!payload?.invoice || !Array.isArray(payload.lines) || !payload.customer) {
           return financeDocumentError(503, "أعاد الخادم بيانات فاتورة غير مكتملة؛ لم يتم إنشاء المستند.");
@@ -51,6 +52,8 @@ export const Route = createFileRoute("/api/invoice-pdf/$invoiceId")({
             payload.lines,
             payload.customer,
             loadArabicDocumentFont(),
+            new Date(),
+            payload.amounts_visible === true,
           );
           return pdfResponse(bytes, "aghbari-invoice.pdf");
         } catch {
