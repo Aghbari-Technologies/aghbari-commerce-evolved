@@ -160,6 +160,21 @@ describe("outbox worker logical RPC result handling", () => {
     expect(sanitizeOutboxErrorMessage({ code: "XX000" })).toBe("Unclassified worker error");
   });
 
+  it("redacts authorization headers, cookies, JWTs and common provider key shapes", () => {
+    const value = sanitizeOutboxErrorMessage(new Error(
+      "Authorization: Bearer opaque-access-token Cookie: session=private-cookie; next=ignored eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signed-token sk-12345678901234567890 AIza123456789012345678901234567890",
+    ));
+    expect(value).not.toContain("opaque-access-token");
+    expect(value).not.toContain("private-cookie");
+    expect(value).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    expect(value).not.toContain("signed-token");
+    expect(value).not.toContain("sk-12345678901234567890");
+    expect(value).not.toContain("AIza123456789012345678901234567890");
+    expect(value).toContain("[redacted]");
+    expect(value).toContain("[token redacted]");
+    expect(value).toContain("[secret redacted]");
+  });
+
   it("provides a bounded, non-empty fallback for unknown worker errors", () => {
     expect(sanitizeOutboxErrorMessage(null)).toBe("Unclassified worker error");
     expect(sanitizeOutboxErrorMessage(new Error("x".repeat(700)))).toHaveLength(500);
