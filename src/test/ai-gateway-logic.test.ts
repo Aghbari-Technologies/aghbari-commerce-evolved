@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildGeminiRequestConfig,
   estimateCost,
   estimateInputTokens,
   isSafeProviderBaseUrl,
@@ -38,6 +39,31 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
     expect(estimateInputTokens("سؤال قصير", 10)).toBe(13);
   });
 
+  it("sends Gemini API keys in a header and never in the request URL", () => {
+    const apiKey = "ci-gemini-test-key-not-a-real-credential";
+    const request = buildGeminiRequestConfig(
+      "https://generativelanguage.googleapis.com/v1beta",
+      "gemini-2.0-flash",
+      apiKey,
+    );
+
+    expect(request.url.toString()).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+    );
+    expect(request.url.search).toBe("");
+    expect(request.url.toString()).not.toContain(apiKey);
+    expect(request.headers["x-goog-api-key"]).toBe(apiKey);
+    expect(request.headers["content-type"]).toBe("application/json");
+  });
+
+  it("rejects unsafe Gemini URLs or missing credentials before building a request", () => {
+    expect(() => buildGeminiRequestConfig("http://generativelanguage.googleapis.com/v1beta", "gemini-2.0-flash", "test-key"))
+      .toThrow("invalid_gemini_provider_config");
+    expect(() => buildGeminiRequestConfig("https://generativelanguage.googleapis.com/v1beta", " ", "test-key"))
+      .toThrow("invalid_gemini_provider_config");
+    expect(() => buildGeminiRequestConfig("https://generativelanguage.googleapis.com/v1beta", "gemini-2.0-flash", " "))
+      .toThrow("invalid_gemini_provider_config");
+  });
   it("blocks HTTP, userinfo, localhost and private IP provider endpoints", () => {
     for (const url of [
       "http://api.example.com/v1", "https://user:secret@api.openai.com/v1",
