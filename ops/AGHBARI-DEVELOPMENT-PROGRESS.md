@@ -81,3 +81,9 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 
 - Added a CI assertion in `scripts/test-database-migrations.mjs` under authenticated customer identity: direct `SELECT tier,price FROM public.product_prices WHERE product_id=...` must be privilege-denied or return no visible tier rows; returning any tier rows fails the acceptance test. Existing cart validation already asserts customer cart responses omit unit prices and totals.
 - Exact-SHA CI for the new assertion is pending. If it fails, inspect active `product_prices` grants/RLS and fix with a new migration + regression test; do not conceal the failed result. `AGH-PRICE-PRIVACY-001` remains PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN.
+## 2026-10-15 — Authenticated tier-price disclosure found; additive fix pending
+
+- CI [38695976338](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695976338) on SHA `700fef00cd26bc022b2f8837236530195951db19` failed isolated PostgreSQL acceptance because an authenticated customer could directly read tier rows from `public.product_prices`.
+- Root cause located in the public-storefront boundary: direct SELECT was revoked from `PUBLIC, anon` but not `authenticated`. Row-level organization scope is not sufficient to keep tier prices staff/private.
+- Added new migration `supabase/migrations/20261015120000_customer_tier_price_read_boundary.sql`: revoke direct SELECT from `PUBLIC, anon, authenticated`, and abort migration if table-level or column-level `SELECT` is still effective for `authenticated`. The existing `scripts/test-database-migrations.mjs` assertion is retained as regression coverage.
+- Fix commit and exact-SHA CI are pending; no production database mutation. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `next_task_id = AGH-SEC-BROWSER-E2E-001` OPEN until the new run passes.

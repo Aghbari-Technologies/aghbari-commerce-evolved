@@ -1,5 +1,13 @@
 # Aghbari Commerce — Latest Execution State
 
+## Security finding — authenticated tier prices were directly readable
+
+- Exact CI run [38695976338](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695976338) failed `Apply all migrations to isolated PostgreSQL 17 and verify core workflows` at SHA `700fef00cd26bc022b2f8837236530195951db19`. The new assertion proved that an authenticated customer could directly enumerate `public.product_prices`; this is a real isolated-DB security defect, not a browser-test harness issue.
+- Root cause: `20261015110000_public_storefront_tenant_scope.sql` revoked table SELECT from `PUBLIC, anon` but omitted `authenticated`. The tenant restrictive policy only scoped rows by organization; it did not restrict this sensitive table to staff.
+- Fix under test: new additive migration `20261015120000_customer_tier_price_read_boundary.sql` revokes direct SELECT from `PUBLIC, anon, authenticated` and aborts if table-level or any column-level SELECT remains for `authenticated`. The existing CI regression test requires customer direct reads to be denied or filtered to zero rows. The fix is not considered proven until exact-SHA CI passes.
+- No production database was touched. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN pending CI, full-channel checks, and actual browser/production evidence.
+
+---
 ## Active security subgate — authenticated customer tier-price non-enumeration
 
 - Adds a targeted assertion to `scripts/test-database-migrations.mjs`: under the CI `authenticated` role for a customer identity, querying `public.product_prices` directly must either be denied by SQL privileges or return zero visible rows. Returning any tier rows fails the test. Existing checkout tests still verify the customer cart endpoint does not return unit prices or order totals.
