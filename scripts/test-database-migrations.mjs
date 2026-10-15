@@ -702,6 +702,11 @@ async function main() {
   await db.unsafe("set role authenticated");
 
   await expectFailure(
+    "customer cannot call internal outbox error redaction helper",
+    () => db.unsafe("select public.sanitize_outbox_error_message('private@example.test')"),
+    /permission denied/i,
+  );
+  await expectFailure(
     "customer cannot claim internal outbox events",
     () => db.unsafe("select * from public.claim_outbox_events('untrusted',1,300,null)"),
     /permission denied/i,
