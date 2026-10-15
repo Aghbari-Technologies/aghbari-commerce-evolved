@@ -742,6 +742,58 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
 
+    const nativeCreateObjectUrl = URL.createObjectURL;
+    const nativeRevokeObjectUrl = URL.revokeObjectURL;
+    let exportedBlob: Blob | null = null;
+    let exportedFilename = "";
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn((blob: Blob) => {
+        exportedBlob = blob;
+        return "blob:aghbari-cart-backup-test";
+      }),
+    });
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      exportedFilename = this.download;
+    });
+    try {
+      const exportButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+        button.textContent?.includes("تنزيل نسخة احتياطية للمسودة"),
+      );
+      expect(exportButton).toBeDefined();
+      await act(async () => {
+        exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(exportedBlob).not.toBeNull();
+      expect(exportedFilename).toMatch(/^aghbari-cart-draft-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+      const backupText = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(exportedBlob as Blob);
+      });
+      const backup = JSON.parse(backupText);
+      expect(backup.schema).toBe("aghbari.offline-cart-draft");
+      expect(backup.version).toBe(1);
+      expect(backup.lines).toEqual([{
+        product_id: "product-offline-2",
+        item_code: "000126",
+        name: "Rice",
+        unit: "carton",
+        quantity: 3,
+      }]);
+      expect(backup.disclaimer).toContain("Not an order");
+      expect(backupText).not.toMatch(/base_price|cost_price|retail_price|wholesale_price|purchase_cost|quantity_on_hand|quantity_reserved|quantity_available|internal_notes/i);
+      expect(host?.textContent).toContain("تم تنزيل نسخة احتياطية للمسودة المحلية");
+    } finally {
+      anchorClick.mockRestore();
+      if (nativeCreateObjectUrl) Object.defineProperty(URL, "createObjectURL", { configurable: true, value: nativeCreateObjectUrl });
+      else delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+      if (nativeRevokeObjectUrl) Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: nativeRevokeObjectUrl });
+      else delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+    }
+
     const clearButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
       button.textContent?.includes("تفريغ المسودة المحلية"),
     );

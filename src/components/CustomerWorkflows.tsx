@@ -2214,6 +2214,51 @@ function Offline() {
       setMessage(detail);
     }
   }
+  function exportLocalDraftBackup() {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل تصدير مسودة مرتبطة بحسابك.");
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, initialOfflineCartLines());
+      const catalog = sanitizePublicCatalogCache(
+        JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+      );
+      const payload = {
+        schema: "aghbari.offline-cart-draft",
+        version: 1,
+        exported_at: new Date().toISOString(),
+        line_count: ledger.lines.length,
+        total_units: ledger.lines.reduce((sum, line) => sum + line.quantity, 0),
+        lines: ledger.lines.map((line) => {
+          const product = catalog.find((item) => item.id === line.product_id);
+          return {
+            product_id: line.product_id,
+            item_code: product?.item_code ?? null,
+            name: product?.name ?? null,
+            unit: product?.unit ?? null,
+            quantity: line.quantity,
+          };
+        }),
+        disclaimer: "Local cart draft backup only. Not an order, invoice, reservation, stock confirmation or trusted price.",
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "aghbari-cart-draft-" + new Date().toISOString().slice(0, 10) + ".json";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      if (typeof URL.revokeObjectURL === "function") {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      }
+      setMessage("تم تنزيل نسخة احتياطية للمسودة المحلية دون أسعار أو مخزون؛ الملف ليس طلبًا ولا يثبت توفر الأصناف.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر تصدير المسودة المحلية.";
+      setMessage(detail);
+    }
+  }
   function clearLocalDraft() {
     const intent = "clear";
     if (!user?.profileId) {
@@ -2385,15 +2430,24 @@ function Offline() {
       <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-draft-heading">
         <h2 id="offline-draft-heading" style={{ marginTop: 0, fontSize: 18 }}>مسودة السلة المحلية</h2>
         <p style={quiet}>هذه كميات محفوظة على الجهاز فقط؛ لا تظهر أسعار ولا تُرسل طلبات من هذه الشاشة.</p>
-        {cartLines.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <button
-            style={{ ...secondary, color: "#991b1b", borderColor: "#fecaca", marginBottom: 10 }}
-            disabled={Boolean(storageError)}
-            onClick={clearLocalDraft}
+            style={secondary}
+            disabled={Boolean(storageError) || cartLines.length === 0}
+            onClick={exportLocalDraftBackup}
           >
-            تفريغ المسودة المحلية
+            تنزيل نسخة احتياطية للمسودة
           </button>
-        )}
+          {cartLines.length > 0 && (
+            <button
+              style={{ ...secondary, color: "#991b1b", borderColor: "#fecaca" }}
+              disabled={Boolean(storageError)}
+              onClick={clearLocalDraft}
+            >
+              تفريغ المسودة المحلية
+            </button>
+          )}
+        </div>
         {cartLines.length === 0 ? (
           <p role="status" style={quiet}>مسودة السلة فارغة.</p>
         ) : (
