@@ -58,3 +58,7 @@ Release status: **NOT production-certified**. Exact target Supabase project `ffx
 - Preserved the newer global Arabic navigation bar from `55645b5` while restoring the root auth health notice, PWA manifest and service-worker registration.
 - Restoration branch: `fix/restore-product-work-after-main-regression-20261009`. Do not call the recovery complete until exact-head unit tests, PostgreSQL 17 acceptance, lint, build, route smoke tests and migration-version uniqueness pass.
 - No production Supabase migrations or deployment performed by this recovery.
+
+## Live DB sync (2026-10-15)
+- [x] 20261009010000_commerce_completion applied to live Cloud DB (drizzle 0001)
+- [ ] Apply remaining 18 supabase/migrations/20261009020000 … 20261009171000 in order (checkout depends on 040000)
