@@ -612,7 +612,6 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const catalogScope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
     const syncedSafe = JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(catalogScope)) || "[]");
     expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
     expect(syncedSafe).toHaveLength(1);

@@ -19,6 +19,22 @@ class MemoryStorage implements LocalStorageLike {
   removeItem(key: string) { this.data.delete(key); }
 }
 
+class RacingStorage extends MemoryStorage {
+  onCheckpoint: (() => void) | null = null;
+  private injected = false;
+
+  setItem(key: string, value: string) {
+    super.setItem(key, value);
+    let record: unknown;
+    try { record = JSON.parse(value); } catch { return; }
+    if (!this.injected && record && typeof record === "object" &&
+        (record as { kind?: unknown }).kind === "checkpoint" && this.onCheckpoint) {
+      this.injected = true;
+      this.onCheckpoint();
+    }
+  }
+}
+
 function mutation(input: Omit<OfflineCartMutationInput, "id"> & { id?: string }): OfflineCartMutationInput {
   const id = input.id ?? "mutation-" + Math.random().toString(36).slice(2, 12);
   return { ...input, id } as OfflineCartMutationInput;
@@ -108,6 +124,48 @@ describe("scoped durable offline cart mutation journal", () => {
     const retried = appendOfflineCartMutation(storage, scope, restore);
     expect(retried.lines).toEqual([{ product_id: "p1", quantity: 277 }]);
     expect(retried.operations_since_checkpoint).toBe(0);
+  });
+
+
+  it("preserves a concurrent write during compaction even when its timestamp ties the snapshot", () => {
+    const storage = new RacingStorage();
+    const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
+    appendOfflineCartMutation(storage, scope, { id: "before-checkpoint", kind: "adjust", product_id: "p1", delta: 1 });
+    const snapshotTimestamp = readOfflineCartLedger(storage, scope).latest_mutation_at;
+    storage.onCheckpoint = () => {
+      const racingRecord = {
+        version: 1,
+        scope_key: scope,
+        id: "concurrent-adjust",
+        kind: "adjust",
+        product_id: "p1",
+        delta: 4,
+        created_at: snapshotTimestamp,
+      };
+      storage.setItem(
+        getOfflineCartLedgerPrefix(scope) + "op:" + encodeURIComponent("concurrent-adjust"),
+        JSON.stringify(racingRecord),
+      );
+    };
+
+    const compacted = compactOfflineCartLedger(storage, scope);
+    expect(compacted.lines).toEqual([{ product_id: "p1", quantity: 5 }]);
+    expect(compacted.applied_mutation_ids).toContain("concurrent-adjust");
+  });
+
+  it("rejects reuse of a compacted mutation ID with a different payload", () => {
+    const storage = new MemoryStorage();
+    const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
+    const original = mutation({ id: "compacted-collision", kind: "adjust", product_id: "p1", delta: 1 });
+    appendOfflineCartMutation(storage, scope, original);
+    compactOfflineCartLedger(storage, scope);
+
+    expect(() => appendOfflineCartMutation(
+      storage,
+      scope,
+      mutation({ id: "compacted-collision", kind: "adjust", product_id: "p1", delta: 2 }),
+    )).toThrow(/تعارض معرّف تغيير السلة/);
+    expect(readOfflineCartLedger(storage, scope).lines).toEqual([{ product_id: "p1", quantity: 1 }]);
   });
 
   it("rejects reuse of an active mutation ID with a different payload", () => {

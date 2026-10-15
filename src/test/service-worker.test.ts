@@ -140,6 +140,23 @@ describe("Aghbari PWA offline shell", () => {
     await expect(Promise.all(pending)).resolves.toEqual([cachedResponse]);
   });
 
+  it("never intercepts or caches an order-commit POST for offline replay", async () => {
+    const worker = await loadServiceWorker();
+    const respondWith = vi.fn();
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "POST",
+        url: "https://aghbari.example/rest/v1/rpc/place_order",
+        mode: "cors",
+      } as Request,
+      respondWith,
+    } as unknown as FetchWorkerEvent);
+
+    expect(respondWith).not.toHaveBeenCalled();
+    expect(worker.cachesMock.open).not.toHaveBeenCalled();
+    expect(worker.cachePut).not.toHaveBeenCalled();
+  });
+
   it("removes previous shell cache versions during activation", async () => {
     const worker = await loadServiceWorker({ cacheNames: ["aghbari-shell-v1", "aghbari-shell-v2", "unrelated-cache"] });
     const pending: Promise<unknown>[] = [];

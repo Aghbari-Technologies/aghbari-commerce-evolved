@@ -31,6 +31,8 @@ type CheckpointRecord = {
   created_at: number;
   lines: CartLineDraft[];
   applied_ids: string[];
+  /** Backward-compatible payload fingerprints detect ID reuse after compaction. */
+  applied_signatures?: Record<string, string>;
 };
 
 type MutationRecord = Omit<OfflineCartMutationInput, never> & {
@@ -49,6 +51,7 @@ export type OfflineCartLedger = {
   operations_since_checkpoint: number;
   latest_mutation_at: number;
   applied_mutation_ids: string[];
+  applied_mutation_signatures: Record<string, string>;
   ignored_operations: number;
 };
 
@@ -104,6 +107,43 @@ function normalizeAppliedIds(value: unknown): string[] {
     throw new Error("تجاوز سجل منع التكرار الحد الآمن؛ لم تُنفذ العملية المحلية.");
   }
   return [...unique];
+}
+
+function normalizeAppliedSignatures(value: unknown, ids: readonly string[]): Record<string, string> {
+  if (!isPlainRecord(value)) return {};
+  const allowed = new Set(ids);
+  const signatures: Record<string, string> = {};
+  for (const [id, signature] of Object.entries(value)) {
+    if (allowed.has(id) && typeof signature === "string" && signature.length <= 64 && /^[a-z0-9-]+$/.test(signature)) {
+      signatures[id] = signature;
+    }
+  }
+  return signatures;
+}
+
+/** A deterministic accidental-collision guard; this is not an authentication primitive. */
+function mutationSignature(mutation: OfflineCartMutationInput): string {
+  let payload: unknown;
+  switch (mutation.kind) {
+    case "adjust": payload = ["adjust", mutation.product_id, mutation.delta]; break;
+    case "set": payload = ["set", mutation.product_id, mutation.quantity]; break;
+    case "remove": payload = ["remove", mutation.product_id]; break;
+    case "clear": payload = ["clear"]; break;
+    case "merge":
+      payload = ["merge", normalizedLines(mutation.lines).map((line) => [line.product_id, line.quantity])];
+      break;
+  }
+  const serialized = JSON.stringify(payload);
+  let first = 2166136261;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < serialized.length; index++) {
+    const code = serialized.charCodeAt(index);
+    first = Math.imul(first ^ code, 16777619);
+    second = Math.imul(second ^ code, 2246822519);
+  }
+  return serialized.length.toString(36) + "-" +
+    (first >>> 0).toString(16).padStart(8, "0") + "-" +
+    (second >>> 0).toString(16).padStart(8, "0");
 }
 
 export function createOfflineCartScopeKey(profileId: string | null | undefined, origin?: string): string {
@@ -187,6 +227,7 @@ function parseStoredRecord(value: unknown, scopeKey: string): LedgerRecord | nul
     const createdAt = Number(value.created_at);
     if (!Number.isSafeInteger(createdAt) || createdAt < 0) return null;
     try {
+      const appliedIds = normalizeAppliedIds(value.applied_ids);
       return {
         version: 1,
         scope_key: scopeKey,
@@ -194,7 +235,8 @@ function parseStoredRecord(value: unknown, scopeKey: string): LedgerRecord | nul
         kind: "checkpoint",
         created_at: createdAt,
         lines: normalizedLines(value.lines),
-        applied_ids: normalizeAppliedIds(value.applied_ids),
+        applied_ids: appliedIds,
+        applied_signatures: normalizeAppliedSignatures(value.applied_signatures, appliedIds),
       };
     } catch {
       return null;
@@ -308,22 +350,34 @@ export function readOfflineCartLedger(
     .filter((record): record is LedgerRecord => record !== null)
     .sort(compareRecords);
   const checkpoints = records.filter((record): record is CheckpointRecord => record.kind === "checkpoint");
-  const checkpoint = checkpoints.sort(compareRecords).at(-1);
+  // Prefer the most advanced checkpoint if concurrent tabs produce the same logical timestamp.
+  const checkpoint = checkpoints.sort((left, right) =>
+    right.created_at - left.created_at ||
+    right.applied_ids.length - left.applied_ids.length ||
+    right.id.localeCompare(left.id)
+  )[0];
   let lines = checkpoint ? [...checkpoint.lines] : [...seed.lines];
   const applied = new Set<string>(checkpoint?.applied_ids ?? []);
+  const signatures: Record<string, string> = { ...(checkpoint?.applied_signatures ?? {}) };
   let operationsSinceCheckpoint = 0;
   let latestMutationAt = checkpoint?.created_at ?? 0;
 
   for (const record of records) {
     if (record.kind === "seed" || record.kind === "checkpoint") continue;
     latestMutationAt = Math.max(latestMutationAt, record.created_at);
-    if (checkpoint && record.created_at <= checkpoint.created_at) {
-      applied.add(record.id);
+    const signature = mutationSignature(record);
+    if (applied.has(record.id)) {
+      const previousSignature = signatures[record.id];
+      if (previousSignature && previousSignature !== signature) {
+        throw new Error("تعارض معرّف تغيير السلة المحفوظ؛ لم تُستبدل المسودة الحالية.");
+      }
+      // Upgrade older checkpoints when the matching operation record is still available.
+      if (!previousSignature) signatures[record.id] = signature;
       continue;
     }
-    if (applied.has(record.id)) continue;
     lines = applyMutation(lines, record);
     applied.add(record.id);
+    signatures[record.id] = signature;
     operationsSinceCheckpoint++;
   }
 
@@ -338,6 +392,7 @@ export function readOfflineCartLedger(
     operations_since_checkpoint: operationsSinceCheckpoint,
     latest_mutation_at: latestMutationAt,
     applied_mutation_ids: [...applied],
+    applied_mutation_signatures: signatures,
     ignored_operations: ignoredOperations,
   };
 }
@@ -393,6 +448,10 @@ export function appendOfflineCartMutation(
     return current;
   }
   if (current.applied_mutation_ids.includes(mutation.id)) {
+    const priorSignature = current.applied_mutation_signatures[mutation.id];
+    if (priorSignature && priorSignature !== mutationSignature(mutation)) {
+      throw new Error("تعارض معرّف تغيير السلة؛ استُخدم هذا المعرّف سابقًا لمحتوى مختلف.");
+    }
     return current;
   }
   if (current.mutation_count >= MAX_APPLIED_MUTATIONS) {
@@ -435,9 +494,11 @@ export function compactOfflineCartLedger(
     scope_key: scopeKey,
     id: createOfflineCartMutationId(),
     kind: "checkpoint",
-    created_at: current.latest_mutation_at,
+    // Advance the checkpoint clock beyond every mutation in the snapshot.
+    created_at: Math.max(Date.now(), current.latest_mutation_at + 1),
     lines: current.lines,
     applied_ids: current.applied_mutation_ids,
+    applied_signatures: current.applied_mutation_signatures,
   };
   storage.setItem(operationKey(scopeKey, checkpoint.id), JSON.stringify(checkpoint));
 
@@ -445,7 +506,9 @@ export function compactOfflineCartLedger(
   for (const entry of entries) {
     const record = entry.record;
     if (!record || record.id === checkpoint.id || record.kind === "seed" || record.kind === "checkpoint") continue;
-    if (record.created_at <= checkpoint.created_at) storage.removeItem(entry.key);
+    // Remove only operations proven to be incorporated into this checkpoint.
+    // Concurrent writes discovered after the snapshot must remain replayable regardless of timestamp.
+    if (current.applied_mutation_ids.includes(record.id)) storage.removeItem(entry.key);
   }
   const compacted = readOfflineCartLedger(storage, scopeKey, current.lines);
   return compacted;
