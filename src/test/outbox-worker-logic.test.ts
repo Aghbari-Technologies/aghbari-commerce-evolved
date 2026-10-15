@@ -129,6 +129,9 @@ describe("outbox worker logical RPC result handling", () => {
     expect(source).toContain("outbox_process_transport_error");
     expect(source).toContain("outbox_failure_transport_error");
     expect(source).toContain("failures > 0 ? 503 : 200");
+    expect(source).toContain('return json({ error: "claim_failed" }, 503, { "retry-after": "30" });');
+    expect(source).toContain("retryAfterSeconds = Math.max(retryAfterSeconds, 300)");
+    expect(source).toContain('failures > 0 ? { "retry-after": String(retryAfterSeconds) } : {}');
     expect(source).toContain("claim_transport_failed");
     expect(source).toContain("catch (cause)");
     expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_process_transport_error/);

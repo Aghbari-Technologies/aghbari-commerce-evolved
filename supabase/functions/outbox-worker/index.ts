@@ -15,10 +15,18 @@ type RpcResult = { status?: string; notifications_created?: number; event_id?: s
 const runtime = (globalThis as unknown as { Deno?: WorkerRuntime }).Deno;
 if (!runtime) throw new Error("This worker must run in the Supabase Edge Runtime.");
 
-function json(body: Record<string, unknown>, status = 200): Response {
+function json(
+  body: Record<string, unknown>,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...extraHeaders,
+    },
   });
 }
 
@@ -86,11 +94,11 @@ if (runtime) {
       console.error("outbox claim transport failed", {
         error: sanitizeOutboxErrorMessage(cause),
       });
-      return json({ error: "claim_transport_failed" }, 503);
+      return json({ error: "claim_transport_failed" }, 503, { "retry-after": "30" });
     }
     if (claimError) {
       console.error("outbox claim failed", { code: claimError.code ?? "unknown" });
-      return json({ error: "claim_failed" }, 500);
+      return json({ error: "claim_failed" }, 503, { "retry-after": "30" });
     }
 
     const claimResult = parseClaimedOutboxEvents(claimedRows);
@@ -103,6 +111,7 @@ if (runtime) {
     let retryScheduled = 0;
     let deadLettered = 0;
     let failures = 0;
+    let retryAfterSeconds = 30;
 
     for (const event of claimed) {
       // Supabase client calls normally return { data, error }, but transport/runtime
@@ -161,6 +170,8 @@ if (runtime) {
       }
       if (failureError) {
         failures++;
+        // This event remains leased until the 300-second lease expires and can then be reclaimed.
+        retryAfterSeconds = Math.max(retryAfterSeconds, 300);
         console.error("outbox failure could not be persisted", {
           eventId: event.id,
           code: failureError.code ?? "unknown",
@@ -187,6 +198,6 @@ if (runtime) {
       retry_scheduled: retryScheduled,
       dead_lettered: deadLettered,
       failures,
-    }, failures > 0 ? 503 : 200);
+    }, failures > 0 ? 503 : 200, failures > 0 ? { "retry-after": String(retryAfterSeconds) } : {});
   });
 }
