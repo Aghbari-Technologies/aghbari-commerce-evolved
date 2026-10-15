@@ -14,6 +14,10 @@ describe("outbox worker logical RPC result handling", () => {
     );
     expect(source).toMatch(/import\s*\{[^}]*sanitizeOutboxErrorMessage[^}]*\}\s*from\s*["']\.\/logic\.ts["']/s);
     expect(source).toContain("sanitizeOutboxErrorMessage(error)");
+    expect(source).toContain("outbox_process_transport_error");
+    expect(source).toContain("outbox_failure_transport_error");
+    expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_process_transport_error/);
+    expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_failure_transport_error/);
     expect(source).not.toMatch(/\bsafeErrorMessage\s*\(/);
   });
 

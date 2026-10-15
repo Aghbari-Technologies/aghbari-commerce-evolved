@@ -86,10 +86,23 @@ if (runtime) {
     let failures = 0;
 
     for (const event of claimed) {
-      const { data, error } = await client.rpc("process_outbox_event", {
-        p_event_id: event.id,
-        p_worker: workerId,
-      });
+      // Supabase client calls normally return { data, error }, but transport/runtime
+      // exceptions must also enter the durable retry path instead of abandoning a lease.
+      let data: unknown = null;
+      let error: { code?: string; message?: string } | null = null;
+      try {
+        const result = await client.rpc("process_outbox_event", {
+          p_event_id: event.id,
+          p_worker: workerId,
+        });
+        data = result.data;
+        error = result.error;
+      } catch (cause) {
+        error = {
+          code: "outbox_process_transport_error",
+          message: sanitizeOutboxErrorMessage(cause),
+        };
+      }
       const processOutcome = error ? "unexpected" : classifyOutboxProcessResult(data);
       if (processOutcome === "processed") {
         processed++;
@@ -106,14 +119,27 @@ if (runtime) {
 
       // A successful HTTP/RPC envelope with a missing or unknown status is not success.
       // Persist it as a retry so the event does not remain leased until timeout unnoticed.
-      const { data: failureData, error: failureError } = await client.rpc("fail_outbox_event", {
-        p_event_id: event.id,
-        p_worker: workerId,
-        p_error_class: error?.code ?? "unexpected_process_result",
-        p_error_message: error
-          ? sanitizeOutboxErrorMessage(error)
-          : "process_outbox_event returned no recognized status",
-      });
+      let failureData: unknown = null;
+      let failureError: { code?: string; message?: string } | null = null;
+      try {
+        const result = await client.rpc("fail_outbox_event", {
+          p_event_id: event.id,
+          p_worker: workerId,
+          p_error_class: error?.code ?? "unexpected_process_result",
+          p_error_message: error
+            ? sanitizeOutboxErrorMessage(error)
+            : "process_outbox_event returned no recognized status",
+        });
+        failureData = result.data;
+        failureError = result.error;
+      } catch (cause) {
+        // Keep this invocation bounded and observable. The DB lease is allowed to expire
+        // and the event can be reclaimed; no false processed/retry success is reported.
+        failureError = {
+          code: "outbox_failure_transport_error",
+          message: sanitizeOutboxErrorMessage(cause),
+        };
+      }
       if (failureError) {
         failures++;
         console.error("outbox failure could not be persisted", {
