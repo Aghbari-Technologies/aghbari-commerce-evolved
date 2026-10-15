@@ -1024,6 +1024,11 @@ async function main() {
   );
   assert.equal(stagedReview[0].result.quantity_review_required, true, "changed quantities must be marked unapproved");
   await expectFailure(
+    "Onyx export audit rejects an order with an unapproved quantity/price review",
+    () => db.unsafe("select public.record_onyx_order_export($1::uuid,$2::integer)", [reviewOrder.id, 1]),
+    /only approved orders/i,
+  );
+  await expectFailure(
     "direct confirmation with unapproved order proposals",
     () => db.unsafe("update public.orders set status='confirmed' where id=$1", [reviewOrder.id]),
     /اعتماد كل الكميات والأسعار|unapproved|approval/i,
@@ -1056,6 +1061,75 @@ async function main() {
   const reviewedInvoice = reviewedFinance[0].result.invoices.filter((row) => row.order_id === reviewOrder.id);
   assert.equal(reviewedInvoice.length, 1, "approval should issue exactly one invoice");
   assert.equal(Number(reviewedInvoice[0].total_amount), 36000);
+
+  const onyxAuditCreated = await db.unsafe(
+    "select public.record_onyx_order_export($1::uuid,$2::integer) as id",
+    [reviewOrder.id, reviewedLines.length],
+  );
+  const onyxAuditId = onyxAuditCreated[0].id;
+  assert.match(onyxAuditId, /^[0-9a-f-]{36}$/i, "the server must return a persisted audit event ID");
+  const onyxAudit = await db.unsafe(
+    "select organization_id,actor_id,action,entity_type,entity_id,new_value from public.audit_logs where id=$1",
+    [onyxAuditId],
+  );
+  assert.equal(onyxAudit.length, 1, "prepared export must persist one server-side audit record");
+  assert.equal(onyxAudit[0].organization_id, organizationId);
+  assert.equal(onyxAudit[0].actor_id, staffProfileId);
+  assert.equal(onyxAudit[0].action, "onyx_export.prepared");
+  assert.equal(onyxAudit[0].entity_type, "order");
+  assert.equal(onyxAudit[0].entity_id, reviewOrder.id);
+  assert.equal(onyxAudit[0].new_value.format, "xlsx");
+  assert.equal(onyxAudit[0].new_value.profile, "onyx-order-27/v1");
+  assert.equal(onyxAudit[0].new_value.column_count, 27);
+  assert.equal(onyxAudit[0].new_value.item_count, 1);
+  assert.equal(onyxAudit[0].new_value.compatibility_verified, false);
+  assert.equal(onyxAudit[0].new_value.download_completion_verified, false,
+    "the event must not claim the browser completed the download");
+  await expectFailure(
+    "Onyx export audit rejects a caller-supplied row count that differs from persisted order items",
+    () => db.unsafe("select public.record_onyx_order_export($1::uuid,$2::integer)", [reviewOrder.id, 2]),
+    /item count does not match/i,
+  );
+
+  // A staff export must not cross organizations even when the foreign order itself is eligible.
+  await db.unsafe("reset role");
+  const foreignAuditCustomerResult = await db.unsafe(
+    `insert into public.customers(
+       organization_id,profile_id,customer_code,business_name,contact_name,phone,email,tier,credit_limit,current_balance,status,approved_at
+     ) values($1,$2,'CI-ONYX-FOREIGN','CI Onyx Foreign Customer','CI Foreign Contact','7779999999',
+       'ci-onyx-foreign@example.test','wholesale',0,0,'approved',now())
+     returning id`,
+    [otherOrganizationId, foreignProfileId],
+  );
+  const foreignAuditOrderResult = await db.unsafe(
+    `insert into public.orders(organization_id,customer_id,order_number,status,total_amount,total_items,created_by)
+     values($1,$2,'CI-ONYX-FOREIGN-ORDER','confirmed',0,1,$3) returning id`,
+    [otherOrganizationId, foreignAuditCustomerResult[0].id, foreignProfileId],
+  );
+  const foreignAuditOrderId = foreignAuditOrderResult[0].id;
+  await db.unsafe(
+    `insert into public.order_items(order_id,product_id,item_code,product_name_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total)
+     values($1,$2,'CI-ONYX-FOREIGN-ITEM','Foreign item','unit',1,0,0)`,
+    [foreignAuditOrderId, otherProductId],
+  );
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "staff cannot create an Onyx export audit for an order in another organization",
+    () => db.unsafe("select public.record_onyx_order_export($1::uuid,$2::integer)", [foreignAuditOrderId, 1]),
+    /order not found in the active organization/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "customer cannot prepare an Onyx order export",
+    () => db.unsafe("select public.record_onyx_order_export($1::uuid,$2::integer)", [reviewOrder.id, 1]),
+    /staff permission required/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  process.stdout.write("PASS Onyx export audit: server-derived actor/tenant, approved-order guard, row-count validation, central audit persistence and cross-tenant/customer denial\\n");
   process.stdout.write("PASS order-review approval, stale/unapproved confirmation guard, one-order price override, invoice and payment-request lifecycle\\n");
 
   const importCreated = await db.unsafe(

@@ -56,6 +56,7 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
   const [drafts, setDrafts] = useState<Record<string, OrderReviewDraft>>({});
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
   const [customerNote, setCustomerNote] = useState('');
   const [reviewMessage, setReviewMessage] = useState('');
   const quantityInputs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -251,11 +252,12 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
     onBack();
   }
 
-  function downloadOnyxWorkbook() {
-    if (!order || !items?.length || !canExportOnyxOrder) {
+  async function downloadOnyxWorkbook() {
+    if (!order || !items?.length || !canExportOnyxOrder || exportBusy) {
       onNotice('لا يمكن تصدير هذا الطلب للمحاسبة قبل اكتمال الاعتماد وتحميل البنود.');
       return;
     }
+    setExportBusy(true);
     try {
       const bytes = buildOnyxOrderWorkbook({
         orderId: order.id,
@@ -266,6 +268,17 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
         customerName: order.customer?.business_name ?? '',
         items,
       });
+
+      // The RPC rechecks active staff identity, tenant, order state and persisted item count.
+      // An audit-write failure blocks the download instead of leaving an unrecorded export.
+      const { data: auditId, error: auditError } = await supabase.rpc('record_onyx_order_export', {
+        p_order_id: order.id,
+        p_item_count: items.length,
+      });
+      if (auditError || typeof auditId !== 'string' || !auditId) {
+        throw new Error('تعذر تسجيل حدث التصدير في سجل التدقيق المركزي؛ لم يبدأ تنزيل الملف.');
+      }
+
       const blob = new Blob([new Uint8Array(bytes).buffer as ArrayBuffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
@@ -278,9 +291,11 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      onNotice('تم إنشاء ملف XLSX بترتيب الأعمدة المرجعي. لم يُثبت بعد توافقه مع إصدار أونكس المستهدف.');
+      onNotice('تم إعداد ملف XLSX وتسجيل حدث التصدير. لم يُثبت بعد اكتمال تنزيل المتصفح أو توافق الملف مع إصدار أونكس المستهدف.');
     } catch (cause) {
-      onNotice(cause instanceof Error ? cause.message : 'تعذر إنشاء ملف XLSX للطلب.');
+      onNotice(cause instanceof Error ? cause.message : 'تعذر إعداد ملف XLSX للطلب.');
+    } finally {
+      setExportBusy(false);
     }
   }
 
@@ -288,13 +303,13 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
     description="راجع البنود والكميات والأسعار، ثم احفظ المسودة واعتمدها في معاملة واحدة قبل تأكيد الطلب."
     icon={Package} note="" toolbar={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       <Button variant="secondary" onClick={goBack} disabled={blocked || busy}><ChevronLeft size={16} /> رجوع</Button>
-      <Button disabled={!canExportOnyxOrder} onClick={downloadOnyxWorkbook}><Download size={16} /> تنزيل XLSX للأونكس</Button>
+      <Button disabled={!canExportOnyxOrder || exportBusy} onClick={downloadOnyxWorkbook}><Download size={16} /> {exportBusy ? 'جارٍ تسجيل حدث التصدير...' : 'تنزيل XLSX للأونكس'}</Button>
     </div>}>
     {order && !canExportOnyxOrder && <p className="privacy-note" role="status" style={{ marginTop: 12 }}>
       تصدير المحاسبة متاح بعد اعتماد الطلب وإكمال مراجعة الكميات والأسعار. لا تُصدّر المسودة غير المعتمدة كمستند محاسبي.
     </p>}
     {order && canExportOnyxOrder && <p className="privacy-note" role="note" style={{ marginTop: 12 }}>
-      يحتوي الملف على ورقة تفاصيل ذات 27 عمودًا بالترتيب المرجعي وورقة مستقلة لرأس المستند والعميل. الحقول غير المتاحة تُترك فارغة. لم يُختبر الملف على إصدار أونكس الفعلي، كما أن تسجيل حدث التنزيل في سجل تدقيق مركزي لم يُنفذ بعد؛ يلزم اختبار قبول قبل الاعتماد المحاسبي.
+      يحتوي الملف على ورقة تفاصيل ذات 27 عمودًا بالترتيب المرجعي وورقة مستقلة لرأس المستند والعميل. الحقول غير المتاحة تُترك فارغة. يُسجل حدث إعداد التصدير خادميًا قبل بدء التنزيل، لكن ذلك لا يثبت اكتمال تنزيل المتصفح أو قبول الملف في إصدار أونكس الفعلي؛ يلزم اختبار قبول قبل الاعتماد المحاسبي.
     </p>}
     {order && <div className="order-detail-grid">
       <div className="order-info-panel">
