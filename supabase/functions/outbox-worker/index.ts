@@ -135,9 +135,17 @@ if (runtime) {
         });
         continue;
       }
-      const failureResult = failureData as RpcResult | null;
-      if (failureResult?.status === "dead_letter") deadLettered++;
-      else if (failureResult?.status === "retry") retryScheduled++;
+      const failureOutcome = classifyOutboxProcessResult(failureData);
+      if (failureOutcome === "dead_letter") deadLettered++;
+      else if (failureOutcome === "retry") retryScheduled++;
+      else if (failureOutcome === "processed") processed++;
+      else {
+        // Do not silently report success when the failure recorder returns an unknown payload.
+        failures++;
+        console.error("outbox failure recorder returned an unrecognized status", {
+          eventId: event.id,
+        });
+      }
     }
 
     return json({
