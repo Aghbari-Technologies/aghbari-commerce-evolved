@@ -171,6 +171,37 @@ describe("Arabic customer finance PDFs", () => {
     )).rejects.toThrow("non-standard monetary value");
   });
 
+  it("rejects invoice PDFs when subtotal plus tax does not equal the total", async () => {
+    const invoice = {
+      id: invoiceId,
+      invoice_number: "INV-2026-TAX-MISMATCH",
+      customer_id: "55555555-5555-4555-8555-555555555555",
+      status: "issued",
+      issued_at: "2026-10-15T09:00:00.000Z",
+      currency: "YER",
+      subtotal: "25.00",
+      tax_amount: "1.00",
+      total_amount: "25.00",
+    };
+    const line = {
+      id: "66666666-6666-4666-8666-666666666666",
+      item_code: "000125",
+      description: "سكر أبيض",
+      unit: "كرتون",
+      quantity: "2",
+      unit_price: "12.50",
+      line_total: "25.00",
+    };
+    const customer = { customer_code: "000042", business_name: "متجر الاختبار" };
+
+    await expect(buildCustomerInvoicePdf(invoice, [line], customer, fontBytes(), generatedAt))
+      .rejects.toThrow("Invoice subtotal plus tax does not equal the invoice total.");
+
+    await expect(buildCustomerInvoicePdf(
+      { ...invoice, total_amount: "26.00" }, [line], customer, fontBytes(), generatedAt,
+    )).resolves.toBeInstanceOf(Uint8Array);
+  });
+
   it("rejects malformed financial amounts rather than issuing a misleading statement", async () => {
     await expect(
       buildCustomerStatementPdf(
