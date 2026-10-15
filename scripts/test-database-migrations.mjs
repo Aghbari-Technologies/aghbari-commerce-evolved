@@ -97,6 +97,67 @@ async function main() {
      on conflict (organization_id,customer_code) do nothing`,
     [organizationId, profileId, secondProfileId],
   );
+
+  // AGH-CUSTOMER-360-001: address ownership, RPC-only mutations and default lifecycle.
+  const customerOne = await db.unsafe(
+    "select id from public.customers where organization_id=$1 and profile_id=$2",
+    [organizationId, profileId],
+  );
+  assert.equal(customerOne.length,1);
+  const customerOneId=customerOne[0].id;
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const first=await db.unsafe(
+    "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean) as id",
+    [null,"CI Main Depot","CI Customer One","7771111111","Street 1",null,"Sanaa",null,null,"YE",null,false],
+  );
+  const firstId=first[0].id;
+  const firstRows=await db.unsafe("select id,is_default from public.customer_addresses where id=$1",[firstId]);
+  assert.equal(firstRows.length,1,"customer should read its own new address");
+  assert.equal(firstRows[0].is_default,true,"first address becomes default even if caller flag is false");
+
+  const second=await db.unsafe(
+    "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean) as id",
+    [null,"CI Receiving Dock","CI Customer One","7771111111","Street 2","Back gate","Sanaa",null,null,"YE","Call before arrival",true],
+  );
+  const secondId=second[0].id;
+  const defaults=await db.unsafe("select id from public.customer_addresses where customer_id=$1 and is_default=true",[customerOneId]);
+  assert.deepEqual(defaults.map(r=>r.id),[secondId],"setting another default demotes the earlier one");
+
+  await expectFailure("direct customer address INSERT is forbidden",
+    ()=>db.unsafe("insert into public.customer_addresses(organization_id,customer_id,label,recipient_name,phone,address_line1,city,country) values($1,$2,'Forged','CI Customer One','7771111111','Injected street','Sanaa','YE')",[organizationId,customerOneId]),
+    /permission denied/i);
+  await expectFailure("direct customer address UPDATE is forbidden",
+    ()=>db.unsafe("update public.customer_addresses set label='Forged' where id=$1",[secondId]),/permission denied/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(secondAuthUserId,"ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
+  const crossCustomer=await db.unsafe("select id from public.customer_addresses where id=$1",[secondId]);
+  assert.equal(crossCustomer.length,0,"same-organization customers must not see each other's addresses");
+  await expectFailure("customer cannot update another customer's address",
+    ()=>db.unsafe("select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean)",
+      [secondId,"Hijack","CI Customer Two","7772222222","Fake street",null,"Sanaa",null,null,"YE",null,true]),
+    /not found|not owned|42501/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure("direct customer address DELETE is forbidden",
+    ()=>db.unsafe("delete from public.customer_addresses where id=$1",[secondId]),/permission denied/i);
+  const deleted=await db.unsafe("select public.delete_customer_address($1::uuid) as deleted",[secondId]);
+  assert.equal(deleted[0].deleted,true);
+  const promoted=await db.unsafe("select id,is_default from public.customer_addresses where id=$1",[firstId]);
+  assert.equal(promoted.length,1);
+  assert.equal(promoted[0].is_default,true,"deleting the default promotes the remaining address");
+
+  await db.unsafe("reset role");
+  const audit=await db.unsafe("select action from public.audit_logs where organization_id=$1 and entity_type='customer_address' and entity_id=any($2::uuid[])",[organizationId,[firstId,secondId]]);
+  assert.ok(audit.some(r=>r.action==="customer_address.created"));
+  assert.ok(audit.some(r=>r.action==="customer_address.deleted"));
+  process.stdout.write("PASS customer address book: RLS ownership, RPC-only writes, default promotion, audit trail, cross-customer denial\\n");
+
   await db.unsafe(
     "update public.profiles set auth_user_id=$1 where id=$2 and auth_user_id is null",
     [staffAuthUserId, staffProfileId],
