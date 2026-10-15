@@ -1365,7 +1365,7 @@ async function main() {
   assert.equal((await db.unsafe("select id from public.customer_company_contacts where id=$1",[firstContactId])).length,1,"buyer is scoped to the invited company's contacts");
   const memberOrderRows=await db.unsafe(
     "select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid) as result",
-    [JSON.stringify([{product_id:productId,quantity:1}]),"Member checkout test","CI Company One","Invited buyer","7771113333","cash_on_delivery","member-checkout-key-000001",null],
+    [db.json([{product_id:productId,quantity:1}]),"Member checkout test","CI Company One","Invited buyer","7771113333","cash_on_delivery","member-checkout-key-000001",null],
   );
   const memberOrderId=memberOrderRows[0].result.id;
   const linkedOrder=await db.unsafe("select customer_id from public.orders where id=$1",[memberOrderId]);
@@ -1388,7 +1388,7 @@ async function main() {
   assert.equal(financeScope[0].can_statement,true,"finance member can read company statements");
   await expectFailure("finance member cannot bypass the order capability through checkout",
     ()=>db.unsafe("select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid)",
-      [JSON.stringify([{product_id:productId,quantity:1}]),"Forbidden finance checkout","CI Company One","Finance member","7771114444","cash_on_delivery","finance-checkout-key-0001",null]),
+      [db.json([{product_id:productId,quantity:1}]),"Forbidden finance checkout","CI Company One","Finance member","7771114444","cash_on_delivery","finance-checkout-key-0001",null]),
     /not allowed to place orders/i);
 
   await db.unsafe("reset role");
