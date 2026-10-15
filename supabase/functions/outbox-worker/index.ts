@@ -30,7 +30,12 @@ function safeErrorMessage(value: unknown): string {
   const message = value instanceof Error ? value.message : "Unclassified worker error";
   return message
     .replace(/\b(Bearer|service_role|anon_key|api[_-]?key|password|secret)\b[=: ]+\S+/gi, "$1=[redacted]")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .split("")
+    .map((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127 ? " " : character;
+    })
+    .join("")
     .slice(0, 500);
 }
 
