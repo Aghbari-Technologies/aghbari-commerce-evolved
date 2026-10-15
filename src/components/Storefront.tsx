@@ -7,7 +7,7 @@ import {
 import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -37,7 +37,13 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
   const { data: liveProducts, loading: productsLoading, error: productsError, refetch: refetchProducts } = useFetch(fetchProducts);
   const [cachedProducts, setCachedProducts] = useState<ProductWithInventory[]>(() => {
     if (typeof window === 'undefined') return [];
-    try { const value = JSON.parse(window.localStorage.getItem('aghbari:catalog:v1') || '[]') as unknown; return Array.isArray(value) ? value as ProductWithInventory[] : []; } catch { return []; }
+    try {
+      const value = JSON.parse(window.localStorage.getItem('aghbari:catalog:v1') || '[]') as unknown;
+      const safe = sanitizePublicCatalogCache(value);
+      // Rewrite legacy v1 cache immediately so staff-only fields from earlier builds are purged.
+      window.localStorage.setItem('aghbari:catalog:v1', JSON.stringify(safe));
+      return safe;
+    } catch { return []; }
   });
   const products = liveProducts ?? cachedProducts;
   const { data: categories, error: categoriesError } = useFetch(fetchCategories);
@@ -72,8 +78,9 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
 
   useEffect(() => {
     if (!liveProducts) return;
-    setCachedProducts(liveProducts);
-    try { window.localStorage.setItem('aghbari:catalog:v1', JSON.stringify(liveProducts)); } catch { /* storage is optional */ }
+    const safeCatalog = sanitizePublicCatalogCache(liveProducts);
+    setCachedProducts(safeCatalog);
+    try { window.localStorage.setItem('aghbari:catalog:v1', JSON.stringify(safeCatalog)); } catch { /* storage is optional */ }
   }, [liveProducts]);
 
   useEffect(() => {
