@@ -106,7 +106,7 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 
 - Verified route-role CI at SHA `c19c0b0516194d309fdf183690b8ceb1ee7a595f`, Actions [38696894239](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696894239) **SUCCESS**. Customer sessions are denied from the real `/admin/quotes` route before any tenant/table/RPC read; active staff sessions load the quotes workspace using the explicit non-financial quote projection.
 - Added two regression assertions in `scripts/test-database-migrations.mjs`: authenticated customers must be denied direct execution of `public.customer_product_unit_price(uuid,uuid,text,numeric)` and `public.preview_order_pricing(jsonb)`. This complements the existing direct `product_prices` table read test and the customer cart response field exclusions.
-- Exact-SHA CI for the new RPC checks is pending. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN until all-channel and real-browser proof exists.
+- Exact-SHA CI at SHA `fe6a993e8ba809d6117c553314ddbc49b9c256db`, [run 38697134660](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697134660), **SUCCESS**. Customer direct calls to both raw pricing functions are denied, alongside direct table SELECT denial. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN until all-channel and live-browser proof exists.
 ## 2026-10-15 — Direct raw price-calculation RPCs denied
 
 - Code SHA `fe6a993e8ba809d6117c553314ddbc49b9c256db`; exact-head CI [run 38697134660](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697134660) **SUCCESS** across unit tests, PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
