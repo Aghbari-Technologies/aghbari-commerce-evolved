@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   fetchPromotions: vi.fn(),
   fetchSettingsMap: vi.fn(),
+  user: null as null | { profileId: string; roles: string[]; name: string },
+  rpc: vi.fn(async () => ({ data: null as unknown, error: null as unknown })),
   products: [
     { id: "product-1", name: "Rice", item_code: "SKU-001", barcode: null, description: null, unit: "carton", base_price: 1000, cost_price: 600, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1000, wholesale_price: 900, inventory: { id: "inv-1", product_id: "product-1", warehouse_id: "warehouse-1", quantity_on_hand: 20, quantity_reserved: 0, quantity_available: 20, reorder_point: 0 } },
     { id: "product-2", name: "Sugar", item_code: "SKU-002", barcode: null, description: null, unit: "carton", base_price: 1200, cost_price: 800, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1200, wholesale_price: 1100, inventory: { id: "inv-2", product_id: "product-2", warehouse_id: "warehouse-1", quantity_on_hand: 15, quantity_reserved: 0, quantity_available: 15, reorder_point: 0 } },
@@ -37,12 +39,12 @@ vi.mock("@/lib/useFetch", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ user: null, configurationError: null, ready: true }),
+  useAuth: () => ({ user: mocks.user, configurationError: null, ready: true }),
   AuthProvider: ({ children }: { children: unknown }) => children,
 }));
 
 vi.mock("@/lib/supabase", () => ({
-  supabase: { rpc: vi.fn(async () => ({ data: null, error: null })) },
+  supabase: { rpc: mocks.rpc },
   ORG_ID: "test-organization",
   ADMIN_PROFILE_ID: "test-admin-profile",
   WAREHOUSE_ID: "test-warehouse",
@@ -95,6 +97,9 @@ describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
     mocks.products.splice(0, mocks.products.length, ...initialProducts);
+    mocks.user = null;
+    mocks.rpc.mockReset();
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
   });
 
   afterEach(async () => {
@@ -109,6 +114,71 @@ describe("customer storefront saved discovery", () => {
     expect(empty.host.textContent).toContain("لا توجد أصناف منشورة حالياً");
     expect(empty.host.textContent).toContain("لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً");
     expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
+  });
+
+  it("keeps cart amounts hidden when the server policy is off", async () => {
+    mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({
+      data: {
+        valid: true,
+        pricing_verified: true,
+        item_count: 1,
+        currency: "YER",
+        amounts_visible: false,
+        items: [{ product_id: "product-1", name: "Rice", item_code: "SKU-001", unit: "carton", quantity: 2 }],
+      },
+      error: null,
+    });
+
+    const cart = await mountAt("/cart");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(mocks.rpc).toHaveBeenCalledWith("get_customer_checkout_preview", {
+      p_items: [{ product_id: "product-1", quantity: 2 }],
+    });
+    expect(cart.host.textContent).toContain("سلة المشتريات");
+    expect(cart.host.textContent).not.toContain("ملخص المبالغ التقديري");
+    expect(cart.host.textContent).not.toContain("الإجمالي التقديري");
+    expect(cart.host.textContent).not.toContain("سعر الوحدة");
+  });
+
+  it("shows only the server-authorized cart amount preview when the policy is on", async () => {
+    mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({
+      data: {
+        valid: true,
+        pricing_verified: true,
+        item_count: 1,
+        currency: "YER",
+        amounts_visible: true,
+        total_amount: 40,
+        items: [{ product_id: "product-1", name: "Rice", item_code: "SKU-001", unit: "carton", quantity: 2, unit_price: 20, line_total: 40 }],
+      },
+      error: null,
+    });
+
+    const cart = await mountAt("/cart");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(cart.host.textContent).toContain("ملخص المبالغ التقديري");
+    expect(cart.host.textContent).toContain("الإجمالي التقديري");
+    expect(cart.host.textContent).toContain("ر.ي");
+    expect(cart.host.textContent).toContain("المبلغ تقديري للمعاينة");
+  });
+
+  it("fails closed when the cart financial RPC is unavailable", async () => {
+    mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "RPC unavailable" } });
+
+    const cart = await mountAt("/cart");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(cart.host.textContent).toContain("تعذر التحقق من ملخص مالي موثوق");
+    expect(cart.host.textContent).not.toContain("ملخص المبالغ التقديري");
+    expect(cart.host.textContent).not.toContain("الإجمالي التقديري");
   });
 
   it("persists wishlist and caps comparison at three across direct route loads", async () => {

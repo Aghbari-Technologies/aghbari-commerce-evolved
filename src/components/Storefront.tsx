@@ -400,7 +400,7 @@ function CartFinancialPreview({ cart, profileId }: { cart: CartItem[]; profileId
       <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>ملخص المبالغ التقديري</h3>
       {preview.items.map((line) => (
         <div key={line.product_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: '1px solid #edf2f3' }}>
-          <span>{line.name} × {formatNumber(line.quantity)}</span>
+          <span>{line.name} × {formatNumber(line.quantity)}<small style={{ display: 'block', color: '#536b70', marginTop: 4 }}>سعر الوحدة: {line.unit_price == null ? 'غير متاح' : formatPolicyMoney(line.unit_price, preview.currency)}</small></span>
           <strong>{line.line_total == null ? 'غير متاح' : formatPolicyMoney(line.line_total, preview.currency)}</strong>
         </div>
       ))}
