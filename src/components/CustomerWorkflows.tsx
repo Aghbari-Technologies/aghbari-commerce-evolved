@@ -2177,7 +2177,8 @@ function CustomerAddresses() {
   }
 
   const inputStyle: React.CSSProperties = { ...field, marginTop: 6 };
-  const set = (key: keyof CustomerAddressInput, value: string | boolean) => setDraft(d => ({ ...d, [key]: value }));
+  type AddressTextField = Exclude<keyof CustomerAddressInput, "id" | "is_default">;
+  const setText = (key: AddressTextField, value: string) => setDraft(d => ({ ...d, [key]: value }));
   return <WorkspaceShell title="عناوين التوصيل" subtitle="احفظ عناوين شركتك ومواقع الاستلام. يستخرج الخادم حساب العميل وصلاحياته ولا يقبل هوية العميل أو المؤسسة من المتصفح.">
     {error && <ErrorBox message={error} retry={() => void load()} />}
     {notice && <div role="status" style={{ ...card, borderColor:"#a8d7c0", color:"#17684d", marginBottom:14 }}>{notice}</div>}
@@ -2187,19 +2188,19 @@ function CustomerAddresses() {
       </h2>
       <form onSubmit={submit}>
         <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12 }}>
-          <label>اسم العنوان<input style={inputStyle} value={draft.label} onChange={e=>set("label",e.target.value)} maxLength={50} required /></label>
-          <label>اسم المستلم<input style={inputStyle} value={draft.recipient_name} onChange={e=>set("recipient_name",e.target.value)} minLength={2} maxLength={120} autoComplete="name" required /></label>
-          <label>رقم الهاتف<input style={inputStyle} type="tel" dir="auto" value={draft.phone} onChange={e=>set("phone",e.target.value)} minLength={7} maxLength={32} autoComplete="tel" required /></label>
-          <label>المدينة<input style={inputStyle} value={draft.city} onChange={e=>set("city",e.target.value)} minLength={2} maxLength={100} autoComplete="address-level2" required /></label>
-          <label>العنوان التفصيلي<input style={inputStyle} value={draft.address_line1} onChange={e=>set("address_line1",e.target.value)} minLength={3} maxLength={180} autoComplete="street-address" required /></label>
-          <label>تفاصيل إضافية<input style={inputStyle} value={draft.address_line2 ?? ""} onChange={e=>set("address_line2",e.target.value)} maxLength={180} /></label>
-          <label>المحافظة / المنطقة<input style={inputStyle} value={draft.region ?? ""} onChange={e=>set("region",e.target.value)} maxLength={100} autoComplete="address-level1" /></label>
-          <label>الرمز البريدي<input style={inputStyle} value={draft.postal_code ?? ""} onChange={e=>set("postal_code",e.target.value)} maxLength={24} autoComplete="postal-code" /></label>
-          <label>رمز الدولة<input style={inputStyle} value={draft.country} onChange={e=>set("country",e.target.value)} minLength={2} maxLength={2} autoComplete="country" required /></label>
-          <label style={{ gridColumn:"1/-1" }}>تعليمات للمندوب (اختياري)<textarea style={{ ...inputStyle,minHeight:76,resize:"vertical" }} value={draft.delivery_instructions ?? ""} onChange={e=>set("delivery_instructions",e.target.value)} maxLength={1000} /></label>
+          <label>اسم العنوان<input style={inputStyle} value={draft.label} onChange={e=>setText("label",e.target.value)} maxLength={50} required /></label>
+          <label>اسم المستلم<input style={inputStyle} value={draft.recipient_name} onChange={e=>setText("recipient_name",e.target.value)} minLength={2} maxLength={120} autoComplete="name" required /></label>
+          <label>رقم الهاتف<input style={inputStyle} type="tel" dir="auto" value={draft.phone} onChange={e=>setText("phone",e.target.value)} minLength={7} maxLength={32} autoComplete="tel" required /></label>
+          <label>المدينة<input style={inputStyle} value={draft.city} onChange={e=>setText("city",e.target.value)} minLength={2} maxLength={100} autoComplete="address-level2" required /></label>
+          <label>العنوان التفصيلي<input style={inputStyle} value={draft.address_line1} onChange={e=>setText("address_line1",e.target.value)} minLength={3} maxLength={180} autoComplete="street-address" required /></label>
+          <label>تفاصيل إضافية<input style={inputStyle} value={draft.address_line2 ?? ""} onChange={e=>setText("address_line2",e.target.value)} maxLength={180} /></label>
+          <label>المحافظة / المنطقة<input style={inputStyle} value={draft.region ?? ""} onChange={e=>setText("region",e.target.value)} maxLength={100} autoComplete="address-level1" /></label>
+          <label>الرمز البريدي<input style={inputStyle} value={draft.postal_code ?? ""} onChange={e=>setText("postal_code",e.target.value)} maxLength={24} autoComplete="postal-code" /></label>
+          <label>رمز الدولة<input style={inputStyle} value={draft.country} onChange={e=>setText("country",e.target.value)} minLength={2} maxLength={2} autoComplete="country" required /></label>
+          <label style={{ gridColumn:"1/-1" }}>تعليمات للمندوب (اختياري)<textarea style={{ ...inputStyle,minHeight:76,resize:"vertical" }} value={draft.delivery_instructions ?? ""} onChange={e=>setText("delivery_instructions",e.target.value)} maxLength={1000} /></label>
         </div>
         <label style={{ display:"flex",alignItems:"center",gap:8,marginTop:14,fontWeight:750 }}>
-          <input type="checkbox" checked={draft.is_default} onChange={e=>set("is_default",e.target.checked)} /> اجعل هذا العنوان هو العنوان الرئيسي للتوصيل
+          <input type="checkbox" checked={draft.is_default} onChange={e=>setDraft(d=>({...d,is_default:e.target.checked}))} /> اجعل هذا العنوان هو العنوان الرئيسي للتوصيل
         </label>
         <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginTop:16 }}>
           <button style={primary} type="submit" disabled={saving || loading}><Save size={16}/>{saving ? "جارٍ الحفظ..." : draft.id ? "حفظ التعديلات" : "حفظ العنوان"}</button>
