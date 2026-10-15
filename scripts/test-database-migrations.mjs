@@ -1311,12 +1311,12 @@ async function main() {
 
   // AGH-CUSTOMER-360-MEMBERS-001: verified invitation, explicit company scope, permission matrix and revocation.
   await db.unsafe("reset role");
-  const invitedProfileId="f6666666-6666-4666-8666-666666666666";
-  const invitedAuthUserId="66666666-6666-4666-8666-666666666666";
-  const financeProfileId="f7777777-7777-4777-8777-777777777777";
-  const financeAuthUserId="77777777-7777-4777-8777-777777777777";
+  const invitedProfileId="f8888888-8888-4888-8888-888888888888";
+  const invitedAuthUserId="88888888-8888-4888-8888-888888888888";
+  const financeProfileId="f9999999-9999-4999-8999-999999999999";
+  const financeAuthUserId="99999999-9999-4999-8999-999999999999";
   await db.unsafe(
-    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Invited Buyer','ci-invited-buyer@example.test',true),($4,$5,$3,'CI Invited Finance','ci-invited-finance@example.test',true) on conflict(id) do nothing",
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Invited Buyer','ci-invited-buyer@example.test',true),($4,$5,$3,'CI Invited Finance','ci-invited-finance@example.test',true)",
     [invitedProfileId,invitedAuthUserId,organizationId,financeProfileId,financeAuthUserId],
   );
   await db.unsafe("insert into public.user_roles(profile_id,role) values($1,'customer'),($2,'customer') on conflict(profile_id,role) do nothing",[invitedProfileId,financeProfileId]);
