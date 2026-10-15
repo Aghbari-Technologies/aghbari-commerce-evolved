@@ -72,7 +72,7 @@ type AccountStatementPayload = {
 function isAccountStatementMoney(value: unknown): value is number | string {
   if (typeof value !== "number" && typeof value !== "string") return false;
   const raw = typeof value === "number" ? String(value) : value.trim();
-  if (!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)) return false;
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) return false;
   return Number.isFinite(Number(raw)) && Number(raw) >= 0;
 }
 function validateAccountStatementPayload(payload: unknown): AccountStatementPayload {
