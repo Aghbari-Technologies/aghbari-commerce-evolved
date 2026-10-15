@@ -1977,7 +1977,14 @@ function Offline() {
     setSyncing(true);
     setMessage("");
     try {
-      const rows = sanitizePublicCatalogCache(await fetchProducts());
+      const fetchedCatalog: unknown = await fetchProducts();
+      if (!Array.isArray(fetchedCatalog)) {
+        throw new Error("استجابة الكتالوج من الخادم غير صالحة؛ احتفظنا بالنسخة المحلية.");
+      }
+      const rows = sanitizePublicCatalogCache(fetchedCatalog);
+      if (fetchedCatalog.length > 0 && rows.length === 0) {
+        throw new Error("لم تتضمن استجابة الخادم أصنافًا صالحة؛ احتفظنا بالنسخة المحلية.");
+      }
       localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(rows));
       refresh();
       setMessage(

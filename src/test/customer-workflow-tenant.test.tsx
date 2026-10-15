@@ -640,6 +640,42 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
   });
 
+  it("preserves the last offline catalog when sync returns malformed server data", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    const catalogScope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    window.localStorage.setItem(getOfflineCatalogCacheKey(catalogScope), JSON.stringify([{
+      id: "offline-preserved-1",
+      name: "Legacy Sugar",
+      item_code: "000771",
+      unit: "carton",
+      base_price: 0,
+    }]));
+    mocks.fetchProducts.mockResolvedValueOnce({ malformed: true });
+
+    await mountQuoteWorkspace("/offline");
+    const cacheKey = getOfflineCatalogCacheKey(catalogScope);
+    const beforeSync = window.localStorage.getItem(cacheKey);
+    const syncButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("تحديث الكتالوج المحلي"),
+    );
+    expect(syncButton).toBeDefined();
+    await act(async () => {
+      syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(window.localStorage.getItem(cacheKey)).toBe(beforeSync);
+    expect(host?.textContent).toContain("تعذر تحديث الكتالوج؛ لم نغيّر النسخة المحلية.");
+    expect(host?.textContent).toContain("Legacy Sugar");
+  });
+
   it("shows invoice prices in the customer preview only from the scoped invoice RPC", async () => {
     const invoiceId = "22222222-2222-4222-8222-222222222222";
     mocks.user = {
