@@ -1,6 +1,6 @@
 # Aghbari Commerce — repository-wide Copilot instructions
 
-Read and obey the root `AGENTS.md` before acting. It is the shared agent rulebook; do not copy or fork its full content here.
+Read and obey the root `AGENTS.md` before acting. It is the shared agent rulebook; do not copy or fork its full content here. Lovable's official documentation confirms that root-level `AGENTS.md` is always read by its agent; this is the free persistent-instruction path: https://docs.lovable.dev/features/knowledge.
 
 At every task/session, verify the live repository state once (`git fetch origin`, `git status --short --branch`, branch, local HEAD, `origin/main`, latest commit, and exact-SHA GitHub Actions). Then read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, `ops/AGHBARI-LATEST-EXECUTION-STATE.md`, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, and `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. Use `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` as the authoritative product spec, consulting only the relevant acceptance criteria.
 

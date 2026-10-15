@@ -44,3 +44,9 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Canonical state/resume/registry/mandate and memory are updated; the owner-supplied `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` remains unchanged. No duplicate log was created and no Lovable points were used.
 - Production Supabase project `ffxxjaolfntzbapmfbuv` remains an external access blocker. Keep production migration and real-browser proof open.
 - **next_task_id:** `AGH-SEC-BROWSER-E2E-001`.
+## 2026-10-15 — Free Lovable persistent-instruction fallback verified
+
+- Lovable official docs explicitly state that root-level `AGENTS.md` is always read by its agent regardless of session length: https://docs.lovable.dev/features/knowledge. The existing root `AGENTS.md` therefore gives Aghbari a free, repository-backed persistent session-resume mechanism; this avoids spending Lovable points or browser wallet credits just to persist the rule.
+- Latest remote baseline when this clarification was prepared: `8729fdd39158ab562d5833d4dbdcf76856d83d47`, exact-head CI [38692662830](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692662830) **SUCCESS**. This CI result applies only to that baseline; verify the clarification commit's own run separately.
+- **Not claimed:** direct Project settings → Knowledge edit, or confirmation that a subsequent SHA is active in the live Lovable editor. The metered browser run did not start because its wallet balance was insufficient. No Lovable points or browser wallet funds were spent in this fallback.
+- `AGH-OPS-RESUME-001` remains `DONE_VERIFIED` for committed repository policy/CI; editor sync stays a separate evidence gate. `next_task_id = AGH-SEC-BROWSER-E2E-001`.

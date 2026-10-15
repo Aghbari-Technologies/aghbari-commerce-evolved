@@ -1,16 +1,24 @@
 # Aghbari Commerce — Latest Execution State
 
+## Free Lovable persistence path verified from official documentation — 2026-10-15
+
+- **Official contract:** Lovable docs state that root-level `AGENTS.md` files are always read by the Lovable agent regardless of session length: https://docs.lovable.dev/features/knowledge. The existing root `AGENTS.md` on this repository is therefore the free persistent-instruction fallback; the separate Project Knowledge text field need not be directly edited just to make resume rules durable.
+- **Live repository baseline before this clarification:** `main` SHA `8729fdd39158ab562d5833d4dbdcf76856d83d47`; exact-SHA CI [run 38692662830](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692662830) completed **SUCCESS**. This is baseline evidence, not proof for the clarification commit that follows.
+- **Scope boundary:** the documented AGENTS loader is verified from official docs; the actual active branch/editor sync for any new commit and direct edit of Project settings → Knowledge remain **UNVERIFIED** because the free browser route did not provide an authenticated editor session. Do not spend wallet/credits or claim editor sync without direct evidence.
+- **Next code task remains** `AGH-SEC-BROWSER-E2E-001`; the last recorded external blocker to production DB work is `AGH-EXT-SUPABASE-001` for intended project `ffxxjaolfntzbapmfbuv`.
+
+---
 ## Verified protocol implementation checkpoint — 2026-10-15
 
 - **Implementation SHA on remote `main`:** `90602f6deeba79a5d80efad38d83efec64be5173` — https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/90602f6deeba79a5d80efad38d83efec64be5173.
 - **Exact-SHA CI:** [run 38692264543](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692264543) completed **SUCCESS** for the implementation SHA above. The job's unit tests, isolated PostgreSQL 17 migration/core workflow acceptance, lint, build, port 5173 dev-server smoke and cleanup steps all concluded success.
 - **Protocol files changed in this batch:** `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, `ops/AGHBARI-LATEST-EXECUTION-STATE.md`, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. Root `AGENTS.md` and `.github/copilot-instructions.md` were already committed and were verified present; no duplicate instruction system was created.
-- **Protocol task:** `AGH-OPS-RESUME-001` is now `DONE_VERIFIED` for repository persistence and the implementation SHA's exact CI. This proves the repository files are committed and CI passed; it does **not** prove Lovable automatically loaded the instructions or synchronized the editor.
+- **Protocol task:** `AGH-OPS-RESUME-001` is `DONE_VERIFIED` for repository persistence and exact-SHA CI. Official Lovable docs establish that root `AGENTS.md` is always read, providing the free persistent-instruction fallback; this does **not** prove a particular new SHA synchronized into the live editor or that Project Knowledge was directly edited.
 - **Remote ref safety:** GitHub reports branch protection disabled. Any direct `main` update must use an expected-SHA lease with `force=false`; abort on SHA mismatch.
 - **Local Git limitation:** this execution host has no mounted checkout. The remote branch, commit and Actions were verified by GitHub API; local `git fetch`, `git status`, local branch and local `HEAD` were not run. Working-tree state remains **UNKNOWN**.
 - **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Resume here; implement/execute source-runnable authenticated customer/staff browser acceptance and tenant/pricing privacy checks with non-production fixtures. Do not repeat broad discovery.
 - **`blocked_task_id = AGH-EXT-SUPABASE-001` — external / recheck before production use.** Expected Supabase project ref is `ffxxjaolfntzbapmfbuv`; do not migrate a different project. Keep production tenant isolation unproven until authorized access and required E2E evidence exist.
-- **Lovable instruction loading/sync:** still unverified. Do not spend Lovable points on discovery or claim sync based on Git push alone.
+- **Lovable persistence/sync:** root `AGENTS.md` auto-reading is documented by Lovable's official docs (https://docs.lovable.dev/features/knowledge), so it is the no-cost instruction mechanism. Synchronization of the newest SHA into the live editor remains unverified; do not spend credits on discovery or claim sync based on Git push alone.
 
 ---
 
