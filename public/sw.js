@@ -1,6 +1,6 @@
 /* Aghbari offline shell. Financial data, auth responses and Supabase traffic are never cached. */
 const CACHE_NAME = 'aghbari-shell-v2';
-const SHELL = ['/', '/manifest.webmanifest', '/favicon.ico'];
+const SHELL = ['/', '/manifest.webmanifest', '/favicon.ico', '/aghbari-192.png', '/aghbari-512.png'];
 
 const MAX_CACHED_BUILD_ASSETS = 120;
 

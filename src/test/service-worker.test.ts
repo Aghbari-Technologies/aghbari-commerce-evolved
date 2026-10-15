@@ -89,7 +89,7 @@ describe("Aghbari PWA offline shell", () => {
 
     expect(worker.cachesMock.open).toHaveBeenCalledWith("aghbari-shell-v2");
     expect(worker.cacheAdd.mock.calls.map(([url]) => url)).toEqual([
-      "/", "/manifest.webmanifest", "/favicon.ico",
+      "/", "/manifest.webmanifest", "/favicon.ico", "/aghbari-192.png", "/aghbari-512.png",
     ]);
     expect(worker.skipWaiting).toHaveBeenCalledOnce();
   });

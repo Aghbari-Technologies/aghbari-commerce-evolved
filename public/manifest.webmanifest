@@ -9,5 +9,24 @@
   "display": "standalone",
   "background_color": "#f6fafb",
   "theme_color": "#087f8d",
-  "icons": [{ "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }]
+  "icons": [
+    {
+      "src": "/aghbari-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/aghbari-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ],
+  "id": "/"
 }
