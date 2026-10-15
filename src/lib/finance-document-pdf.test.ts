@@ -23,6 +23,8 @@ describe("Arabic customer finance PDFs", () => {
             due_at: "2026-10-30T00:00:00.000Z",
             currency: "YER",
             total_amount: "100.10",
+            paid_amount: "25.05",
+            outstanding_amount: "75.05",
           },
           {
             id: "22222222-2222-4222-8222-222222222222",
@@ -32,6 +34,8 @@ describe("Arabic customer finance PDFs", () => {
             due_at: null,
             currency: "USD",
             total_amount: "7.25",
+            paid_amount: "0.00",
+            outstanding_amount: "7.25",
           },
           {
             id: "33333333-3333-4333-8333-333333333333",
@@ -40,6 +44,8 @@ describe("Arabic customer finance PDFs", () => {
             issued_at: "2026-10-13T09:00:00.000Z",
             currency: "YER",
             total_amount: "500.00",
+            paid_amount: "0.00",
+            outstanding_amount: "0.00",
           },
         ],
         payments: [
@@ -50,6 +56,14 @@ describe("Arabic customer finance PDFs", () => {
             paid_at: "2026-10-15T10:00:00.000Z",
           },
         ],
+        summary: {
+          invoice_count: 3,
+          payment_count: 1,
+          totals_by_currency: [
+            { currency: "YER", invoiced: "100.10", paid: "25.05", outstanding: "75.05", invoice_count: 1 },
+            { currency: "USD", invoiced: "7.25", paid: "0.00", outstanding: "7.25", invoice_count: 1 },
+          ],
+        },
       },
       fontBytes(),
       generatedAt,
@@ -214,14 +228,73 @@ describe("Arabic customer finance PDFs", () => {
               issued_at: "2026-10-15T09:00:00.000Z",
               currency: "YER",
               total_amount: "12.345",
+              paid_amount: "0.00",
+              outstanding_amount: "12.345",
             },
           ],
           payments: [],
+          summary: {
+            invoice_count: 1,
+            payment_count: 0,
+            totals_by_currency: [
+              { currency: "YER", invoiced: "12.345", paid: "0.00", outstanding: "12.345", invoice_count: 1 },
+            ],
+          },
         },
         fontBytes(),
         generatedAt,
       ),
     ).rejects.toThrow("non-standard monetary value");
+  });
+
+  it("rejects capped statement payloads without an authoritative full-ledger summary", async () => {
+    await expect(buildCustomerStatementPdf(
+      {
+        invoices: [{
+          id: invoiceId,
+          invoice_number: "INV-CAPPED",
+          status: "issued",
+          issued_at: "2026-10-15T09:00:00.000Z",
+          currency: "YER",
+          total_amount: "100.00",
+          paid_amount: "25.00",
+          outstanding_amount: "75.00",
+        }],
+        payments: [],
+      },
+      fontBytes(),
+      generatedAt,
+    )).rejects.toThrow("complete server ledger summary is required");
+  });
+
+  it("uses the server summary even when the detail payload is capped", async () => {
+    const bytes = await buildCustomerStatementPdf(
+      {
+        invoices: [{
+          id: invoiceId,
+          invoice_number: "INV-RECENT",
+          status: "partially_paid",
+          issued_at: "2026-10-15T09:00:00.000Z",
+          currency: "YER",
+          total_amount: "100.00",
+          paid_amount: "25.00",
+          outstanding_amount: "75.00",
+        }],
+        payments: [],
+        summary: {
+          invoice_count: 205,
+          payment_count: 520,
+          totals_by_currency: [
+            { currency: "YER", invoiced: "20500.00", paid: "5125.00", outstanding: "15375.00", invoice_count: 205 },
+          ],
+        },
+      },
+      fontBytes(),
+      generatedAt,
+    );
+    const document = await PDFDocument.load(bytes);
+    expect(document.getPageCount()).toBeGreaterThanOrEqual(1);
+    expect(document.getTitle()).toContain("كشف الحساب");
   });
 
   it("rejects an unauthenticated request before querying Supabase", async () => {
