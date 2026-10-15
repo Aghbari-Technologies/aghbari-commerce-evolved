@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active subgate — authenticated tenant-scope resolver regression tests
+
+- Previous source privacy test fix SHA `127fb2b001c1ae4414cd8ee8baf9864cdd8fac12` is now **CI SUCCESS**: [run 38694129297](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694129297); unit tests, isolated PostgreSQL 17 workflows, lint, build and port-5173 smoke all passed on that exact SHA.
+- This batch adds `src/test/tenant-scope.test.ts` against the real `src/lib/supabase.ts` resolver to cover signed-in context mapping/cache, missing session, malformed server scope, retry after RPC failure, anonymous public binding/fail-closed behavior, signed-in scope selection, and auth-event cache invalidation.
+- These are isolated unit tests, not authenticated browser E2E or production Supabase proof. The task remains OPEN; this commit's exact-SHA CI must pass before recording the subgate.
+
+---
 ## Latest result — AGH-SEC-BROWSER-E2E-001 lint fix
 
 - First source-test SHA `e26e71e4ec05ef90e42da922bdf513cff43c22ed`: Actions [38693899113](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38693899113) showed **unit tests PASS** and **isolated PostgreSQL acceptance PASS**, then Lint failed only on `prefer-const` at `src/test/public-catalog-privacy.test.ts:44` (`builder` never reassigned). Build and server smoke were skipped by workflow dependency.
