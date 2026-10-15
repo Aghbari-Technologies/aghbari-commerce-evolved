@@ -1935,6 +1935,7 @@ function Offline() {
   const [cartCount, setCartCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
+  const [storageError, setStorageError] = useState("");
   const catalogQuery = catalogSearch.trim().toLocaleLowerCase();
   const matchingCatalogRows = catalogRows.filter((product) => {
     if (!catalogQuery) return true;
@@ -1974,10 +1975,14 @@ function Offline() {
       const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
       setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setStorageError("");
+      return true;
     } catch {
       setCached(0);
       setCatalogRows([]);
       setCartCount(0);
+      setStorageError("تعذر التحقق من التخزين المحلي أو سجل السلة؛ لم تُرسل أي عملية. أعد المحاولة بعد التحقق من مساحة التخزين.");
+      return false;
     }
   }, [cartScopeKey]);
   useEffect(() => {
@@ -2010,14 +2015,17 @@ function Offline() {
         throw new Error("لم تتضمن استجابة الخادم أصنافًا صالحة؛ احتفظنا بالنسخة المحلية.");
       }
       localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(rows));
-      refresh();
+      if (!refresh()) {
+        setMessage("تعذر التحقق من سجل السلة المحلي؛ لم نعلن اكتمال المزامنة.");
+        return;
+      }
       setMessage(
         "تم تحديث نسخة الكتالوج المحلية من الخادم: " +
           rows.length +
-          " صنف، مع أرصدة المخزون والتصنيفات المتاحة.",
+          " صنف. السعر والمخزون النهائيان يخضعان للتحقق المباشر عند الشراء.",
       );
     } catch {
-      setMessage("تعذر تحديث الكتالوج؛ لم نغيّر النسخة المحلية.");
+      setMessage("تعذر تحديث الكتالوج أو حفظه محليًا؛ راجع حالة النسخة المحفوظة قبل المتابعة.");
     } finally {
       setSyncing(false);
     }
@@ -2091,6 +2099,11 @@ function Offline() {
           </strong>
         </article>
       </div>
+      {storageError && (
+        <p role="alert" style={{ ...card, marginBottom: 14, border: "1px solid #b91c1c", color: "#991b1b" }}>
+          {storageError}
+        </p>
+      )}
       <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-catalog-heading">
         <h2 id="offline-catalog-heading" style={{ marginTop: 0, fontSize: 18 }}>الكتالوج المحلي</h2>
         <label htmlFor="offline-catalog-search" style={{ ...quiet, display: "block", marginBottom: 8 }}>ابحث بالاسم أو رمز الصنف أو الباركود أو التصنيف</label>

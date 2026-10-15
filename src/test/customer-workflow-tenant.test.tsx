@@ -1,10 +1,23 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import {
+  act } from "react";
+import { createRoot,
+  type Root } from "react-dom/client";
 import { QueryClient } from "@tanstack/react-query";
-import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createMemoryHistory,
+  createRouter,
+  RouterProvider } from "@tanstack/react-router";
+import { afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi } from "vitest";
 import { routeTree } from "@/routeTree.gen";
-import { createOfflineCartScopeKey, getOfflineCatalogCacheKey, readOfflineCartLedger } from "@/lib/offline-cart-ledger";
+import { createOfflineCartScopeKey,
+  getOfflineCatalogCacheKey,
+  readOfflineCartLedger,
+  getOfflineCartLedgerPrefix,
+} from "@/lib/offline-cart-ledger";
 
 const mocks = vi.hoisted(() => ({
   user: null as null | {
@@ -688,6 +701,35 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       .toEqual([{ product_id: "product-offline-1", quantity: 1 }]);
     expect(host?.textContent).toContain("لم يُرسل طلب");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+  });
+
+  it("shows a storage error instead of a misleading empty-catalog state when the cart ledger is corrupt", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    const scope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    window.localStorage.setItem(
+      getOfflineCartLedgerPrefix(scope) + "seed",
+      JSON.stringify({
+        version: 1,
+        scope_key: "foreign-scope",
+        id: "seed",
+        kind: "seed",
+        created_at: 0,
+        lines: [],
+      }),
+    );
+
+    await mountQuoteWorkspace("/offline");
+
+    expect(host?.textContent).toContain("تعذر التحقق من التخزين المحلي أو سجل السلة");
+    expect(host?.textContent).not.toContain("لا توجد أصناف محفوظة على هذا الجهاز");
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain("لم تُرسل أي عملية");
   });
 
   it("preserves the last offline catalog when sync returns malformed server data", async () => {
