@@ -375,6 +375,20 @@ async function main() {
     [otherOrganizationId],
   );
   assert.equal(foreignCustomersVisible.length, 0, "staff must not read another organization's customers");
+
+  const foreignOrganizationsVisible = await db.unsafe(
+    "select id from public.organizations where id=$1",
+    [otherOrganizationId],
+  );
+  assert.equal(foreignOrganizationsVisible.length, 0, "staff must not read another organization row even though its tenant key is the primary id");
+  await expectFailure(
+    "staff cannot create another organization's tenant row",
+    () => db.unsafe(
+      "insert into public.organizations(id,name,currency) values($1,'Unauthorized organization','YER')",
+      ["a1111111-1111-4111-8111-111111111114"],
+    ),
+    /row-level security|policy/i,
+  );
   await expectFailure(
     "staff cannot create a product in another organization",
     () => db.unsafe(
