@@ -1,23 +1,20 @@
 # Aghbari Commerce — Development Progress Ledger
 
-**Baseline before execution:** `f385e3406d5b85b58c88d92d6db4e3029c002585` on `main`, 2026-10-15. Evidence belongs to the exact tested SHA only.
+Rule: tests and evidence apply only to the exact SHA recorded with them. The push and Lovable sync are separate acceptance events.
 
-| Area | Baseline status | Evidence | Open closure |
+| Item | Current status | Evidence | Next closure |
 |---|---|---|---|
-| Unit tests | PASS | CI run 38681026977 unit step passed | Rerun on next exact SHA |
-| Isolated DB acceptance | PASS | PostgreSQL 17 migration/workflow step passed | Rerun; not production DB proof |
-| Lint/build/dev smoke | FAIL / SKIPPED | `prefer-const` at `previewAuthStorage.ts:38`; later steps skipped | Fix and rerun all gates |
-| Atomic orders/idempotency | PARTIAL | Isolated transaction rollback, price authority, replay-key and state/stock tests | Authenticated browser E2E and production concurrency |
-| Pricing | PARTIAL | Rule CRUD/approval and formula tests exist | Prove three tiers and data-channel privacy |
-| Import engine | PARTIAL | CSV/XLSX primitives, DQS, chunk manifests and snapshots | Browser resume/cancel, rollback, compatibility, TTL and 100k-row profiling |
-| Onyx | PARTIAL | Snapshots and comparison-only reconciliation | Shared reporting/source lineage and real workbook acceptance |
-| Invoices/statements | PARTIAL | Pages and RPC foundations | Target DB flow, overpayment test, server PDF |
-| AI platform | PARTIAL | Deterministic assistant and governance schema | Provider registry/Test Connection, budget, sanitizer, evidence-backed recommendations/fallback |
-| Offline/PWA | PARTIAL | Cached catalog and local cart draft | Stale-data and reconnection tests; no offline order approval |
-| Tenant isolation | NOT PROVEN in target | Isolated DB evidence; fixed tenant constants remain | Server-derived tenant and cross-tenant denial in target |
-| Address book/company users | OPEN | Listed in roadmap | Implement after schema/RLS review |
-| WhatsApp | BLOCKED EXTERNALLY if provider absent | In-app notifications exist | Official API/credentials/templates and external message IDs |
-| Production/Lovable | NOT PROVEN | README says main is connected to Lovable | Verify exact deployed/preview SHA and runtime |
+| CI at `f75dcb7fd3f4a598b2acf6db6d649e0f54c92fac` | PASS | [Run 38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037) unit/PostgreSQL/lint/build/5173 smoke all successful | The later `main` SHA has a separate CI run; do not transfer this PASS |
+| CI at `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459` | IN PROGRESS at last observation | [Run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412) adds more route and PWA asset smoke checks | Recheck outcome for the exact SHA after documentation commit |
+| Persistent project requirements | PARTIALLY closed by this batch | Complete owner-uploaded master spec already exists at `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`; new durable mandate and resume files are being added | Keep updated after each implementation batch |
+| Supabase production | BLOCKED EXTERNALLY | Current connector cannot access expected project ref `ffxxjaolfntzbapmfbuv` | Owner/admin access and explicit project identity required; never substitute another project |
+| Tenant security | NOT PROVEN in target | Fixed tenant/warehouse IDs remain in client API layer; isolated PostgreSQL tests are not target project proof | Server-derived scope plus negative cross-tenant tests |
+| Customer/staff E2E and pricing privacy | PARTIAL | Isolated transaction, price authority, idempotency and denial checks are present in CI acceptance script | Test through authenticated browser and target DB; test all three tiers and data channels |
+| Import / Onyx | PARTIAL | Unified CSV/XLSX engine, DQS, manifests/snapshots and read-only reconciliation exist | Validate resume/cancel/rollback/100k rows and exact Onyx workbook in a permitted test system |
+| Invoice PDF / Onyx workbook | NOT PROVEN | Finance UI/RPC foundations exist; exported template acceptance is not attached | Generate actual PDF/XLSX and validate template column order from section 21 of canonical spec |
+| AI gateway / queues / WhatsApp | PARTIAL or externally blocked | Deterministic assistant/schema and internal notifications exist; provider/worker proof incomplete | Secret-safe provider validation, quotas, privacy gate, fallback, deployed workers, official WhatsApp receipt |
+| Public Lovable preview | PARTIAL / sync unproven | Home/login/admin/order page accessible; selected deep URLs/assets returned 404 from external fetch; editor returned 403 | Verify with runtime browser and Lovable project SHA; distinguish deployment state from extractor limitation |
+| Production restore/performance | NOT PROVEN | No target-environment restore drill or P95/100k-row profile evidence | Run isolated/authorized tests and record method/results |
 
-## Next acceptance gate
-Exact-head CI must show unit tests, isolated PostgreSQL acceptance, lint, build, and port 5173 smoke all passing. Then verify target Supabase identity/schema and authenticated E2E. Production and Lovable release remain unproven until directly observed.
+## Execution protocol
+Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requirement registry first. Continue from the current GitHub `main` SHA. No broad repeated discovery, no placeholder success, no unverified production operation, no Lovable point spend before a tested push.

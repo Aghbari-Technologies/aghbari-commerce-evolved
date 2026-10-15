@@ -2,26 +2,30 @@
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`
 - Branch: `main`
-- Baseline before this batch: `f385e3406d5b85b58c88d92d6db4e3029c002585`
-- Canonical spec: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`
-- Requirement registry: `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`
-- Progress ledger: `ops/AGHBARI-DEVELOPMENT-PROGRESS.md`
+- HEAD at the start of this documentation batch: `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459`
+- Most recent successful CI SHA: `f75dcb7fd3f4a598b2acf6db6d649e0f54c92fac`; run [38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037) passed.
+- CI for current pre-documentation head `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459` was in progress at last check: [run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412). Recheck after this commit.
+- Canonical specification: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
+- Durable mandate: `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`.
+- Gap register: `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+- Session resume prompt: `ops/AGHBARI-SESSION-RESUME.md`.
+- Root project memory: `PROJECT_MEMORY.md`.
 
-## Baseline evidence
-- CI run [38681026977](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38681026977): unit tests **PASS**; isolated PostgreSQL 17 acceptance **PASS**; ESLint **FAIL** at `src/integrations/supabase/previewAuthStorage.ts:38`; build and port 5173 smoke **SKIPPED**.
-- The intended Supabase project ref `ffxxjaolfntzbapmfbuv` is not accessible through the current Supabase connector. No production migration is claimed.
-- Tenant isolation is not production-certified; `src/lib/supabase.ts` still exports fixed organization/warehouse IDs.
+## Proven changes already pushed
+- Fixed the auth preview timeout lint defect; exact-head CI passed on SHA `f75dcb7...`.
+- Operations Center refresh now re-fetches connected data rather than emitting an unsupported success toast.
+- Onyx UI wording reflects the product-level integration decision, while reconciliation remains read-only.
+- Inert offer creation is visibly disabled instead of implying persistence.
+- Data-center connectivity message derives from an actual category request.
+- Root `.env` is no longer present in current tree; `.env.example` contains blank values.
+- The exact owner-supplied engineering specification was preserved in the canonical docs folder.
 
-## Changes in this batch
-- Fix lint-blocking timeout declaration while retaining the two-second timeout.
-- Make Operations Center refresh re-fetch its visible data without unmounting active imports.
-- Present Onyx as integrated into Aghbari while keeping reconciliation read-only until a separately approved adjustment.
-- Disable inert offer creation instead of implying a saved promotion.
-- Derive database status from an actual category query instead of an unconditional success label.
-- Store the exact user-supplied spec, gap registry, state and progress ledger.
-- Remove local `.env` values from tracking; add `.env.example`.
+## Current/pending evidence
+- CI run on `05fcacbf...` adds smoke checks for customer/admin routes and PWA assets; it was still in progress at the last status check. Recheck final conclusion.
+- Public preview is reachable and has correct product metadata. External checks returned 404 for some deep links/PWA manifest and 403 for the Lovable editor; reproduce in a real authenticated browser before deciding if the deployment is stale or route fallback is broken.
+- A Git push is not proof of Lovable sync.
+- Target Supabase `ffxxjaolfntzbapmfbuv` remains inaccessible from the currently connected Supabase integration. No live migration, production RLS proof, or production E2E is claimed.
+- Client code still has fixed `ORG_ID`/`WAREHOUSE_ID`; server-authoritative tenant isolation remains a critical open requirement.
 
-## Open gates
-Production migrations/RLS/session/tenant tests; dynamic tenant context; three-tier price privacy; customer/staff E2E; Onyx contract/workbook acceptance; invoice PDF; AI gateway/provider credentials; deployed workers; official WhatsApp provider; backup restore; measured P95; responsive RTL UAT.
-
-Lovable synchronization remains unproven until project `851f6f5c-d23d-45a6-9568-1452d5cfdd73` is observed loading this exact resulting `main` SHA.
+## Next action
+Start from exact `main` HEAD after this commit; inspect the active CI result; then take the first open priority from the requirement registry. Do not repeat broad discovery. Do not claim production/Lovable completion without direct proof.
