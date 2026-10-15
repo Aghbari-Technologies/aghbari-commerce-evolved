@@ -1621,10 +1621,21 @@ function Assistant() {
                   .join("\n")
             : "لم أعثر على صنف مطابق في الكتالوج الحالي.",
         );
-      } else
-        setAnswer(
-          "أستطيع جلب طلبات حسابك وقراءة الفواتير والمدفوعات المسجلة والبحث في الكتالوج والإرشاد للعمل دون اتصال. لا أعطي بيانات غير موجودة في النظام ولا أرسل معلوماتك لخدمة خارجية.",
-        );
+      } else {
+        // Verified orders, invoices and prices remain on deterministic, account-scoped paths above.
+        // Only general guidance reaches the model, and the gateway applies privacy/quota gates again.
+        try {
+          const { data, error: gatewayError } = await supabase.functions.invoke("ai-gateway", {
+            body: { action: "ask", question: q },
+          });
+          const result = data as { answer?: unknown } | null;
+          setAnswer(!gatewayError && typeof result?.answer === "string"
+            ? result.answer
+            : "المساعد الخارجي غير متاح أو تجاوز حدود الاستخدام. لا تزال بيانات الحساب الفعلية متاحة من شاشات الطلبات والفواتير والكتالوج.");
+        } catch {
+          setAnswer("المساعد الخارجي غير متاح الآن. يمكنك متابعة الطلبات والفواتير والأسعار من الشاشات الموثقة داخل المتجر.");
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر استرجاع بيانات موثوقة.");
     } finally {

@@ -10,6 +10,8 @@ import {
   fetchSettings, fetchSuppliers,
   markAllNotificationsRead, markNotificationRead, resolveAiAlert, toggleAiTaskStatus,
   updateOrderStatus, reviewOrderLines, updateSetting, createSupplier,
+  fetchAiGatewayBudget, configureAiGatewayBudget, testAiGatewayConnection,
+  type AiGatewayBudget,
 } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber, timeAgo } from '@/lib/format';
@@ -31,18 +33,178 @@ export function Notifications({ onNotice }: { onNotice: (m: string) => void }) {
   </AdminPage>;
 }
 
+type AiGatewayDraft = {
+  ai_enabled: boolean;
+  fallback_enabled: boolean;
+  primary_provider: 'openai_compatible' | 'gemini';
+  primary_model: string;
+  primary_base_url: string;
+  fallback_provider: 'openai_compatible' | 'gemini';
+  fallback_model: string;
+  fallback_base_url: string;
+  daily_cost_limit: string;
+  monthly_cost_limit: string;
+  daily_token_limit: string;
+  monthly_token_limit: string;
+  per_request_cost_limit: string;
+};
+
+const defaultAiGatewayDraft: AiGatewayDraft = {
+  ai_enabled: false, fallback_enabled: true,
+  primary_provider: 'openai_compatible', primary_model: 'gpt-4o-mini', primary_base_url: 'https://api.openai.com/v1',
+  fallback_provider: 'gemini', fallback_model: 'gemini-2.0-flash', fallback_base_url: 'https://generativelanguage.googleapis.com/v1beta',
+  daily_cost_limit: '1', monthly_cost_limit: '20', daily_token_limit: '50000', monthly_token_limit: '1000000', per_request_cost_limit: '0.05',
+};
+
 export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
+  const { user } = useAuth();
+  const canManageGateway = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
   const { data: alerts, loading: aLoading, refetch: rAlerts } = useFetch(fetchAiAlerts);
   const { data: tasks, loading: tLoading, refetch: rTasks } = useFetch(fetchAiTasks);
   const [tab, setTab] = useState<'alerts' | 'tasks'>('alerts');
+  const [gateway, setGateway] = useState<AiGatewayBudget | null>(null);
+  const [draft, setDraft] = useState<AiGatewayDraft>(defaultAiGatewayDraft);
+  const [gatewayLoading, setGatewayLoading] = useState(false);
+  const [gatewaySaving, setGatewaySaving] = useState(false);
+  const [connectionBusy, setConnectionBusy] = useState(false);
+  const [gatewayMessage, setGatewayMessage] = useState('');
+  const [gatewayError, setGatewayError] = useState('');
+
+  useEffect(() => {
+    if (!canManageGateway) return;
+    let active = true;
+    setGatewayLoading(true);
+    void fetchAiGatewayBudget().then((value) => {
+      if (!active) return;
+      setGateway(value);
+      setDraft({
+        ai_enabled: value.ai_enabled,
+        fallback_enabled: value.fallback_enabled,
+        primary_provider: value.primary_provider,
+        primary_model: value.primary_model,
+        primary_base_url: value.primary_base_url,
+        fallback_provider: value.fallback_provider,
+        fallback_model: value.fallback_model,
+        fallback_base_url: value.fallback_base_url,
+        daily_cost_limit: String(value.daily_cost_limit || ''),
+        monthly_cost_limit: String(value.monthly_cost_limit || ''),
+        daily_token_limit: String(value.daily_token_limit || ''),
+        monthly_token_limit: String(value.monthly_token_limit || ''),
+        per_request_cost_limit: String(value.per_request_cost_limit || ''),
+      });
+      setGatewayError('');
+    }).catch((error: unknown) => {
+      if (active) setGatewayError(error instanceof Error ? error.message : 'تعذر تحميل إعدادات الذكاء.');
+    }).finally(() => { if (active) setGatewayLoading(false); });
+    return () => { active = false; };
+  }, [canManageGateway]);
+
+  function patchGateway(patch: Partial<AiGatewayDraft>) {
+    setDraft((previous) => ({ ...previous, ...patch }));
+    setGatewayMessage('');
+  }
+  async function saveGateway() {
+    const daily = Number(draft.daily_cost_limit), monthly = Number(draft.monthly_cost_limit);
+    const dailyTokens = Number(draft.daily_token_limit), monthlyTokens = Number(draft.monthly_token_limit);
+    const perRequest = Number(draft.per_request_cost_limit);
+    if (![daily,monthly,dailyTokens,monthlyTokens,perRequest].every(Number.isFinite) ||
+        daily < 0 || monthly < daily || dailyTokens < 0 || monthlyTokens < dailyTokens ||
+        perRequest < 0 || perRequest > daily || perRequest > monthly ||
+        (draft.ai_enabled && (daily <= 0 || monthly <= 0 || dailyTokens <= 0 || monthlyTokens <= 0 || perRequest <= 0))) {
+      setGatewayError('تحقق من حدود التكلفة والرموز. عند التفعيل يجب أن تكون الحدود موجبة، والحد اليومي لا يتجاوز الشهري.');
+      return;
+    }
+    setGatewaySaving(true); setGatewayError(''); setGatewayMessage('');
+    try {
+      const saved = await configureAiGatewayBudget({
+        ...draft, daily_cost_limit: daily, monthly_cost_limit: monthly,
+        daily_token_limit: dailyTokens, monthly_token_limit: monthlyTokens, per_request_cost_limit: perRequest,
+      });
+      setGateway(saved);
+      setGatewayMessage('حُفظت الإعدادات والحدود لهذه المؤسسة. لم يتم حفظ أي مفتاح سري في قاعدة البيانات.');
+      onNotice('تم حفظ إعدادات بوابة الذكاء وحدود الاستهلاك.');
+    } catch (error) {
+      setGatewayError(error instanceof Error ? error.message : 'تعذر حفظ إعدادات الذكاء.');
+    } finally { setGatewaySaving(false); }
+  }
+  async function testGateway() {
+    setConnectionBusy(true); setGatewayError(''); setGatewayMessage('');
+    try {
+      const result = await testAiGatewayConnection();
+      setGatewayMessage('نجح اتصال المزود: ' + (result.provider ?? '') + ' / ' + (result.model ?? '') +
+        (result.fallback_used ? ' (عبر المزود الاحتياطي)' : '') + '. تم تسجيل الاستهلاك.');
+      onNotice('اجتاز مزود الذكاء اختبار الاتصال.');
+      const latest = await fetchAiGatewayBudget(); setGateway(latest);
+    } catch (error) {
+      setGatewayError(error instanceof Error ? error.message : 'فشل اختبار اتصال المزود.');
+    } finally { setConnectionBusy(false); }
+  }
+
   async function resolve(id: string) { try { await resolveAiAlert(id); rAlerts(); onNotice('تم حل التنبيه'); } catch (e) { onNotice(e instanceof Error ? e.message : 'خطأ'); } }
   async function taskAction(id: string, status: string) { try { await toggleAiTaskStatus(id, status); rTasks(); onNotice(status === 'completed' ? 'تم إنجاز المهمة' : 'تم تحديث المهمة'); } catch (e) { onNotice(e instanceof Error ? e.message : 'خطأ'); } }
-  return <AdminPage eyebrow="الذكاء الاصطناعي" title="مركز الذكاء" description="تنبيهات ومهام يولدها النظام تلقائياً" icon={Bot} note={`${alerts?.filter((a) => !a.is_resolved).length ?? 0} تنبيه نشط — ${tasks?.filter((t) => t.status !== 'completed').length ?? 0} مهمة معلقة`} toolbar={<Button variant="secondary" onClick={() => { rAlerts(); rTasks(); }}><RefreshCw size={16} /> تحديث</Button>}>
+
+  return <AdminPage eyebrow="الذكاء الاصطناعي" title="مركز الذكاء" description="تنبيهات ومهام ومزودون بحدود استهلاك واضحة" icon={Bot} note={`${alerts?.filter((a) => !a.is_resolved).length ?? 0} تنبيه نشط — ${tasks?.filter((t) => t.status !== 'completed').length ?? 0} مهمة معلقة`} toolbar={<Button variant="secondary" onClick={() => { rAlerts(); rTasks(); }}><RefreshCw size={16} /> تحديث</Button>}>
+    {canManageGateway && <section style={{ ...card, display: 'grid', gap: 14 }}>
+      <div><h2 style={{ margin: 0, fontSize: 19 }}>بوابة الذكاء والميزانية</h2><p style={quiet}>المفاتيح لا تُحفظ هنا. خزّنها كأسرار Edge Function ثم اختبر الاتصال بعد الحفظ.</p></div>
+      {gatewayLoading ? <Loading /> : <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
+          <label style={{ display: 'grid', gap: 6 }}>المزود الأساسي
+            <select style={field} value={draft.primary_provider} onChange={(e) => patchGateway({ primary_provider: e.target.value as AiGatewayDraft['primary_provider'], primary_base_url: e.target.value === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://api.openai.com/v1' })}>
+              <option value="openai_compatible">OpenAI Compatible / OpenRouter / مزود متوافق</option><option value="gemini">Google Gemini</option>
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>معرف نموذج المزود الأساسي
+            <input style={field} value={draft.primary_model} maxLength={160} onChange={(e) => patchGateway({ primary_model: e.target.value })} />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>عنوان API الأساسي (HTTPS)
+            <input style={field} type="url" value={draft.primary_base_url} maxLength={500} onChange={(e) => patchGateway({ primary_base_url: e.target.value })} />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>المزود الاحتياطي
+            <select style={field} value={draft.fallback_provider} onChange={(e) => patchGateway({ fallback_provider: e.target.value as AiGatewayDraft['fallback_provider'], fallback_base_url: e.target.value === 'gemini' ? 'https://generativelanguage.googleapis.com/v1beta' : 'https://api.openai.com/v1' })}>
+              <option value="openai_compatible">OpenAI Compatible / OpenRouter</option><option value="gemini">Google Gemini</option>
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>معرف النموذج الاحتياطي
+            <input style={field} value={draft.fallback_model} maxLength={160} onChange={(e) => patchGateway({ fallback_model: e.target.value })} disabled={!draft.fallback_enabled} />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>عنوان API الاحتياطي (HTTPS)
+            <input style={field} type="url" value={draft.fallback_base_url} maxLength={500} onChange={(e) => patchGateway({ fallback_base_url: e.target.value })} disabled={!draft.fallback_enabled} />
+          </label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
+          {([
+            ['daily_cost_limit','حد التكلفة اليومي (USD)','0.01'],
+            ['monthly_cost_limit','حد التكلفة الشهري (USD)','1'],
+            ['per_request_cost_limit','حد التكلفة للطلب (USD)','0.01'],
+            ['daily_token_limit','حد الرموز اليومي','1000'],
+            ['monthly_token_limit','حد الرموز الشهري','20000'],
+          ] as const).map(([key,label,step]) => <label key={key} style={{ display: 'grid', gap: 6 }}>{label}
+            <input style={field} type="number" min="0" step={key.includes('token') ? '1' : '0.000001'} value={draft[key]} onChange={(e) => patchGateway({ [key]: e.target.value } as Partial<AiGatewayDraft>)} />
+          </label>)}
+        </div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={draft.ai_enabled} onChange={(e) => patchGateway({ ai_enabled: e.target.checked })} /> تفعيل مزود الذكاء</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={draft.fallback_enabled} onChange={(e) => patchGateway({ fallback_enabled: e.target.checked })} /> استخدام المزود الاحتياطي عند الفشل</label>
+        </div>
+        {gateway && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
+          <div style={card}><span style={quiet}>التكلفة اليوم</span><strong style={{ display: 'block' }}>{Number(gateway.today_cost).toFixed(4)} USD</strong></div>
+          <div style={card}><span style={quiet}>التكلفة هذا الشهر</span><strong style={{ display: 'block' }}>{Number(gateway.month_cost).toFixed(4)} USD</strong></div>
+          <div style={card}><span style={quiet}>الرموز اليوم</span><strong style={{ display: 'block' }}>{formatNumber(gateway.today_tokens)}</strong></div>
+          <div style={card}><span style={quiet}>الرموز هذا الشهر</span><strong style={{ display: 'block' }}>{formatNumber(gateway.month_tokens)}</strong></div>
+        </div>}
+        <p style={quiet}>أسرار الخادم المطلوبة عند استخدام المزود: AI_OPENAI_COMPATIBLE_API_KEY وAI_GEMINI_API_KEY، وأسعار الرمز AI_OPENAI_COMPATIBLE_INPUT_COST_PER_1K / OUTPUT_COST_PER_1K وAI_GEMINI_INPUT_COST_PER_1K / OUTPUT_COST_PER_1K. ضع القيمة صفرًا للمزود المجاني؛ لا تدخل المفاتيح في الحقول أو قاعدة البيانات.</p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Button onClick={() => void saveGateway()} disabled={gatewaySaving || connectionBusy}>{gatewaySaving ? 'جارٍ الحفظ...' : 'حفظ الميزانية والمزود'}</Button>
+          <Button variant="secondary" onClick={() => void testGateway()} disabled={gatewaySaving || connectionBusy || !draft.ai_enabled}>{connectionBusy ? 'جارٍ اختبار الاتصال...' : 'اختبار الاتصال'}</Button>
+        </div>
+        {gatewayMessage && <p role="status" style={card}>{gatewayMessage}</p>}
+        {gatewayError && <ErrorBox message={gatewayError} />}
+      </>}
+    </section>}
     <div className="ai-tabs"><button className={tab === 'alerts' ? 'active' : ''} onClick={() => setTab('alerts')}><AlertTriangle size={16} /> التنبيهات</button><button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}><Check size={16} /> المهام</button></div>
     {tab === 'alerts' ? (aLoading ? <Loading /> : <div className="ai-alert-list">{alerts?.filter((a: AiAlert) => !a.is_resolved).map((a: AiAlert) => <div className="ai-alert-row" key={a.id}><span className={`ai-severity ${a.severity}`}><AlertTriangle size={18} /></span><div><strong>{a.title}</strong><p>{a.body ?? '—'}</p><small>{timeAgo(a.created_at)}</small></div><Button variant="outline" onClick={() => resolve(a.id)}>حل</Button></div>)}{!alerts?.filter((a) => !a.is_resolved).length && <Empty text="لا توجد تنبيهات نشطة" />}</div>) : (tLoading ? <Loading /> : <div className="ai-task-list">{tasks?.filter((t: AiTask) => t.status !== 'completed').map((t: AiTask) => <div className="ai-task-row" key={t.id}><span className={`ai-priority ${t.priority}`} /><div><strong>{t.title}</strong><p>{t.description ?? '—'}</p><small>{timeAgo(t.created_at)}</small></div><div className="ai-task-actions"><Button variant="outline" onClick={() => taskAction(t.id, 'in_progress')}>بدء</Button><Button onClick={() => taskAction(t.id, 'completed')}>إنجاز</Button></div></div>)}{!tasks?.filter((t) => t.status !== 'completed').length && <Empty text="لا توجد مهام معلقة" />}</div>)}
   </AdminPage>;
 }
-
 type OrderReviewDraft = { quantity: string; unitPrice: string; reason: string };
 
 export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { orderId: string; onBack: () => void; onNotice: (m: string) => void; onBlockedChange: (blocked: boolean) => void }) {

@@ -527,6 +527,69 @@ export async function togglePromotion(id: string, isActive: boolean): Promise<vo
   if (error) throw error;
 }
 
+// ─── Budgeted AI Gateway ───
+export type AiGatewayBudget = {
+  organization_id: string;
+  configured: boolean;
+  ai_enabled: boolean;
+  fallback_enabled: boolean;
+  primary_provider: 'openai_compatible' | 'gemini';
+  primary_model: string;
+  primary_base_url: string;
+  fallback_provider: 'openai_compatible' | 'gemini';
+  fallback_model: string;
+  fallback_base_url: string;
+  daily_cost_limit: number;
+  monthly_cost_limit: number;
+  daily_token_limit: number;
+  monthly_token_limit: number;
+  per_request_cost_limit: number;
+  today_cost: number;
+  month_cost: number;
+  today_tokens: number;
+  month_tokens: number;
+  reserved_cost: number;
+  keys_stored_in_database: false;
+};
+
+export async function fetchAiGatewayBudget(): Promise<AiGatewayBudget> {
+  const { data, error } = await supabase.rpc('get_ai_gateway_budget');
+  if (error || !data || typeof data !== 'object') {
+    throw new Error('تعذر تحميل إعدادات الذكاء. يلزم حساب مدير أو مدير فرع.');
+  }
+  return data as AiGatewayBudget;
+}
+
+export async function configureAiGatewayBudget(settings: {
+  ai_enabled: boolean;
+  fallback_enabled: boolean;
+  primary_provider: 'openai_compatible' | 'gemini';
+  primary_model: string;
+  primary_base_url: string;
+  fallback_provider: 'openai_compatible' | 'gemini';
+  fallback_model: string;
+  fallback_base_url: string;
+  daily_cost_limit: number;
+  monthly_cost_limit: number;
+  daily_token_limit: number;
+  monthly_token_limit: number;
+  per_request_cost_limit: number;
+}): Promise<AiGatewayBudget> {
+  const { data, error } = await supabase.rpc('configure_ai_usage_budget', { p_settings: settings });
+  if (error || !data || typeof data !== 'object') {
+    throw new Error('تعذر حفظ إعدادات الذكاء. تحقق من حدود الميزانية والمزود وصلاحية حسابك.');
+  }
+  return data as AiGatewayBudget;
+}
+
+export async function testAiGatewayConnection(): Promise<{ status: string; provider?: string; model?: string; fallback_used?: boolean }> {
+  const { data, error } = await supabase.functions.invoke('ai-gateway', { body: { action: 'test_connection' } });
+  if (error || !data || typeof data !== 'object' || (data as Record<string, unknown>).status !== 'connection_ok') {
+    throw new Error('فشل اختبار الاتصال. تحقق من تفعيل الذكاء والميزانية وأسرار المزود في بيئة Edge Function.');
+  }
+  return data as { status: string; provider?: string; model?: string; fallback_used?: boolean };
+}
+
 // ─── AI Alerts ───
 export async function fetchAiAlerts(): Promise<AiAlert[]> {
   const { organizationId: orgId } = await getCurrentTenantScope();
