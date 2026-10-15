@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active subgate — sanitize the offline catalog cache on read and write
+
+- At verified base SHA `950174047f0ef34f53cd7cc4ccec0f0599bade46`, exact-SHA CI [38697641746](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697641746) passed all gates.
+- Source review found `sanitizePublicCatalogCache()` already strips purchase cost, tier prices, inventory reservations/thresholds and internal notes, with an existing unit test; however, `OfflineWorkspacePage` was writing raw `fetchProducts()` rows directly to `aghbari:catalog:v1` and reading prior contents without applying the sanitizer. Since staff queries intentionally return broader fields, this could persist private values locally.
+- This batch applies the existing allowlist when hydrating/re-writing legacy cache contents and when storing fresh catalog sync results. `src/test/customer-workflow-tenant.test.tsx` adds route-level regression for both stale cache migration and fresh sync from a staff payload. Exact-SHA CI is pending; no production DB or user data was touched.
+
+---
 ## Verified pricing-privacy RPC subgate
 
 - **Code SHA:** `fe6a993e8ba809d6117c553314ddbc49b9c256db`.

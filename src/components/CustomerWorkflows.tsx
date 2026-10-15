@@ -24,6 +24,7 @@ import {
   classifyAssistantIntent,
   matchesArabicCatalogSearch,
   normalizeCartDraft,
+  sanitizePublicCatalogCache,
   summarizeAccount,
   summarizeCustomerInvoiceStatuses,
   summarizeCustomerOrderStatuses,
@@ -1542,8 +1543,17 @@ function Offline() {
   const [message, setMessage] = useState("");
   const refresh = useCallback(() => {
     try {
-      const c = JSON.parse(localStorage.getItem("aghbari:catalog:v1") || "[]");
-      setCached(Array.isArray(c) ? c.length : 0);
+      let safeCatalog = [];
+      try {
+        safeCatalog = sanitizePublicCatalogCache(
+          JSON.parse(localStorage.getItem("aghbari:catalog:v1") || "[]"),
+        );
+      } catch {
+        localStorage.removeItem("aghbari:catalog:v1");
+      }
+      // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
+      localStorage.setItem("aghbari:catalog:v1", JSON.stringify(safeCatalog));
+      setCached(safeCatalog.length);
       setCartCount(
         normalizeCartDraft(JSON.parse(localStorage.getItem("aghbari:cart:v1") || "[]")).reduce(
           (s, l) => s + l.quantity,
@@ -1574,7 +1584,7 @@ function Offline() {
     setSyncing(true);
     setMessage("");
     try {
-      const rows = await fetchProducts();
+      const rows = sanitizePublicCatalogCache(await fetchProducts());
       localStorage.setItem("aghbari:catalog:v1", JSON.stringify(rows));
       refresh();
       setMessage(

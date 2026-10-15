@@ -108,7 +108,12 @@ describe("customer quote workspace tenant boundary", () => {
   let root: Root | undefined;
   let host: HTMLDivElement | undefined;
 
+  let originalOnlineDescriptor: PropertyDescriptor | undefined;
+
   beforeEach(() => {
+    originalOnlineDescriptor = Object.getOwnPropertyDescriptor(window.navigator, "onLine");
+    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
+    window.localStorage.clear();
     vi.clearAllMocks();
     mocks.user = null;
     mocks.queries.splice(0);
@@ -136,6 +141,10 @@ describe("customer quote workspace tenant boundary", () => {
   });
 
   afterEach(async () => {
+    window.localStorage.clear();
+    if (originalOnlineDescriptor) {
+      Object.defineProperty(window.navigator, "onLine", originalOnlineDescriptor);
+    }
     if (root) {
       await act(async () => root?.unmount());
       root = undefined;
@@ -237,6 +246,78 @@ describe("customer quote workspace tenant boundary", () => {
       "id,quote_number,status,notes,response_note,created_at,quoted_at,valid_until",
     );
     expect(mocks.from).toHaveBeenCalledTimes(1);
+  });
+
+  it("sanitizes old and newly synced offline catalogs before persisting them", async () => {
+    const unsafeRow = {
+      id: "product-offline-1",
+      name: "Sugar",
+      item_code: "000125",
+      barcode: "628123",
+      unit: "carton",
+      base_price: 1200,
+      cost_price: 800,
+      retail_price: 1200,
+      wholesale_price: 1000,
+      purchase_cost: 790,
+      min_stock: 50,
+      internal_notes: "private staff note",
+      inventory: {
+        id: "inventory-offline-1",
+        product_id: "product-offline-1",
+        warehouse_id: "warehouse-1",
+        quantity_on_hand: 20,
+        quantity_reserved: 4,
+        quantity_available: 16,
+        reorder_point: 8,
+        internal_movement_note: "private stock note",
+      },
+      category: { id: "category-1", name: "Food", internal_note: "private category note" },
+    };
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    // Simulate a legacy cache written by a staff session before the allowlist was wired in.
+    window.localStorage.setItem("aghbari:catalog:v1", JSON.stringify([unsafeRow]));
+    mocks.fetchProducts.mockResolvedValueOnce([unsafeRow]);
+
+    await mountQuoteWorkspace("/offline");
+
+    const legacySafe = JSON.parse(window.localStorage.getItem("aghbari:catalog:v1") || "[]");
+    expect(legacySafe).toHaveLength(1);
+    expect(legacySafe[0]).not.toHaveProperty("cost_price");
+    expect(legacySafe[0]).not.toHaveProperty("retail_price");
+    expect(legacySafe[0]).not.toHaveProperty("wholesale_price");
+    expect(legacySafe[0]).not.toHaveProperty("purchase_cost");
+    expect(legacySafe[0]).not.toHaveProperty("min_stock");
+    expect(legacySafe[0]).not.toHaveProperty("internal_notes");
+    expect(legacySafe[0].inventory).not.toHaveProperty("quantity_reserved");
+    expect(legacySafe[0].inventory).not.toHaveProperty("reorder_point");
+    expect(legacySafe[0].inventory).not.toHaveProperty("internal_movement_note");
+    expect(legacySafe[0].category).not.toHaveProperty("internal_note");
+
+    const syncButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("تحديث الكتالوج المحلي"),
+    );
+    expect(syncButton).toBeDefined();
+    await act(async () => {
+      syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const syncedSafe = JSON.parse(window.localStorage.getItem("aghbari:catalog:v1") || "[]");
+    expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
+    expect(syncedSafe).toHaveLength(1);
+    expect(syncedSafe[0]).not.toHaveProperty("cost_price");
+    expect(syncedSafe[0]).not.toHaveProperty("retail_price");
+    expect(syncedSafe[0]).not.toHaveProperty("wholesale_price");
+    expect(syncedSafe[0].inventory).not.toHaveProperty("quantity_reserved");
+    expect(syncedSafe[0].inventory).not.toHaveProperty("reorder_point");
   });
 
   it("fails closed when the authenticated server scope cannot be resolved", async () => {

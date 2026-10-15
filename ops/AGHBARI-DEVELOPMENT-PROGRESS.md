@@ -113,3 +113,8 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Added isolated database checks that authenticated customers cannot directly call `public.customer_product_unit_price(uuid,uuid,text,numeric)` or `public.preview_order_pricing(jsonb)`; the existing table-level direct SELECT regression and no-price/no-total checkout response tests also pass.
 - Admin quotes route role tests pass at SHA `c19c0b0516194d309fdf183690b8ceb1ee7a595f`, CI [38696894239](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696894239): customers are denied before reads, while active staff load the quote view.
 - This evidence remains isolated CI + mocked jsdom. Full API/RPC/cache/export channel proof, production DB migration and live authenticated browser E2E are not certified.
+## 2026-10-15 — Offline catalog cache allowlist wired end-to-end
+
+- Code review found the existing `sanitizePublicCatalogCache()` already removed private fields in a unit test, but `OfflineWorkspacePage` did not use it; raw rows from staff's broad `fetchProducts()` query could be persisted and stale contents were counted unsanitized.
+- Updated `src/components/CustomerWorkflows.tsx` to sanitize/rewrite legacy cached contents and sanitize fresh sync results before localStorage persistence. Added route regression in `src/test/customer-workflow-tenant.test.tsx` with mock staff rows containing cost/tier prices, stock thresholds/reservations and internal notes; both legacy cache migration and fresh sync must remove those fields.
+- This is an offline-cache privacy guard, not live browser/production proof. Exact-SHA CI is pending. Keep `AGH-SEC-BROWSER-E2E-001` OPEN.
