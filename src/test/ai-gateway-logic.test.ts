@@ -57,7 +57,7 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
 
   it("parses Gemini content and measured token usage", () => {
     expect(parseProviderResponse("gemini", {
-      candidates: [{ content: { parts: [{ text: "إجابة " }, { text: "عربية" }] }],
+      candidates: [{ content: { parts: [{ text: "إجابة " }, { text: "عربية" }] } }],
       usageMetadata: { promptTokenCount: 80, candidatesTokenCount: 21 },
     })).toEqual({ text: "إجابة عربية", usage: { inputTokens: 80, outputTokens: 21 } });
   });
