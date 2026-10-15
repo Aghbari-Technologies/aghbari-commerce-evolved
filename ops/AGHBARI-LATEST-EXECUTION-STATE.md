@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest verified admin-role boundary — customer denial
+
+- Exact-SHA CI at `aff2a30dadf5d977a82f2c8b5458da46f100cc98` [run 38696635586](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696635586) **SUCCESS**. The customer identity visiting `/admin/quotes` is rejected with `لا تملك صلاحية الإدارة` before `getCurrentTenantScope`, `supabase.from`, or `supabase.rpc` is called.
+- New complementary case in `src/test/customer-workflow-tenant.test.tsx` exercises the same actual route with an active `staff` identity, expecting the staff quote workspace to load only the explicit non-financial quote columns. The new exact-SHA CI is pending.
+- The tier-price table leak is fixed and isolated-CI-proven at SHA `8f1a7ec7b6f85a280da66e183bfd130996902edb` / run `38696292337`. Production DB and live-authenticated browser proof remain unavailable; `AGH-SEC-BROWSER-E2E-001` remains OPEN.
+
+---
 ## Active subgate — customer denial on the actual admin quotes route
 
 - The direct tier-table access fix at SHA `8f1a7ec7b6f85a280da66e183bfd130996902ed` passed exact-SHA CI [38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337), including unit, isolated PostgreSQL, lint, build and port-5173 smoke.

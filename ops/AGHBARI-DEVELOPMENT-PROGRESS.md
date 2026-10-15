@@ -97,3 +97,8 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 
 - Extended `src/test/customer-workflow-tenant.test.tsx` to mount the real `/admin/quotes` route with a customer identity and verify the app displays `لا تملك صلاحية الإدارة` without calling `getCurrentTenantScope`, `supabase.from`, or `supabase.rpc`.
 - This remains route/jsdom evidence, not a live authenticated browser session. Exact-SHA CI is pending; the prior direct-price-table fix remains independently proven on SHA `8f1a7ec7b6f85a280da66e183bfd130996902edb` / run [38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337).
+## 2026-10-15 — Admin quote role boundary, staff-path companion
+
+- Exact-head CI `aff2a30dadf5d977a82f2c8b5458da46f100cc98` / [run 38696635586](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696635586) **SUCCESS** for customer denial on `/admin/quotes` before any tenant or data access.
+- Added the staff-side companion to `src/test/customer-workflow-tenant.test.tsx`: an active staff identity must be able to load the actual `/admin/quotes` route, receive the quote list from the mock DB boundary, and use only the enumerated non-financial quote columns. Exact-SHA CI pending.
+- This remains jsdom route acceptance, not an authenticated real-browser session. `AGH-SEC-BROWSER-E2E-001` remains OPEN.

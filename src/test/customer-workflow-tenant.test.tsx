@@ -219,6 +219,26 @@ describe("customer quote workspace tenant boundary", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it("allows an active staff identity to load the staff quotes workspace", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+
+    await mountQuoteWorkspace("/admin/quotes");
+
+    expect(host?.textContent).toContain("إدارة عروض الأسعار");
+    expect(host?.textContent).toContain("لا توجد طلبات عروض أسعار.");
+    expect(queryFor("sales_quotes").columns).toBe(
+      "id,quote_number,status,notes,response_note,created_at,quoted_at,valid_until",
+    );
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed when the authenticated server scope cannot be resolved", async () => {
     mocks.user = {
       id: USER_ID,
