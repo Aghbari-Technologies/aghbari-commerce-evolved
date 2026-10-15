@@ -712,8 +712,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       { product_id: "product-offline-1", quantity: 1 },
       { product_id: "product-offline-2", quantity: 2 },
     ]));
-    expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
-    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+    expect(host?.textContent).toContain("لم يُرسل طلب");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
 
     const increase = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
@@ -740,7 +739,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     });
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
       .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
-    expect(host?.textContent).toContain("لم يُرسل طلب");
+    expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
   });
 
   it("shows a storage error instead of a misleading empty-catalog state when the cart ledger is corrupt", async () => {
