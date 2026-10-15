@@ -86,7 +86,14 @@ jobs:
             cat /tmp/aghbari-vite-dev.log
             exit 1
           }
-          for route in /cart /checkout /compare /wishlist /product/ci-route-smoke-test; do
+          # Probe the client and admin workspaces plus PWA assets. Route-unit tests alone
+          # don't prove the dev server can serve each URL.
+          for route in \
+            /cart /checkout /compare /wishlist /product/ci-route-smoke-test \
+            /orders /invoices /statement /quotes /reorder /assistant /barcode /offline \
+            /admin /admin/orders /admin/products /admin/customers /admin/pricing \
+            /admin/operations /admin/finance /admin/reports /admin/settings \
+            /manifest.webmanifest /sw.js; do
             status=$(curl --silent --output /dev/null --write-out "%{http_code}" "http://127.0.0.1:5173$route")
             if [ "$status" != "200" ]; then
               echo "Expected HTTP 200 from $route, received $status"
@@ -94,3 +101,9 @@ jobs:
               exit 1
             fi
           done
+          curl --fail --silent --show-error http://127.0.0.1:5173/manifest.webmanifest -o /tmp/aghbari-manifest.json
+          grep -q "Aghbari Commerce" /tmp/aghbari-manifest.json || {
+            echo "PWA manifest is missing the canonical Aghbari Commerce identity."
+            cat /tmp/aghbari-manifest.json
+            exit 1
+          }
