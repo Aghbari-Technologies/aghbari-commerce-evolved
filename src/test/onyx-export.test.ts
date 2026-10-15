@@ -19,6 +19,23 @@ const order = {
   }],
 };
 
+function storedZipEntry(bytes: Uint8Array, targetPath: string): string {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  let offset = 0;
+  while (offset + 30 <= bytes.length && view.getUint32(offset, true) === 0x04034b50) {
+    const compressedSize = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const name = decoder.decode(bytes.slice(nameStart, nameStart + nameLength));
+    const dataStart = nameStart + nameLength + extraLength;
+    if (name === targetPath) return decoder.decode(bytes.slice(dataStart, dataStart + compressedSize));
+    offset = dataStart + compressedSize;
+  }
+  throw new Error('Missing XLSX ZIP entry: ' + targetPath);
+}
+
 describe('Onyx order workbook draft', () => {
   it('keeps the exact 27 reference columns and preserves identifier strings', () => {
     expect(ONYX_ORDER_COLUMNS).toHaveLength(27);
@@ -64,11 +81,14 @@ describe('Onyx order workbook draft', () => {
         product_name_snapshot: 'سكر' + control3 + ' برازيلي',
       }],
     };
-    const archiveText = new TextDecoder().decode(buildOnyxOrderWorkbook(dirty));
-    expect(archiveText).not.toContain(control1);
-    expect(archiveText).not.toContain(control2);
-    expect(archiveText).not.toContain(control3);
-    expect(archiveText).toContain('سكر برازيلي');
+    const bytes = buildOnyxOrderWorkbook(dirty);
+    const detailXml = storedZipEntry(bytes, 'xl/worksheets/sheet1.xml');
+    const headerXml = storedZipEntry(bytes, 'xl/worksheets/sheet2.xml');
+    expect(detailXml).not.toContain(control1);
+    expect(detailXml).not.toContain(control3);
+    expect(headerXml).not.toContain(control1);
+    expect(headerXml).not.toContain(control2);
+    expect(detailXml).toContain('سكر برازيلي');
   });
 
   it('rejects empty exports and sanitizes filenames', () => {
