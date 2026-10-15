@@ -822,6 +822,26 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     const restoreConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const restoreInput = host?.querySelector<HTMLInputElement>("#offline-cart-backup-input");
     expect(restoreInput).toBeDefined();
+    const foreignScopeBackup = JSON.stringify({
+      schema: "aghbari.offline-cart-draft",
+      version: 2,
+      scope_marker: "backup-scope-from-another-account",
+      lines: [{ product_id: "product-offline-2", quantity: 5 }],
+    });
+    const fakeForeignScopeFile = {
+      name: "foreign-scope.json",
+      size: foreignScopeBackup.length,
+      text: async () => foreignScopeBackup,
+    } as File;
+    Object.defineProperty(restoreInput, "files", { configurable: true, value: [fakeForeignScopeFile] });
+    await act(async () => {
+      restoreInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines).toEqual([]);
+    expect(host?.textContent).toContain("لا تنتمي إلى الحساب والمتجر الحاليين");
+    expect(window.confirm).not.toHaveBeenCalled();
+
     const invalidBackup = JSON.stringify({
       schema: "aghbari.offline-cart-draft",
       version: 2,
@@ -877,7 +897,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     }
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
       .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
-    expect(host?.textContent).toContain("تم دمج النسخة الاحتياطية في المسودة المحلية");
+    expect(host?.textContent).toContain("سبق دمج هذه النسخة في جيل المسودة الحالي؛ لم تُضاعف الكميات.");
     const storedLedgerRows = Array.from({ length: window.localStorage.length }, (_, index) => {
       const key = window.localStorage.key(index);
       if (!key?.startsWith(getOfflineCartLedgerPrefix(catalogScope) + "op:")) return "";
