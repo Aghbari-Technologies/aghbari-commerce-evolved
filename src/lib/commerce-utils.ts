@@ -3,6 +3,18 @@ import type { ProductWithInventory } from './types';
 export type InvoiceAmount = { id: string; total_amount: number | string; status?: string };
 export type PaymentAmount = { invoice_id: string; amount: number | string };
 
+// Keep in sync with the server account-statement RPC row caps.
+// At a cap, the client cannot distinguish a complete ledger from a truncated one.
+export const CUSTOMER_STATEMENT_MAX_INVOICES = 200;
+export const CUSTOMER_STATEMENT_MAX_PAYMENTS = 500;
+
+export function isCustomerStatementPossiblyPartial(invoiceCount: number, paymentCount: number): boolean {
+  if (!Number.isSafeInteger(invoiceCount) || invoiceCount < 0 ||
+      !Number.isSafeInteger(paymentCount) || paymentCount < 0) return true;
+  return invoiceCount >= CUSTOMER_STATEMENT_MAX_INVOICES ||
+    paymentCount >= CUSTOMER_STATEMENT_MAX_PAYMENTS;
+}
+
 type InvoiceBalance = {
   valid: boolean;
   total: number;
