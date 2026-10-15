@@ -10,10 +10,19 @@ export type CurrentTenantScope = {
   profileId: string;
   organizationId: string;
   warehouseId: string | null;
+  isStaff: boolean;
 };
+
+export type StorefrontDataScope = Pick<CurrentTenantScope, 'organizationId' | 'warehouseId' | 'isStaff'>;
 
 type TenantScopePayload = {
   profile_id?: unknown;
+  organization_id?: unknown;
+  warehouse_id?: unknown;
+  is_staff?: unknown;
+};
+
+type PublicStorefrontScopePayload = {
   organization_id?: unknown;
   warehouse_id?: unknown;
 };
@@ -58,7 +67,8 @@ export async function getCurrentTenantScope(): Promise<CurrentTenantScope> {
       !payload ||
       !isUuid(payload.profile_id) ||
       !isUuid(payload.organization_id) ||
-      (payload.warehouse_id !== null && !isUuid(payload.warehouse_id))
+      (payload.warehouse_id !== null && !isUuid(payload.warehouse_id)) ||
+      typeof payload.is_staff !== 'boolean'
     ) {
       throw new Error('أعاد الخادم نطاق مؤسسة غير صالح؛ تم إيقاف العملية لحماية البيانات.');
     }
@@ -67,6 +77,7 @@ export async function getCurrentTenantScope(): Promise<CurrentTenantScope> {
       profileId: payload.profile_id,
       organizationId: payload.organization_id,
       warehouseId: payload.warehouse_id,
+      isStaff: payload.is_staff,
     };
   })();
 
@@ -77,4 +88,40 @@ export async function getCurrentTenantScope(): Promise<CurrentTenantScope> {
     if (tenantScopeCache?.pending === pending) tenantScopeCache = undefined;
     throw error;
   }
+}
+
+/**
+ * Public catalog access is bound by the database to the configured storefront tenant.
+ * Signed-in users continue to use the organization resolved from their own auth.uid().
+ */
+export async function getStorefrontDataScope(): Promise<StorefrontDataScope> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw new Error('تعذر التحقق من جلسة الحساب.');
+
+  if (sessionData.session?.user.id) {
+    const scope = await getCurrentTenantScope();
+    return {
+      organizationId: scope.organizationId,
+      warehouseId: scope.warehouseId,
+      isStaff: scope.isStaff,
+    };
+  }
+
+  const { data, error } = await supabase.rpc('get_public_storefront_context');
+  if (error) throw new Error('تعذر تحميل إعدادات المتجر العام: ' + error.message);
+
+  const payload = data as PublicStorefrontScopePayload | null;
+  if (
+    !payload ||
+    !isUuid(payload.organization_id) ||
+    (payload.warehouse_id !== null && !isUuid(payload.warehouse_id))
+  ) {
+    throw new Error('لم يُضبط نطاق المتجر العام في قاعدة البيانات؛ تم إيقاف قراءة الكتالوج.');
+  }
+
+  return {
+    organizationId: payload.organization_id,
+    warehouseId: payload.warehouse_id,
+    isStaff: false,
+  };
 }
