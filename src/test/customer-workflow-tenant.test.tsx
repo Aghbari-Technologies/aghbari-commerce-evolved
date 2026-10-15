@@ -992,7 +992,10 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     const timestampBeforeSync = window.localStorage.getItem(timestampKey);
     expect(cacheBeforeSync).not.toBeNull();
     expect(timestampBeforeSync).toBe(priorTimestamp);
-    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
+    await act(async () => {
+      Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
+      window.dispatchEvent(new Event("online"));
+    });
     // The explicit refresh click now owns this response and persistence failure.
     mocks.fetchProducts.mockResolvedValueOnce([{
       id: "new-cache-product",
@@ -1011,27 +1014,32 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       }
       return originalSetItem.call(this, key, value);
     });
-    const syncButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
-      button.textContent?.includes("تحديث الكتالوج المحلي"),
-    );
-    expect(syncButton).toBeDefined();
-    await act(async () => {
-      syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    try {
+      const syncButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+        button.textContent?.includes("تحديث الكتالوج المحلي"),
+      );
+      expect(syncButton).toBeDefined();
+      expect(syncButton?.disabled).toBe(false);
+      await act(async () => {
+        syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
 
-    expect(window.localStorage.getItem(cacheKey)).toBe(cacheBeforeSync);
-    expect(window.localStorage.getItem(timestampKey)).toBe(timestampBeforeSync);
-    expect(host?.querySelector('[role="alert"]')?.textContent).toContain("فشل حفظ تحديث الكتالوج محليًا");
-    const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
-      button.textContent?.includes("إضافة إلى المسودة المحلية"),
-    );
-    expect(addButton?.disabled).toBe(true);
-    writeSpy.mockRestore();
-    if (navigatorOnlineDescriptor) {
-      Object.defineProperty(window.navigator, "onLine", navigatorOnlineDescriptor);
-    } else {
-      delete (window.navigator as Partial<Navigator>).onLine;
+      expect(failedTimestampWrite).toBe(true);
+      expect(window.localStorage.getItem(cacheKey)).toBe(cacheBeforeSync);
+      expect(window.localStorage.getItem(timestampKey)).toBe(timestampBeforeSync);
+      expect(host?.querySelector('[role="alert"]')?.textContent).toContain("فشل حفظ تحديث الكتالوج محليًا");
+      const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+        button.textContent?.includes("إضافة إلى المسودة المحلية"),
+      );
+      expect(addButton?.disabled).toBe(true);
+    } finally {
+      writeSpy.mockRestore();
+      if (navigatorOnlineDescriptor) {
+        Object.defineProperty(window.navigator, "onLine", navigatorOnlineDescriptor);
+      } else {
+        delete (window.navigator as Partial<Navigator>).onLine;
+      }
     }
   });
 
