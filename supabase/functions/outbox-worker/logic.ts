@@ -16,7 +16,7 @@ export function sanitizeOutboxErrorMessage(value: unknown): string {
     .replace(/\b(authorization|proxy-authorization)\s*[:=][^\r\n]*/gi, "[authorization redacted]")
     .replace(/\b(cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "[cookie redacted]")
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[token redacted]")
-    .replace(/(?<!\[)\b(Bearer|service_role|anon_key|api[_-]?key|client[_-]?secret|password|secret|access[_-]?token|refresh[_-]?token|id[_-]?token|credential)\b[=: ]+\S+/gi, "$1=[redacted]")
+    .replace(/(?<!\[)\b(Bearer|service_role|anon_key|api[_-]?key|client[_-]?secret|password|secret|access[_-]?token|refresh[_-]?token|id[_-]?token|credential)\b[=: ]+[^&\s]+/gi, "$1=[redacted]")
     .replace(/\b(sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,})\b/g, "[secret redacted]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email redacted]")
     .replace(/(?:\+?[0-9٠-٩۰-۹][0-9٠-٩۰-۹\s().-]{6,}[0-9٠-٩۰-۹])/g, "[number redacted]")

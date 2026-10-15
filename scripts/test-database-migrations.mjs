@@ -682,6 +682,9 @@ async function main() {
   assert.ok(!durableError.includes("opaque-cookie"));
   assert.ok(!durableError.includes("opaque-session"));
   assert.ok(!durableError.includes("opaque-refresh-cookie"));
+  assert.ok(durableError.includes("code=[redacted]"), "database redacts OAuth authorization codes");
+  assert.ok(durableError.includes("id_token=[redacted]"), "database preserves and redacts ID-token field names");
+  assert.ok(durableError.includes("client_secret=[redacted]"), "database preserves and redacts client-secret field names");
   assert.ok(!durableError.includes("opaque-auth-code"));
   assert.ok(!durableError.includes("opaque-id-token"));
   assert.ok(!durableError.includes("opaque-client-secret"));
