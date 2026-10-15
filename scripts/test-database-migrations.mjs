@@ -142,6 +142,13 @@ async function main() {
     [otherProductId, otherOrganizationId],
   );
 
+  // The original schema seeded one wholesale price break at 10; migration 600 adds a second break.
+  await db.unsafe(
+    `insert into public.product_prices(product_id,tier,price,min_quantity,is_active)
+      values($1,'wholesale',35000,20,true)`,
+    [productId],
+  );
+
   // Public storefront visibility is bound to one configured tenant and cannot expose costs, tiers, or private settings.
   const foreignWarehouseId = "d1111111-1111-4111-8111-111111111111";
   await db.unsafe(
