@@ -158,6 +158,62 @@ async function main() {
   assert.ok(audit.some(r=>r.action==="customer_address.deleted"));
   process.stdout.write("PASS customer address book: RLS ownership, RPC-only writes, default promotion, audit trail, cross-customer denial\\n");
 
+
+  // AGH-CUSTOMER-360-001: customer contacts, scoped RPCs, primary lifecycle and audit.
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const firstContactResult=await db.unsafe(
+    "select public.save_customer_contact($1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,$8::boolean,$9::boolean) as id",
+    [null,null,"CI Purchasing Contact","Purchasing","+967777111111","purchasing-ci@example.test","purchasing",false,true],
+  );
+  const firstContactId=firstContactResult[0].id;
+  const ownContacts=await db.unsafe("select public.list_customer_contacts(null::uuid) as contacts");
+  assert.equal(ownContacts[0].contacts.length,1,"customer lists only its own contacts through the scoped RPC");
+  assert.equal(ownContacts[0].contacts[0].is_primary,true,"first active contact becomes primary");
+  assert.equal(Object.hasOwn(ownContacts[0].contacts[0],"customer_id"),false,"safe contact projection omits internal ownership keys");
+
+  const secondContactResult=await db.unsafe(
+    "select public.save_customer_contact($1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,$8::boolean,$9::boolean) as id",
+    [null,null,"CI Finance Contact","Finance",null,"finance-ci@example.test","finance",true,true],
+  );
+  const secondContactId=secondContactResult[0].id;
+  const activePrimaries=await db.unsafe("select id from public.customer_contacts where customer_id=$1 and is_active and is_primary",[customerOneId]);
+  assert.deepEqual(activePrimaries.map(r=>r.id),[secondContactId],"setting a second primary demotes the former primary in the same transaction");
+
+  await expectFailure("customer direct SELECT on contact table is forbidden",
+    ()=>db.unsafe("select * from public.customer_contacts where customer_id=$1",[customerOneId]),/permission denied/i);
+  await expectFailure("customer direct INSERT on contact table is forbidden",
+    ()=>db.unsafe("insert into public.customer_contacts(organization_id,customer_id,full_name) values($1,$2,'Forged')",[organizationId,customerOneId]),/permission denied/i);
+  await expectFailure("customer direct UPDATE on contact table is forbidden",
+    ()=>db.unsafe("update public.customer_contacts set full_name='Forged' where id=$1",[secondContactId]),/permission denied/i);
+  await expectFailure("customer direct DELETE on contact table is forbidden",
+    ()=>db.unsafe("delete from public.customer_contacts where id=$1",[secondContactId]),/permission denied/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(secondAuthUserId,"ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
+  const secondCustomerContacts=await db.unsafe("select public.list_customer_contacts(null::uuid) as contacts");
+  assert.equal(secondCustomerContacts[0].contacts.length,0,"another customer in the same organization cannot see the first customer's contacts");
+  await expectFailure("customer cannot edit another customer's contact through RPC",
+    ()=>db.unsafe("select public.save_customer_contact($1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,$8::boolean,$9::boolean)",
+      [secondContactId,null,"Hijack","Owner","7772222222","hijack@example.test","general",true,true]),
+    /not found|not owned|42501/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const deletedContact=await db.unsafe("select public.delete_customer_contact($1::uuid,null::uuid) as deleted",[secondContactId]);
+  assert.equal(deletedContact[0].deleted,true);
+  const primaryAfterDelete=await db.unsafe("select id,is_primary from public.customer_contacts where id=$1",[firstContactId]);
+  assert.equal(primaryAfterDelete.length,1);
+  assert.equal(primaryAfterDelete[0].is_primary,true,"deleting the primary promotes the remaining active contact");
+  await db.unsafe("reset role");
+  const contactAudits=await db.unsafe("select action from public.audit_logs where organization_id=$1 and entity_type='customer_contact' and entity_id=any($2::uuid[])",[organizationId,[firstContactId,secondContactId]]);
+  assert.ok(contactAudits.some(r=>r.action==="customer_contact.created"));
+  assert.ok(contactAudits.some(r=>r.action==="customer_contact.deleted"));
+  process.stdout.write("PASS customer contact directory: server-derived ownership, RPC-only writes, primary replacement, audit and cross-customer denial\\n");
+
   await db.unsafe(
     "update public.profiles set auth_user_id=$1 where id=$2 and auth_user_id is null",
     [staffAuthUserId, staffProfileId],
@@ -172,6 +228,16 @@ async function main() {
     "insert into public.user_roles(profile_id,role) values($1,'staff') on conflict(profile_id,role) do nothing",
     [operationsStaffProfileId],
   );
+  await db.unsafe("reset role");
+  await setIdentity(operationsStaffAuthUserId,"ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  const staffCompanyContacts=await db.unsafe("select public.list_customer_contacts($1::uuid) as contacts",[customerOneId]);
+  assert.equal(staffCompanyContacts[0].contacts.length,1,"active staff can read contacts for a selected customer in the same organization");
+  await expectFailure("staff cannot read contacts for a foreign organization",
+    ()=>db.unsafe("select public.list_customer_contacts($1::uuid)",[foreignProfileId]),
+    /outside the current organization|customer is outside|42501/i);
+  await db.unsafe("reset role");
+
   const accountantProfileId = "f5555555-5555-4555-8555-555555555555";
   const accountantAuthUserId = "55555555-5555-4555-8555-555555555555";
   await db.unsafe(

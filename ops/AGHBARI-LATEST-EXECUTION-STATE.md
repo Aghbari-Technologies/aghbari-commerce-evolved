@@ -1,14 +1,15 @@
 # Aghbari Commerce — Latest Execution State
 
-## Active implementation — AGH-CUSTOMER-360-001: freeze delivery address into the checkout/order lifecycle
+## Active implementation — AGH-CUSTOMER-360-001: company contact directory
 
-- Customer address book merged to `main` at `12b31fa9c1a9ad89934e936ef822b1288f342649`; implementation head `64a7056274a7b24324c53f9020ec1b710133a724`, exact-head CI [38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) **SUCCESS** across unit tests, isolated PostgreSQL 17, lint, build and port-5173 route smoke.
-- Follow-up on `feat/checkout-delivery-address-20261015-v2` adds an optional saved-address picker to checkout; server-side ownership validation; immutable `orders.delivery_address_snapshot`; idempotency/address mismatch guards; and a transactional, idempotent `OrderCreated` outbox event.
-- Customer/staff order detail surfaces display only the safe frozen delivery snapshot. Authenticated customer SELECT stays column-limited: internal `delivery_address_id` and `delivery_address_fingerprint` are not granted. Isolated PostgreSQL regressions cover snapshot immutability, retry mismatch, event idempotency and privacy.
-- **Exact-SHA CI is pending for this follow-up.** Do not treat a route, migration source, or pending PR as completion. No production database was changed; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible.
-- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. Validate this follow-up in exact-SHA CI, fix any failure, merge only after proof, then continue to company contacts/member management. `AGH-SEC-BROWSER-E2E-001` remains separately OPEN for live authenticated browser and production evidence.
+- Customer address book merged to `main` at `12b31fa9c1a9ad89934e936ef822b1288f342649`; exact implementation CI [38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) **SUCCESS**.
+- Checkout/order snapshot integration merged to `main` at `df87290ec3c27d152c88e64a23e089dcae64bc49`; exact PR-head CI [38701603398](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38701603398) **SUCCESS** across unit tests, isolated PostgreSQL 17 workflow/migration acceptance, lint, build and port-5173 smoke.
+- Current batch adds a reusable contact manager to the customer account at `/company/contacts` and the admin Customer 360 panel. Contacts are stored in `customer_contacts` with server-derived customer/tenant scope, RPC-only data mutations/reads, audit events, cross-customer denial, and a single active primary-contact invariant. Exact-SHA CI is pending for this batch.
+- This is a commercial contact directory, not an authentication/invitation system. Company-member identity linkage/invitations remain open. No production database was changed; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible.
+- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. Pass/fix exact-SHA CI, then continue customer-member invitations and identity linkage without reassigning existing profile/customer ownership. Keep `AGH-SEC-BROWSER-E2E-001` separately OPEN for live authenticated browser and production proof.
 
 ---
+
 
 
 ## Verified offline catalog cache privacy subgate

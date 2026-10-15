@@ -52,7 +52,6 @@ export type Supplier = {
 };
 
 export type OrderDeliveryAddressSnapshot = {
-  source_address_id: string;
   label: string;
   recipient_name: string;
   phone: string;

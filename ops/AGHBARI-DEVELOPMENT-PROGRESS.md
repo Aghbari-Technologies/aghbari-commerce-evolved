@@ -147,3 +147,17 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - New additive migration `20261015140000_checkout_delivery_address_snapshot.sql` adds a frozen safe order snapshot, server-derived ownership checking, private internal address FK/fingerprint, address-sensitive idempotent replay rules and transactional `OrderCreated` outbox event.
 - Customer and staff order details display the persisted snapshot; the customer projection reveals only the display-safe snapshot field. Existing server-side price/credit/idempotency transaction remains the authoritative order creator.
 - Expanded isolated PostgreSQL test coverage for frozen snapshot, direct-column denial, idempotent outbox, retry mismatch and history immutability. This follow-up's exact-SHA CI remains pending; no production migration or live browser claim.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: checkout address snapshot verification
+
+- PR #30 merged to `main` as `df87290ec3c27d152c88e64a23e089dcae64bc49`.
+- Exact PR-head CI [run 38701603398](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38701603398) **SUCCESS** across unit tests, all migrations and core workflows on isolated PostgreSQL 17, lint, build and port-5173 smoke.
+- Checkout uses a server-validated saved address ID, stores a safe immutable snapshot in the order, prevents an idempotent retry from rebinding changed address content, keeps internal address ID/fingerprint private, and writes `OrderCreated` to the outbox exactly once. The snapshot excludes the private address-row ID.
+- No production migration or live authenticated browser proof was performed. Company contact/member work continues as the next subtask.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: customer contact directory (in progress)
+
+- Added a reusable contacts manager for `/company/contacts` and the admin customer-profile panel; added an additive `customer_contacts` migration and RPC-only list/save/delete functions.
+- Contact ownership and organization scope are derived from the authenticated server profile. Direct table access is revoked; write operations audit their before/after values, and only one active primary contact is permitted with automatic replacement when the primary is deactivated/deleted.
+- Added isolated PostgreSQL checks for self-scope, same-tenant staff scope, cross-customer denial, direct-table access denial, primary replacement and audit rows, plus unit tests for input validation and false-success prevention. Exact-SHA CI is pending.
+- Contact records do not create login accounts. Invitations and company-member profile linkage remain open.

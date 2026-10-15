@@ -15,7 +15,7 @@ import {
 import type { CustomerTierPricePreview } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatDateShort, formatNumber } from '@/lib/format';
-import type { Category, CreatePricingRuleInput, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
+import type { Category, CreatePricingRuleInput, Customer, PricingRule, ProductWithInventory, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from '@tanstack/react-router';
 import { Login } from '@/components/Login';
@@ -25,6 +25,7 @@ import {
   TableWrap, Modal, Notifications, OrderDetail, SettingsPage, Suppliers,
 } from '@/components/AdminPages';
 import { OperationsCenter } from '@/components/OperationsCenter';
+import { CustomerContactsManager } from '@/components/CustomerContactsManager';
 import { StaffQuotesPage, StaffFinancePage } from '@/components/CustomerWorkflows';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
@@ -236,12 +237,92 @@ function ProductModal({ product, onClose, onSaved }: { product: ProductWithInven
 }
 
 function Customers({ onNotice }: { onNotice: (m: string) => void }) {
-  const { data, loading, error, refetch } = useFetch(fetchCustomers); const [query, setQuery] = useState(''); const [modal, setModal] = useState(false);
-  const rows = (data ?? []).filter((c) => `${c.business_name} ${c.phone ?? ''} ${c.customer_code}`.includes(query));
-  async function status(id: string, next: string) { try { await updateCustomerStatus(id, next); refetch(); onNotice(next === 'approved' ? 'تم اعتماد العميل' : 'تم تحديث حالة العميل'); } catch (e) { onNotice(e instanceof Error ? e.message : 'تعذر تحديث العميل'); } }
-  return <><Heading eyebrow="المبيعات والعملاء" title="إدارة العملاء" description="اعتماد الحسابات ومتابعة الأرصدة وشرائح الأسعار" icon={Users} /><div className="toolbar"><span className="toolbar-note">{data?.length ?? 0} عميل مسجل</span><div className="toolbar-actions"><Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button><Button onClick={() => setModal(true)}><Plus size={17} /> إضافة عميل</Button></div></div><section className="panel table-panel"><div className="table-head"><h2>دليل العملاء</h2><label className="search-field"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث عن عميل..." /></label></div>{loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap><table><thead><tr><th>العميل</th><th>جهة الاتصال</th><th>الشريحة</th><th>الرصيد</th><th>الحد الائتماني</th><th>الحالة</th><th /></tr></thead><tbody>{rows.map((c) => <tr key={c.id}><td><strong>{c.business_name}</strong><small>{c.customer_code}</small></td><td>{c.contact_name ?? '—'}<small>{c.phone ?? '—'}</small></td><td><span className="tier">{c.tier === 'vip' ? 'مميز' : c.tier === 'wholesale' ? 'جملة' : 'تجزئة'}</span></td><td className={c.current_balance > 0 ? 'amount-danger' : ''}>{formatCurrency(c.current_balance)}</td><td>{formatCurrency(c.credit_limit)}</td><td><span className={`badge ${c.status === 'approved' ? 'success' : c.status === 'pending' ? 'warning' : 'danger'}`}>{c.status === 'approved' ? 'معتمد' : c.status === 'pending' ? 'قيد المراجعة' : 'موقوف'}</span></td><td>{c.status === 'pending' && <Button onClick={() => status(c.id, 'approved')}>اعتماد</Button>}</td></tr>)}</tbody></table></TableWrap>}</section>{modal && <CustomerModal onClose={() => setModal(false)} onSaved={() => { setModal(false); refetch(); onNotice('تمت إضافة العميل'); }} />}</>;
+  const { data, loading, error, refetch } = useFetch(fetchCustomers);
+  const [query, setQuery] = useState("");
+  const [modal, setModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const rows = (data ?? []).filter((c) =>
+    (c.business_name + " " + (c.phone ?? "") + " " + c.customer_code)
+      .toLocaleLowerCase("ar").includes(query.trim().toLocaleLowerCase("ar"))
+  );
+
+  async function status(id: string, next: string) {
+    try {
+      await updateCustomerStatus(id, next);
+      await refetch();
+      onNotice(next === "approved" ? "تم اعتماد العميل" : "تم تحديث حالة العميل");
+    } catch (e) {
+      onNotice(e instanceof Error ? e.message : "تعذر تحديث العميل");
+    }
+  }
+
+  return <>
+    <Heading eyebrow="المبيعات والعملاء" title="إدارة العملاء" description="ملف العميل، اعتماد الحسابات، جهات الاتصال، العناوين وشرائح الأسعار" icon={Users} />
+    <div className="toolbar">
+      <span className="toolbar-note">{data?.length ?? 0} عميل مسجل</span>
+      <div className="toolbar-actions">
+        <Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button>
+        <Button onClick={() => setModal(true)}><Plus size={17} /> إضافة عميل</Button>
+      </div>
+    </div>
+    <section className="panel table-panel">
+      <div className="table-head">
+        <h2>دليل العملاء</h2>
+        <label className="search-field"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث عن عميل..." /></label>
+      </div>
+      {loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap>
+        <table>
+          <thead><tr><th>العميل</th><th>جهة الاتصال الأساسية</th><th>الشريحة</th><th>الرصيد</th><th>الحد الائتماني</th><th>الحالة</th><th>ملف العميل</th></tr></thead>
+          <tbody>{rows.map((c) => <tr key={c.id}>
+            <td><strong>{c.business_name}</strong><small>{c.customer_code}</small></td>
+            <td>{c.contact_name ?? "—"}<small>{c.phone ?? "—"}</small><small>{c.email ?? ""}</small></td>
+            <td><span className="tier">{c.tier === "vip" ? "مميز" : c.tier === "wholesale" ? "جملة" : "تجزئة"}</span></td>
+            <td className={c.current_balance > 0 ? "amount-danger" : ""}>{formatCurrency(c.current_balance)}</td>
+            <td>{formatCurrency(c.credit_limit)}</td>
+            <td><span className={c.status === "approved" ? "badge success" : c.status === "pending" ? "badge warning" : "badge danger"}>{c.status === "approved" ? "معتمد" : c.status === "pending" ? "قيد المراجعة" : "موقوف"}</span></td>
+            <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <Button variant="outline" onClick={() => setSelectedCustomer(c)}><Users size={15} /> جهات الاتصال</Button>
+              {c.status === "pending" && <Button onClick={() => void status(c.id, "approved")}>اعتماد</Button>}
+            </td>
+          </tr>)}</tbody>
+        </table>
+      </TableWrap>}
+    </section>
+    {selectedCustomer && <section className="panel" style={{ marginTop: 16, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div><h2 style={{ margin: 0 }}>ملف العميل: {selectedCustomer.business_name}</h2><p style={{ margin: "5px 0", color: "#71868a" }}>رمز العميل: {selectedCustomer.customer_code}. إدارة جهات الاتصال مرتبطة بسجل هذا العميل داخل المؤسسة.</p></div>
+        <Button variant="outline" onClick={() => setSelectedCustomer(null)}>إغلاق الملف</Button>
+      </div>
+      <CustomerContactsManager mode="admin" customerId={selectedCustomer.id} customerName={selectedCustomer.business_name} />
+    </section>}
+    {modal && <CustomerModal onClose={() => setModal(false)} onSaved={() => { setModal(false); void refetch(); onNotice("تمت إضافة العميل"); }} />}
+  </>;
 }
-function CustomerModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) { const [business, setBusiness] = useState(''); const [contact, setContact] = useState(''); const [phone, setPhone] = useState(''); const [tier, setTier] = useState('retail'); const [error, setError] = useState(''); async function save() { if (!business.trim()) { setError('اسم المنشأة مطلوب'); return; } try { await createCustomer({ business_name: business, contact_name: contact, phone, tier, customer_code: `CUST-${Date.now().toString().slice(-6)}`, status: 'pending' }); onSaved(); } catch (e) { setError(e instanceof Error ? e.message : 'تعذر الحفظ'); } } return <Modal title="إضافة عميل" onClose={onClose}><Field label="اسم المنشأة"><input value={business} onChange={(e) => setBusiness(e.target.value)} /></Field><div className="form-grid"><Field label="اسم المسؤول"><input value={contact} onChange={(e) => setContact(e.target.value)} /></Field><Field label="رقم الهاتف"><input value={phone} onChange={(e) => setPhone(e.target.value)} /></Field></div><Field label="شريحة الأسعار"><select value={tier} onChange={(e) => setTier(e.target.value)}><option value="retail">تجزئة</option><option value="wholesale">جملة</option><option value="vip">مميز</option></select></Field>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={save}>حفظ العميل</Button></div></Modal>; }
+
+function CustomerModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [business, setBusiness] = useState("");
+  const [contact, setContact] = useState("");
+  const [phone, setPhone] = useState("");
+  const [tier, setTier] = useState("retail");
+  const [error, setError] = useState("");
+  async function save() {
+    if (!business.trim()) { setError("اسم المنشأة مطلوب"); return; }
+    try {
+      await createCustomer({ business_name: business, contact_name: contact, phone, tier, customer_code: "CUST-" + Date.now().toString().slice(-6), status: "pending" });
+      onSaved();
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذر الحفظ"); }
+  }
+  return <Modal title="إضافة عميل" onClose={onClose}>
+    <Field label="اسم المنشأة"><input value={business} onChange={(e) => setBusiness(e.target.value)} maxLength={160} required /></Field>
+    <div className="form-grid">
+      <Field label="اسم المسؤول"><input value={contact} onChange={(e) => setContact(e.target.value)} maxLength={120} /></Field>
+      <Field label="رقم الهاتف"><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={32} /></Field>
+    </div>
+    <Field label="شريحة الأسعار"><select value={tier} onChange={(e) => setTier(e.target.value)}><option value="retail">تجزئة</option><option value="wholesale">جملة</option><option value="vip">مميز</option></select></Field>
+    {error && <div className="form-error" role="alert">{error}</div>}
+    <div className="modal-actions"><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={() => void save()}>حفظ العميل</Button></div>
+  </Modal>;
+}
 
 function Orders({ onViewDetail }: { onViewDetail: (id: string) => void }) {
   const { data, loading, error, refetch } = useFetch(fetchOrders);

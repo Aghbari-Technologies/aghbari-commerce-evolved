@@ -36,6 +36,7 @@ import {
   type PaymentAmount,
 } from "@/lib/commerce-utils";
 import { fetchProducts } from "@/lib/api";
+import { CustomerContactsManager } from "@/components/CustomerContactsManager";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 
 type Invoice = {
@@ -157,6 +158,7 @@ const secondary: React.CSSProperties = {
 };
 const links = [
   ["/addresses", "عناوين التوصيل"],
+  ["/company/contacts", "جهات اتصال الشركة"],
   ["/invoices", "الفواتير"],
   ["/statement", "كشف الحساب"],
   ["/quotes", "عروض الأسعار"],
@@ -2232,5 +2234,16 @@ function CustomerAddresses() {
          </article>)}
        </div>}
     </section>
+  </WorkspaceShell>;
+}
+
+
+export function CustomerCompanyContactsPage() {
+  const { user, ready } = useAuth();
+  if (!ready) return <WorkspaceShell title="جهات اتصال الشركة" subtitle="جارٍ التحقق من الحساب"><p role="status">جارٍ التحقق من جلسة الحساب...</p></WorkspaceShell>;
+  if (!user) return <Login />;
+  if (user.isStaff) return <WorkspaceShell title="جهات اتصال الشركة" subtitle="مساحة حساب العميل"><ErrorBox message="هذه الصفحة مخصصة لحساب العميل. استخدم ملف العميل في لوحة الإدارة لإدارة جهات الاتصال وفق صلاحيتك." /></WorkspaceShell>;
+  return <WorkspaceShell title="جهات اتصال الشركة" subtitle="أدر جهات الاتصال التجارية للمشتريات والمالية والاستلام. هذه سجلات تواصل وليست حسابات دخول.">
+    <CustomerContactsManager mode="customer" />
   </WorkspaceShell>;
 }
