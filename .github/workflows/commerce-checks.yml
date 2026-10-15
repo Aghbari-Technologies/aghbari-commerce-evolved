@@ -120,6 +120,28 @@ jobs:
               exit 1
             fi
           done
+          # A generic not-found shell can still return HTTP 200. Require each critical
+          # customer route to render its own title in the built production artifact.
+          for route_spec in \
+            "/invoices|الفواتير" \
+            "/statement|كشف الحساب"; do
+            route="${route_spec%%|*}"
+            expected_title="${route_spec#*|}"
+            curl --fail --silent --show-error "http://127.0.0.1:4173$route" -o /tmp/aghbari-preview-route-contract.html
+            if ! grep -Fq "$expected_title" /tmp/aghbari-preview-route-contract.html; then
+              echo "Production preview route contract failed: $route did not render its own title '$expected_title'."
+              cat /tmp/aghbari-preview-route-contract.html
+              cat /tmp/aghbari-preview.log
+              exit 1
+            fi
+          done
+          # Verify the served static assets are the PWA files, not fallback HTML.
+          curl --connect-timeout 2 --max-time 5 --fail --silent --show-error http://127.0.0.1:4173/sw.js -o /tmp/aghbari-preview-sw.js
+          grep -Fq "CACHE_NAME" /tmp/aghbari-preview-sw.js || {
+            echo "Production preview /sw.js did not contain the service worker implementation."
+            cat /tmp/aghbari-preview-sw.js
+            exit 1
+          }
           for route in \
             /api/statement-pdf \
             /api/invoice-pdf/11111111-1111-4111-8111-111111111111; do
