@@ -1930,6 +1930,18 @@ function Offline() {
       } catch {
         localStorage.removeItem(getOfflineCatalogCacheKey(cartScopeKey));
       }
+
+      // An old global cache has no trustworthy account scope. Scrub sensitive fields,
+      // then remove it instead of replaying its inventory into an arbitrary account.
+      try {
+        const oldGlobalCache = localStorage.getItem("aghbari:catalog:v1");
+        if (oldGlobalCache) {
+          localStorage.setItem("aghbari:catalog:v1", JSON.stringify(sanitizePublicCatalogCache(JSON.parse(oldGlobalCache))));
+          localStorage.removeItem("aghbari:catalog:v1");
+        }
+      } catch {
+        localStorage.removeItem("aghbari:catalog:v1");
+      }
       // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
       localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
       setCached(safeCatalog.length);

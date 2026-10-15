@@ -4,6 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { routeTree } from "@/routeTree.gen";
+import { createOfflineCartScopeKey, getOfflineCatalogCacheKey } from "@/lib/offline-cart-ledger";
 
 const mocks = vi.hoisted(() => ({
   user: null as null | {
@@ -598,20 +599,9 @@ describe("customer workflow tenant and monetary display boundaries", () => {
 
     await mountQuoteWorkspace("/offline");
 
-    const legacySafe = JSON.parse(window.localStorage.getItem("aghbari:catalog:v1") || "[]");
-    expect(legacySafe).toHaveLength(1);
-    expect(legacySafe[0].base_price).toBe(0);
-    expect(legacySafe[0]).not.toHaveProperty("display_price");
-    expect(legacySafe[0]).not.toHaveProperty("cost_price");
-    expect(legacySafe[0]).not.toHaveProperty("retail_price");
-    expect(legacySafe[0]).not.toHaveProperty("wholesale_price");
-    expect(legacySafe[0]).not.toHaveProperty("purchase_cost");
-    expect(legacySafe[0]).not.toHaveProperty("min_stock");
-    expect(legacySafe[0]).not.toHaveProperty("internal_notes");
-    expect(legacySafe[0].inventory).not.toHaveProperty("quantity_reserved");
-    expect(legacySafe[0].inventory).not.toHaveProperty("reorder_point");
-    expect(legacySafe[0].inventory).not.toHaveProperty("internal_movement_note");
-    expect(legacySafe[0].category).not.toHaveProperty("internal_note");
+    expect(window.localStorage.getItem("aghbari:catalog:v1")).toBeNull();
+    const catalogScope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    expect(JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(catalogScope)) || "[]")).toEqual([]);
 
     const syncButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
       button.textContent?.includes("تحديث الكتالوج المحلي"),
@@ -622,7 +612,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const syncedSafe = JSON.parse(window.localStorage.getItem("aghbari:catalog:v1") || "[]");
+    const catalogScope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    const syncedSafe = JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(catalogScope)) || "[]");
     expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
     expect(syncedSafe).toHaveLength(1);
     expect(syncedSafe[0].base_price).toBe(0);
