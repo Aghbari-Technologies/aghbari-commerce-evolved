@@ -75,6 +75,64 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
         run: npm run build
 
+      # The dev server compiles routes on demand and can hide missing production SSR/handler output.
+      # Verify the actual built artifact separately before treating a green build as deployable.
+      - name: Production build preview smoke test on port 4173
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          SUPABASE_URL: https://ci-placeholder.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/aghbari-preview.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for attempt in $(seq 1 45); do
+            status=$(curl --silent --output /tmp/aghbari-preview-home.html --write-out "%{http_code}" http://127.0.0.1:4173/ || true)
+            if [ "$status" = "200" ] && grep -q "الأغبري" /tmp/aghbari-preview-home.html; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat /tmp/aghbari-preview.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "Production preview did not serve the built Arabic storefront at HTTP 200."
+            cat /tmp/aghbari-preview.log
+            exit 1
+          fi
+          for route in \\
+            /login /cart /checkout /orders /invoices /statement /quotes /assistant \\
+            /admin /admin/orders /admin/products /admin/finance /manifest.webmanifest /sw.js; do
+            status=$(curl --silent --output /tmp/aghbari-preview-route.html --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
+            if [ "$status" != "200" ]; then
+              echo "Production preview expected HTTP 200 from $route, received $status"
+              cat /tmp/aghbari-preview.log
+              exit 1
+            fi
+          done
+          for route in \\
+            /api/statement-pdf \\
+            /api/invoice-pdf/11111111-1111-4111-8111-111111111111; do
+            status=$(curl --silent --output /tmp/aghbari-preview-pdf-auth.json --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
+            if [ "$status" != "401" ]; then
+              echo "Production preview expected unauthenticated PDF route $route to return 401, received $status"
+              cat /tmp/aghbari-preview-pdf-auth.json
+              cat /tmp/aghbari-preview.log
+              exit 1
+            fi
+          done
+          curl --fail --silent --show-error http://127.0.0.1:4173/manifest.webmanifest -o /tmp/aghbari-preview-manifest.json
+          grep -q "Aghbari Commerce" /tmp/aghbari-preview-manifest.json || {
+            echo "Production preview PWA manifest is missing the canonical product identity."
+            cat /tmp/aghbari-preview-manifest.json
+            exit 1
+          }
+
       - name: Dev server smoke test on port 5173
         env:
           VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
@@ -115,6 +173,21 @@ jobs:
             status=$(curl --silent --output /dev/null --write-out "%{http_code}" "http://127.0.0.1:5173$route")
             if [ "$status" != "200" ]; then
               echo "Expected HTTP 200 from $route, received $status"
+              cat /tmp/aghbari-vite-dev.log
+              exit 1
+            fi
+          done
+          # A 200 alone can be a generic SPA fallback or not-found shell. Assert route-specific
+          # SSR document metadata so a missing file-based route cannot silently pass this probe.
+          for route_spec in \
+            "/invoices|الفواتير" \
+            "/statement|كشف الحساب"; do
+            route="${route_spec%%|*}"
+            expected_title="${route_spec#*|}"
+            curl --fail --silent --show-error "http://127.0.0.1:5173$route" -o /tmp/aghbari-route-contract.html
+            if ! grep -Fq "$expected_title" /tmp/aghbari-route-contract.html; then
+              echo "Expected route-specific Arabic title '$expected_title' for $route, but the document did not contain it."
+              cat /tmp/aghbari-route-contract.html
               cat /tmp/aghbari-vite-dev.log
               exit 1
             fi
