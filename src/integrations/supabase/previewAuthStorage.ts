@@ -35,11 +35,11 @@ export function brokeredPreviewStorage() {
     new Promise((resolve) => {
       const requestId = newId();
       let done = false;
-      const timer: ReturnType<typeof setTimeout> = setTimeout(() => finish(null), TIMEOUT);
+      const timer = { id: undefined as ReturnType<typeof setTimeout> | undefined };
       const finish = (r: { ok: boolean; value?: string | null } | null) => {
         if (done) return;
         done = true;
-        clearTimeout(timer);
+        if (timer.id !== undefined) clearTimeout(timer.id);
         window.removeEventListener('message', onMessage);
         resolve(r);
       };
@@ -53,6 +53,7 @@ export function brokeredPreviewStorage() {
       if (value !== undefined) msg['value'] = value;
       // targetOrigin per trusted editor origin, so a session token never reaches an arbitrary embedder.
       for (const origin of editorOrigins) window.parent.postMessage(msg, origin);
+      timer.id = setTimeout(() => finish(null), TIMEOUT);
     });
 
   // The editor may not be listening yet at the first getItem, so retry once.
