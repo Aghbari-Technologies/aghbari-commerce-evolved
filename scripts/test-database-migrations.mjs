@@ -1081,9 +1081,31 @@ async function main() {
     /admin role required/i,
   );
 
+  // A finance-only accountant may read finance surfaces but must see the same
+  // server-resolved retail price as a non-approved/untiered customer, never products.base_price.
+  const accountantPriceProductId = "e5555555-e555-4555-8555-e55555555555";
   await db.unsafe("reset role");
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Accountant Price Boundary','CI-ACCOUNTANT-PRICE-01','unit',99000,'active') on conflict(id) do update set base_price=excluded.base_price,status='active'",
+    [accountantPriceProductId, organizationId],
+  );
+  await db.unsafe(
+    "insert into public.product_prices(product_id,tier,price,min_quantity,is_active) values($1,'retail',1234,1,true) on conflict(product_id,tier) do update set price=excluded.price,min_quantity=1,is_active=true",
+    [accountantPriceProductId],
+  );
+  const expectedAccountantRetailRows = await db.unsafe(
+    "select public.customer_product_unit_price($1::uuid,$2::uuid,'retail',1) as price",
+    [accountantPriceProductId, organizationId],
+  );
+  assert.equal(Number(expectedAccountantRetailRows[0].price), 1234, "accountant fixture's authoritative retail price is distinct from base_price");
   await setIdentity(accountantAuthUserId, "ci-accountant@example.test");
   await db.unsafe("set role authenticated");
+  const accountantResolvedPrices = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[accountantPriceProductId], 1],
+  );
+  assert.equal(accountantResolvedPrices.length, 1, "accountant can resolve a display price through the safe storefront API");
+  assert.equal(Number(accountantResolvedPrices[0].unit_price), 1234, "accountant must not receive raw base price 99000");
   const accountantFinanceResult = await db.unsafe("select public.fetch_staff_finance_data() as result");
   const accountantInvoice = accountantFinanceResult[0].result.invoices.find((row) => row.id === invoice.id);
   assert.equal(Number(accountantInvoice.total_amount), 370000, "accountant may read the authorized invoice financial snapshot");
