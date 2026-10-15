@@ -712,7 +712,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       { product_id: "product-offline-1", quantity: 1 },
       { product_id: "product-offline-2", quantity: 2 },
     ]));
-    expect(host?.textContent).toContain("لم يُرسل طلب");
+    expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
 
     const increase = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
@@ -798,7 +799,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     });
     expect(host?.querySelector('[role="alert"]')).toBeNull();
     expect(host?.textContent).toContain("تمت إعادة قراءة النسخة المحلية");
-    expect(host?.textContent).toContain("لا توجد أصناف محفوظة على هذا الجهاز");
+    expect(host?.textContent).toContain("Stored Flour");
+    expect(host?.textContent).not.toContain("لا توجد أصناف محفوظة على هذا الجهاز");
   });
 
   it("preserves the last offline catalog when sync returns malformed server data", async () => {

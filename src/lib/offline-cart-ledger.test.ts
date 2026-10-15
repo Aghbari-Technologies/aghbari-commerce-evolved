@@ -5,6 +5,7 @@ import {
   createOfflineCartScopeKey,
   createStableOfflineCartMutationId,
   getOfflineCartLedgerPrefix,
+  getOfflineCatalogCacheKey,
   getOfflineCatalogSyncTimestampKey,
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
