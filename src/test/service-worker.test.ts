@@ -9,6 +9,8 @@ type Listener = (event: WorkerEvent) => void;
 async function loadServiceWorker(overrides: {
   cacheAdd?: (url: string) => Promise<void>;
   cacheNames?: string[];
+  cacheMatch?: (request: Request) => Promise<Response | null>;
+  fetcher?: (request: Request) => Promise<Response>;
 } = {}) {
   const source = await readFile(resolve(process.cwd(), "public/sw.js"), "utf8");
   const listeners = new Map<string, Listener>();
@@ -20,6 +22,7 @@ async function loadServiceWorker(overrides: {
     open: vi.fn(async () => cache),
     keys: vi.fn(async () => cacheNames),
     delete: cacheDelete,
+    match: vi.fn(async (request: Request) => overrides.cacheMatch?.(request) ?? null),
   };
   const skipWaiting = vi.fn(async () => undefined);
   const claim = vi.fn(async () => undefined);
@@ -36,7 +39,9 @@ async function loadServiceWorker(overrides: {
     URL,
     Promise,
     Response,
-    fetch: vi.fn(),
+    fetch: vi.fn((request: Request) => overrides.fetcher
+      ? overrides.fetcher(request)
+      : Promise.reject(new Error("unexpected network request"))),
     console,
   });
 
@@ -60,6 +65,25 @@ describe("Aghbari PWA offline shell", () => {
       "/", "/manifest.webmanifest", "/favicon.ico",
     ]);
     expect(worker.skipWaiting).toHaveBeenCalledOnce();
+  });
+
+  it("serves a cached asset without an unhandled rejection when the background refresh is offline", async () => {
+    const cachedResponse = new Response("cached asset", { status: 200 });
+    const worker = await loadServiceWorker({
+      cacheMatch: async () => cachedResponse,
+      fetcher: async () => { throw new Error("offline"); },
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise as Promise<Response>),
+    } as WorkerEvent & { request: Request; respondWith: (promise: Promise<Response>) => void });
+
+    await expect(Promise.all(pending)).resolves.toEqual([cachedResponse]);
   });
 
   it("removes previous shell cache versions during activation", async () => {
