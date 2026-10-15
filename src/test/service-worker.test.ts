@@ -184,7 +184,11 @@ describe("Aghbari PWA offline shell", () => {
   it("does not fail a successful network response when cache persistence is unavailable", async () => {
     const worker = await loadServiceWorker({
       cachePut: async () => { throw new Error("quota exceeded"); },
-      fetcher: async () => new Response("public build asset", { status: 200 }),
+      fetcher: async () => {
+        const response = new Response("public build asset", { status: 200 });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      },
     });
     const pending: Promise<Response>[] = [];
     worker.listeners.get("fetch")?.({
