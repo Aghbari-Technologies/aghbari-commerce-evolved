@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { routeTree } from "@/routeTree.gen";
-import { createOfflineCartScopeKey, getOfflineCatalogCacheKey } from "@/lib/offline-cart-ledger";
+import { createOfflineCartScopeKey, getOfflineCatalogCacheKey, readOfflineCartLedger } from "@/lib/offline-cart-ledger";
 
 const mocks = vi.hoisted(() => ({
   user: null as null | {
@@ -622,6 +622,22 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(syncedSafe[0]).not.toHaveProperty("wholesale_price");
     expect(syncedSafe[0].inventory).not.toHaveProperty("quantity_reserved");
     expect(syncedSafe[0].inventory).not.toHaveProperty("reorder_point");
+    expect(host?.textContent).toContain("Sugar");
+    expect(host?.textContent).toContain("السعر والمخزون الحاليان يحتاجان مراجعة الخادم");
+
+    const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إضافة إلى المسودة المحلية"),
+    );
+    expect(addButton).toBeDefined();
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual([{ product_id: "product-offline-1", quantity: 1 }]);
+    expect(host?.textContent).toContain("لم يُرسل طلب");
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
   });
 
   it("shows invoice prices in the customer preview only from the scoped invoice RPC", async () => {

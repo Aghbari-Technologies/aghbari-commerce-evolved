@@ -1917,6 +1917,7 @@ function Offline() {
   );
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [cached, setCached] = useState(0);
+  const [catalogRows, setCatalogRows] = useState<ReturnType<typeof sanitizePublicCatalogCache>>([]);
   const [cartCount, setCartCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
@@ -1945,6 +1946,7 @@ function Offline() {
       // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
       localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
       setCached(safeCatalog.length);
+      setCatalogRows(safeCatalog);
       const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, safeCatalog.map((product) => product.id));
       const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
       const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
@@ -1952,6 +1954,7 @@ function Offline() {
       setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
     } catch {
       setCached(0);
+      setCatalogRows([]);
       setCartCount(0);
     }
   }, [cartScopeKey]);
@@ -2006,6 +2009,24 @@ function Offline() {
       setMessage(cause instanceof Error ? cause.message : "تعذر حفظ مسودة السلة المحلية بأمان.");
     }
   }
+  function addToLocalDraft(productId: string, productName: string) {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل حفظ مسودة سلة مرتبطة بحسابك.");
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "adjust",
+        product_id: productId,
+        delta: 1,
+      }, []);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage(
+        "تمت إضافة " + productName + " إلى مسودة السلة المحلية فقط. لم يُرسل طلب؛ السعر والمخزون يحتاجان تحقق الخادم عند عودة الاتصال.",
+      );
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "تعذر إضافة الصنف إلى المسودة المحلية.");
+    }
+  }
   return (
     <WorkspaceShell
       title="العمل دون اتصال"
@@ -2039,6 +2060,26 @@ function Offline() {
           </strong>
         </article>
       </div>
+      <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-catalog-heading">
+        <h2 id="offline-catalog-heading" style={{ marginTop: 0, fontSize: 18 }}>الكتالوج المحلي</h2>
+        {catalogRows.length === 0 ? (
+          <p role="status" style={quiet}>لا توجد أصناف محفوظة على هذا الجهاز. اتصل بالخادم ثم حدّث الكتالوج.</p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+            {catalogRows.map((product) => (
+              <article key={product.id} style={{ border: "1px solid #dbe5e7", borderRadius: 10, padding: 12 }}>
+                <strong>{product.name}</strong>
+                <p style={quiet}>رمز الصنف: {product.item_code} · الوحدة: {product.unit}</p>
+                {product.category?.name && <p style={quiet}>التصنيف: {product.category.name}</p>}
+                <p style={quiet}>السعر والمخزون الحاليان يحتاجان مراجعة الخادم؛ لا نعتمد قيمًا محلية قديمة.</p>
+                <button style={secondary} onClick={() => addToLocalDraft(product.id, product.name)}>
+                  إضافة إلى المسودة المحلية
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
       <section style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button style={primary} onClick={() => void sync()} disabled={syncing || !online}>
           <RefreshCw size={16} />
