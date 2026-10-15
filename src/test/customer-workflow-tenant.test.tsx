@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   },
   getCurrentTenantScope: vi.fn(),
   fetchProducts: vi.fn(),
+  fetchResolvedProductPrices: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
   signOut: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock("@/lib/supabase", () => ({
 
 vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
+  fetchResolvedProductPrices: mocks.fetchResolvedProductPrices,
 }));
 
 
@@ -136,6 +138,7 @@ describe("customer quote workspace tenant boundary", () => {
       isStaff: false,
     });
     mocks.fetchProducts.mockResolvedValue([]);
+    mocks.fetchResolvedProductPrices.mockImplementation(async (ids: string[]) => new Map(ids.map((id) => [id, 1000])));
     mocks.from.mockImplementation((table: string) => makeQuery(table));
     mocks.rpc.mockResolvedValue({ data: null, error: null });
   });
@@ -195,8 +198,9 @@ describe("customer quote workspace tenant boundary", () => {
     expect(mocks.getCurrentTenantScope).toHaveBeenCalledTimes(1);
 
     const productQuery = queryFor("products");
-    expect(productQuery.columns).toBe("id,name,item_code,barcode,unit,base_price,status");
-    expect(productQuery.columns).not.toMatch(/cost_price|retail_price|wholesale_price|purchase_cost/i);
+    expect(productQuery.columns).toBe("id,name,item_code,barcode,unit,status");
+    expect(productQuery.columns).not.toMatch(/base_price|cost_price|retail_price|wholesale_price|purchase_cost/i);
+    expect(mocks.fetchResolvedProductPrices).toHaveBeenCalledWith(["product-1"]);
     expect(productQuery.filters).toContainEqual({
       column: "organization_id",
       value: ORGANIZATION_ID,
