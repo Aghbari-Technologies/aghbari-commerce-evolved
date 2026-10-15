@@ -1,1 +1,4 @@
 project_id = "ffxxjaolfntzbapmfbuv"
+
+[functions.outbox-worker]
+verify_jwt = false
