@@ -7,6 +7,7 @@ import {
 import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { parseCustomerCheckoutPreview, type CustomerCheckoutPreview } from '@/lib/customer-money-policy';
 import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeCartCounts, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
@@ -295,7 +296,8 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
                   </div>
                 ))}
               </div>
-              <div role="note" style={{ marginTop: 12, padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70' }}>سيُراجع الطلب ويُعتمد من جهة الإدارة. الأسعار والإجماليات لا تظهر في شاشة الطلب للعميل.</div>
+              <CartFinancialPreview cart={cart} profileId={user?.roles.includes('customer') ? user.profileId : undefined} />
+              <div role="note" style={{ marginTop: 12, padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70' }}>سيُراجع الطلب ويُعتمد من جهة الإدارة. لا تظهر المبالغ هنا إلا إذا فعّلت الإدارة سياسة العرض؛ ويعيد الخادم احتساب أسعار الطلب عند إرساله.</div>
               <div className="sf-cart-actions"><button className="sf-btn-secondary" onClick={() => void navigate({ to: '/' })}>متابعة التسوق</button><button className="sf-btn-primary" onClick={() => void navigate({ to: '/checkout' })}>إتمام الطلب <ChevronLeft size={16} /></button></div>
             </>
             }
@@ -346,22 +348,71 @@ function CollectionView({ title, icon: Icon, products, wishlist, compare, loadin
   </section>;
 }
 
-type CheckoutPreviewLine = {
-  product_id: string;
-  name: string;
-  item_code: string;
-  unit: string;
-  quantity: number | string;
-};
-type CheckoutValidation = {
-  valid: true;
-  items: CheckoutPreviewLine[];
-  item_count: number;
-  currency: string;
-  pricing_verified: true;
-};
 
-function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void }) {
+function formatPolicyMoney(amount: number, currency: string): string {
+  if (currency === 'YER') return formatCurrency(amount);
+  return new Intl.NumberFormat('ar', { maximumFractionDigits: 2 }).format(amount) + ' ' + currency;
+}
+
+function CartFinancialPreview({ cart, profileId }: { cart: CartItem[]; profileId?: string }) {
+  const [preview, setPreview] = useState<CustomerCheckoutPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!profileId || cart.length === 0) {
+      setPreview(null);
+      setLoading(false);
+      setFailed(false);
+      return () => { active = false; };
+    }
+    setLoading(true);
+    setFailed(false);
+    setPreview(null);
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_customer_checkout_preview', {
+          p_items: cart.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+        });
+        if (error) throw error;
+        const parsed = parseCustomerCheckoutPreview(data);
+        if (active) setPreview(parsed);
+      } catch {
+        if (active) {
+          setPreview(null);
+          setFailed(true);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [cart, profileId]);
+
+  if (!profileId || cart.length === 0) return null;
+  if (loading) return <p role="status" style={{ color: '#536b70', marginTop: 12 }}>جارٍ التحقق من سياسة عرض المبالغ لدى الخادم...</p>;
+  if (failed) return <p role="status" style={{ color: '#9a5b13', marginTop: 12 }}>تعذر التحقق من ملخص مالي موثوق؛ لم تُعرض أي مبالغ.</p>;
+  if (!preview?.amounts_visible || preview.total_amount == null) return null;
+
+  return (
+    <section aria-label="ملخص المبالغ التقديري" style={{ marginTop: 12, padding: 14, border: '1px solid #d8e8e8', borderRadius: 12, background: '#fff' }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>ملخص المبالغ التقديري</h3>
+      {preview.items.map((line) => (
+        <div key={line.product_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: '1px solid #edf2f3' }}>
+          <span>{line.name} × {formatNumber(line.quantity)}</span>
+          <strong>{line.line_total == null ? 'غير متاح' : formatPolicyMoney(line.line_total, preview.currency)}</strong>
+        </div>
+      ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
+        <span>الإجمالي التقديري</span><strong>{formatPolicyMoney(preview.total_amount, preview.currency)}</strong>
+      </div>
+      <small style={{ display: 'block', marginTop: 8, color: '#536b70' }}>المبلغ تقديري للمعاينة؛ يعتمد المبلغ النهائي على إعادة الاحتساب الخادمي عند إرسال الطلب.</small>
+    </section>
+  );
+}
+
+function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void })
   const { user } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState('');
@@ -377,7 +428,7 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
     () => deliveryAddresses.find((address) => address.id === deliveryAddressId) ?? null,
     [deliveryAddresses, deliveryAddressId],
   );
-  const [cartValidation, setCartValidation] = useState<CheckoutValidation | null>(null);
+  const [cartValidation, setCartValidation] = useState<CustomerCheckoutPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewError, setPreviewError] = useState('');
   const [previewRetry, setPreviewRetry] = useState(0);
@@ -428,27 +479,10 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
     setCartValidation(null);
     void (async () => {
       try {
-        const { data, error: rpcError } = await supabase.rpc('validate_checkout_cart', { p_items: checkoutItems });
-        if (rpcError) throw new Error(rpcError.message || 'تعذر التحقق من أصناف السلة وسياسة التسعير');
-        const payload = data as { valid?: unknown; items?: unknown; item_count?: unknown; currency?: unknown; pricing_verified?: unknown } | null;
-        if (!payload || payload.valid !== true || payload.pricing_verified !== true || !Array.isArray(payload.items) ||
-          payload.items.length === 0 || Number(payload.item_count) !== payload.items.length) {
-          throw new Error('لم يصل تأكيد تحقق صالح من الخادم');
-        }
-        const rows = payload.items as CheckoutPreviewLine[];
-        if (rows.some((line) =>
-          typeof line.product_id !== 'string' || typeof line.name !== 'string' ||
-          typeof line.item_code !== 'string' || typeof line.unit !== 'string' ||
-          !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0 ||
-          'unit_price' in line || 'line_total' in line || 'total_amount' in line
-        )) throw new Error('استجابة تحقق السلة غير مكتملة أو تحتوي حقولًا مالية غير مسموحة');
-        if (active) setCartValidation({
-          valid: true,
-          items: rows,
-          item_count: Number(payload.item_count),
-          currency: typeof payload.currency === 'string' ? payload.currency : 'YER',
-          pricing_verified: true,
-        });
+        const { data, error: rpcError } = await supabase.rpc('get_customer_checkout_preview', { p_items: checkoutItems });
+        if (rpcError) throw new Error(rpcError.message || 'تعذر التحقق من أصناف السلة وسياسة عرض المبالغ');
+        const parsedPreview = parseCustomerCheckoutPreview(data);
+        if (active) setCartValidation(parsedPreview);
       } catch (e) {
         if (active) setPreviewError(e instanceof Error ? e.message : 'تعذر التحقق من الأسعار الحالية');
       } finally {
@@ -563,10 +597,11 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
         <aside className="sf-checkout-summary">
           <h3>ملخص الطلب</h3>
           {previewLoading && <p role="status">جارٍ التحقق من الأصناف وسياسة التسعير من الخادم...</p>}
-          {cartValidation ? cartValidation.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>الكمية: {formatNumber(Number(line.quantity))} {line.unit}</small></div>)
+          {cartValidation ? cartValidation.items.map((line) => <div className="sf-summary-row" key={line.product_id}><span>{line.name}</span><small>الكمية: {formatNumber(line.quantity)} {line.unit}{cartValidation.amounts_visible && line.unit_price != null && line.line_total != null ? ' · سعر الوحدة: ' + formatPolicyMoney(line.unit_price, cartValidation.currency) + ' · الإجمالي: ' + formatPolicyMoney(line.line_total, cartValidation.currency) : ''}</small></div>)
             : !previewLoading && cart.map((i) => <div className="sf-summary-row" key={i.product.id}><span>{i.product.name}</span><small>الكمية: {formatNumber(i.quantity)} {i.product.unit}</small></div>)}
+          {cartValidation?.amounts_visible && cartValidation.total_amount != null && <div style={{ marginTop: 12, padding: 12, border: '1px solid #d8e8e8', borderRadius: 10 }}><span style={{ color: '#536b70' }}>الإجمالي التقديري من الخادم</span><strong style={{ display: 'block', marginTop: 6, fontSize: 20 }}>{formatPolicyMoney(cartValidation.total_amount, cartValidation.currency)}</strong><small>تقدير للمعاينة؛ يعيد الخادم احتساب الطلب عند الإرسال.</small></div>}
           <div role="note" style={{ padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70', lineHeight: 1.8 }}>
-            الأسعار والإجماليات مخفية في مستندات الطلب للعميل. بعد مراجعة الإدارة سيظهر إشعار حالة الطلب وتعليمات السداد عند الحاجة.
+            {cartValidation?.amounts_visible ? 'تُعرض المبالغ التقديرية وفق سياسة المؤسسة؛ المرجع النهائي هو المبلغ الذي يحتسبه الخادم عند تسجيل الطلب.' : 'الأسعار والإجماليات مخفية وفق سياسة الخصوصية المعتمدة. بعد مراجعة الإدارة سيظهر إشعار حالة الطلب وتعليمات السداد عند الحاجة.'}
           </div>
           {cartValidation && <small style={{ color: '#71868a', lineHeight: 1.7 }}>تحقق الخادم من الأصناف وصلاحية سياسة التسعير دون إرسال أي أسعار أو إجماليات للمتصفح. يعيد الخادم حساب المبلغ داخل معاملة إنشاء الطلب.</small>}
           {!cartValidation && !previewLoading && <small style={{ color: '#9b2626', lineHeight: 1.7 }}>لن يُرسل الطلب حتى ينجح التحقق من السلة وسياسة التسعير في الخادم.</small>}

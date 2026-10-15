@@ -455,6 +455,39 @@ async function main() {
   assert.equal(Number(preview20[0].result.items[0].quantity), 20);
   assert.ok(!("total_amount" in preview20[0].result));
 
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key in ('customer_cart_amounts_visible','customer_order_amounts_visible')", [organizationId]);
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const checkoutMoneyHiddenResult = await db.unsafe(
+    "select public.get_customer_checkout_preview($1::jsonb) as result",
+    [db.json([{ product_id: productId, quantity: 10 }])],
+  );
+  const checkoutMoneyHidden = checkoutMoneyHiddenResult[0].result;
+  assert.equal(checkoutMoneyHidden.amounts_visible, false, "cart money must be hidden when the tenant policy is missing");
+  assert.ok(!("total_amount" in checkoutMoneyHidden), "default-hidden checkout response must not include a total field");
+  assert.ok(!("unit_price" in checkoutMoneyHidden.items[0]) && !("line_total" in checkoutMoneyHidden.items[0]), "default-hidden checkout item must contain no financial fields");
+  await expectFailure("customer cannot turn on cart financial visibility",
+    () => db.unsafe("select public.set_customer_money_display_policy('cart',true)"), /admin or manager/i);
+
+  await db.unsafe("reset role");
+  await db.unsafe("insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_cart_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,category=excluded.category,updated_at=now()", [organizationId]);
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const checkoutMoneyVisibleResult = await db.unsafe(
+    "select public.get_customer_checkout_preview($1::jsonb) as result",
+    [db.json([{ product_id: productId, quantity: 10 }])],
+  );
+  const checkoutMoneyVisible = checkoutMoneyVisibleResult[0].result;
+  assert.equal(checkoutMoneyVisible.amounts_visible, true, "only the explicit tenant opt-in reveals cart prices");
+  assert.equal(Number(checkoutMoneyVisible.items[0].unit_price), 37000, "visible cart price must use the wholesale quantity resolver");
+  assert.equal(Number(checkoutMoneyVisible.items[0].line_total), 370000);
+  assert.equal(Number(checkoutMoneyVisible.total_amount), 370000);
+  assert.equal(checkoutMoneyVisible.currency, "YER");
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key='customer_cart_amounts_visible'", [organizationId]);
+  await db.unsafe("set role authenticated");
+
   const wholesaleResolved10 = await db.unsafe(
     "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
     [[productId], 10],
@@ -502,6 +535,28 @@ async function main() {
   assert.equal(order.status, "pending");
   assert.ok(!("total_amount" in order), "customer order response must not disclose monetary values");
   assert.equal(order.idempotent_replay, false);
+
+  const orderMoneyHiddenResult = await db.unsafe("select public.get_customer_order_financials($1::uuid) as result", [order.id]);
+  const orderMoneyHidden = orderMoneyHiddenResult[0].result;
+  assert.equal(orderMoneyHidden.amounts_visible, false, "order detail money must default to hidden");
+  assert.equal(orderMoneyHidden.total_amount, null);
+  assert.ok(orderMoneyHidden.items.length > 0);
+  assert.ok(orderMoneyHidden.items.every((line) => line.unit_price === null && line.line_total === null), "hidden order items must carry NULL financial values");
+
+  await db.unsafe("reset role");
+  await db.unsafe("insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_order_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,category=excluded.category,updated_at=now()", [organizationId]);
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const orderMoneyVisibleResult = await db.unsafe("select public.get_customer_order_financials($1::uuid) as result", [order.id]);
+  const orderMoneyVisible = orderMoneyVisibleResult[0].result;
+  assert.equal(orderMoneyVisible.amounts_visible, true);
+  assert.equal(Number(orderMoneyVisible.total_amount), 370000);
+  assert.equal(orderMoneyVisible.items.length, 1);
+  assert.equal(Number(orderMoneyVisible.items[0].unit_price), 37000);
+  assert.equal(Number(orderMoneyVisible.items[0].line_total), 370000);
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key='customer_order_amounts_visible'", [organizationId]);
+
   // Verify server-computed financial storage as the trusted test owner, not through customer grants.
   await db.unsafe("reset role");
   const persistedOrderAmount = await db.unsafe("select total_amount from public.orders where id=$1", [order.id]);
