@@ -1,25 +1,26 @@
 # Aghbari Commerce — Latest Execution State
 
-## Current execution pointer — 2026-10-16 (offline cart idempotency + bounded PWA cache)
+## Current execution pointer — 2026-10-16 (offline mutation recovery, PWA cache limits, Outbox retry signaling)
 
 - Active PR #72: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72
-- Work branch: fix/acceptance-hardening-cart-finance-20261015, target main. Do not merge or publish from this session.
-- Current branch SHA before this state commit: 0d3a6d2c6d2eee978ec6f02fb37d4cb9425b55c2. Exact-head CI not confirmed yet.
-- Latest known successful source CI: ba67f3efc3073913087e8da4b285652cb0310e51, run 38817897066 SUCCESS. Every later code commit requires a fresh exact-head result; do not transfer this PASS.
-- Offline cart ledger has stable mutation IDs, signatures for compacted IDs, fail-closed handling of unsigned legacy checkpoints, race-safe compaction, and scoped storage event subscriptions.
-- Offline workspace in src/components/CustomerWorkflows.tsx has a scoped sanitized catalog, Arabic storefront search, 100-row rendering cap, stale/unknown cache freshness warnings, add/increment/decrement/remove, and confirmed local draft clear. Money and order submission stay server-only.
-- Local mutation recovery keeps intent IDs until full reconciliation finishes. The retry action replays uncertain edits using the same ID, so a write-then-throw does not double-increment; regression test in src/test/customer-workflow-tenant.test.tsx models this failure.
-- Catalog sync separates malformed/network response from local persistence errors and best-effort rolls back cache plus freshness timestamp when writes fail.
-- Service worker caches public shell/assets only, reads its own cache namespace, avoids private-route/order POST caching, and bounds build assets to 120 by evicting oldest /assets/* entries. The asset extension matcher has been corrected to use a literal dot.
-- Outbox worker has streaming 4096-byte request limits, strict UTF-8/body/claim validation, handled RPC transport errors, and sanitized durable error text. Isolated PostgreSQL acceptance covers lease reclaim, idempotent receipts, retry/backoff, and poison-event dead-lettering.
-- Known older CI failures were addressed in later source: run 38817974329 exposed malformed-sync/rollback test expectations; run 38818267326 exposed asset regex escaping and a one-shot server response consumed before the test click. Newer exact-head CI still needs to confirm all fixes together.
+- Work branch: fix/acceptance-hardening-cart-finance-20261015; target main. Do not merge or publish from this session.
+- Current source SHA before this state commit: 3032bf5d16b724824f05114f345a7d08f4f4c00c. Exact-head CI has not confirmed this latest batch.
+- Latest known successful source CI: ba67f3efc3073913087e8da4b285652cb0310e51, Actions run 38817897066 SUCCESS. Do not transfer PASS to later commits.
+- Offline cart ledger includes stable mutation signatures, safe checkpoint compaction, fail-closed unsigned legacy checkpoint retries, and scope-filtered cross-tab storage notifications.
+- Offline workspace has an Arabic-searchable sanitized catalog, 100-row rendering cap, cache freshness timestamps/warnings, local add/edit/remove/confirmed-clear, and separate catalog/cart error handling. No offline prices or order submission.
+- Local cart mutations retain an intent ID after uncertain writes. The recovery control replays that exact ID and discards it only after append/readback/owner persistence fully succeeds; regression test simulates write-then-throw and prevents double increment.
+- Catalog sync distinguishes network/validation failures from local persistence errors and best-effort restores previous cache plus timestamp if storage fails. Test drives the online event before explicit sync and restores spies.
+- Service worker caches public shell/assets only, reads its own cache namespace, avoids private-route/order POST caching, limits retained /assets/* build assets to 120 by evicting oldest entries, and treats cache errors as best-effort.
+- Outbox worker returns HTTP 503 when it cannot durably record one or more failure outcomes, making retry visible to the scheduler; event counters remain in the response. Idempotency receipts make repeats safe.
+- Outbox input remains bounded (4096 bytes), strict on UTF-8/request/claim shapes, catches claim/process/failure RPC transport exceptions, and sanitizes durable error messages. Isolated PostgreSQL acceptance covers lease reclaim, idempotency, retry/backoff and dead-lettering.
+- Run 38818957374 failed at source SHA 04adc5c: the sync button remained disabled because React's online state was stale, and the test's failing spy then contaminated the next test. The current test now dispatches an online event and restores spies in finally; exact-head CI is pending.
 - AGH-OFFLINE-PWA-001 and AGH-ASYNC-OUTBOX-001 remain PARTIAL pending current exact-head CI, authenticated browser offline/resume, and deployed worker crash/replay evidence.
-- External boundary: intended Supabase project ffxxjaolfntzbapmfbuv is inaccessible; never substitute mrcyqezbhpncuvaehwgf. No production DB write/migration, Lovable publish, or main merge.
-- next_task_id = AGH-OFFLINE-PWA-001 — OPEN. Fix exact-head CI failures, then continue recovery/restore edge cases for the local draft. Don't create fake orders or treat local quantities/prices as authoritative.
-- Resume rule: resolve live branch/PR refs, edit only files relevant to the next task, save a coherent source commit, update this pointer and the one canonical registry, and proceed without restarting discovery or asking for the mandate again.
+- External boundary: intended Supabase project ffxxjaolfntzbapmfbuv remains inaccessible; never substitute mrcyqezbhpncuvaehwgf. No production DB write/migration, Lovable publish, or main merge.
+- next_task_id = AGH-OFFLINE-PWA-001 — OPEN. Fix current exact-head CI failures, then continue local draft recovery/restore safeguards. Continue Outbox closure once this batch passes.
+- Resume rule: resolve live branch/PR refs, inspect only files for the active task, commit and push coherent batches, update this pointer and one canonical registry, then proceed without broad restart.
 
 ## Persistent execution protocol
-- Canonical references: AGENTS.md, ops/AGHBARI-PERSISTENT-EXECUTION-PROTOCOL.md, docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md. Keep one resume pointer and one registry.
+- Canonical files: AGENTS.md, ops/AGHBARI-PERSISTENT-EXECUTION-PROTOCOL.md, docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md. Keep one resume pointer and one registry.
 
 ---
 
