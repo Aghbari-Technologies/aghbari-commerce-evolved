@@ -30,6 +30,7 @@ import {
   normalizeCartDraft,
   sanitizePublicCatalogCache,
   summarizeAccount,
+  summarizeInvoiceAmounts,
   summarizeCustomerInvoiceStatuses,
   summarizeCustomerOrderStatuses,
   type InvoiceAmount,
@@ -701,6 +702,11 @@ function Statement() {
         <p role="status">جارٍ تحميل كشف الحساب...</p>
       ) : (
         <>
+          {!totals.valid && (
+            <p role="alert" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
+              تعذر احتساب أرصدة الحساب بدقة؛ توجد قيمة مالية غير صالحة في البيانات. لم تُعرض كصفر.
+            </p>
+          )}
           <div
             style={{
               display: "grid",
@@ -726,7 +732,7 @@ function Statement() {
                     color: label === "المتبقي المستحق" ? "#9b4e22" : "#087f8d",
                   }}
                 >
-                  {formatCurrency(value)}
+                  {totals.valid ? formatCurrency(value) : "غير متاح"}
                 </strong>
               </article>
             ))}
@@ -745,20 +751,16 @@ function Statement() {
               </thead>
               <tbody>
                 {invoices.map((i) => {
-                  const paid = payments
-                    .filter((p) => p.invoice_id === i.id)
-                    .reduce((s, p) => s + Number(p.amount), 0);
-                  const remaining =
-                    i.status === "void" ? 0 : Math.max(0, Number(i.total_amount) - paid);
+                  const balance = summarizeInvoiceAmounts(i as InvoiceAmount, payments);
                   return (
                     <tr key={i.id} style={{ borderTop: "1px solid #edf2f3" }}>
                       <td style={{ padding: 12 }}>{formatDateShort(i.issued_at)}</td>
                       <td>
                         <strong>{i.invoice_number}</strong>
                       </td>
-                      <td>{formatCurrency(Number(i.total_amount))}</td>
-                      <td>{formatCurrency(paid)}</td>
-                      <td>{formatCurrency(remaining)}</td>
+                      <td>{balance.valid ? formatCurrency(balance.total) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatCurrency(balance.paid) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatCurrency(balance.outstanding) : "غير متاح"}</td>
                       <td>
                         {i.status === "paid"
                           ? "مدفوعة"
