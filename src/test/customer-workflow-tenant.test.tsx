@@ -807,6 +807,68 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     writeSpy.mockRestore();
   });
 
+  it("retries an uncertain local append with the same mutation ID instead of double-incrementing", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    const scope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    window.localStorage.setItem(getOfflineCatalogCacheKey(scope), JSON.stringify([{
+      id: "offline-idempotency-product",
+      name: "Idempotency Test",
+      item_code: "000902",
+      unit: "bag",
+      base_price: 0,
+    }]));
+    await mountQuoteWorkspace("/offline");
+
+    const originalSetItem = Storage.prototype.setItem;
+    const operationPrefix = getOfflineCartLedgerPrefix(scope) + "op:";
+    let writeThenThrow = true;
+    const writeSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      const result = originalSetItem.call(this, key, value);
+      if (writeThenThrow && key.startsWith(operationPrefix)) {
+        writeThenThrow = false;
+        throw new DOMException("write result was uncertain", "QuotaExceededError");
+      }
+      return result;
+    });
+
+    const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إضافة إلى المسودة المحلية"),
+    );
+    await act(async () => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain("أعد التحقق من التخزين");
+    expect(readOfflineCartLedger(window.localStorage, scope).lines)
+      .toEqual([{ product_id: "offline-idempotency-product", quantity: 1 }]);
+
+    const retryButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إعادة محاولة قراءة التخزين"),
+    );
+    await act(async () => {
+      retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const recoveredAddButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إضافة إلى المسودة المحلية"),
+    );
+    await act(async () => {
+      recoveredAddButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, scope).lines)
+      .toEqual([{ product_id: "offline-idempotency-product", quantity: 1 }]);
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+    writeSpy.mockRestore();
+  });
+
   it("shows a storage error instead of a misleading empty-catalog state when the cart ledger is corrupt", async () => {
     mocks.user = {
       id: USER_ID,

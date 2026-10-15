@@ -1939,6 +1939,19 @@ function Offline() {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
   const [storageError, setStorageError] = useState("");
+  // Keep an idempotency ID for an intent until the caller confirms its outcome.
+  // If storage wrote the record and then threw, retrying the same intent must not double-apply it.
+  const pendingLocalMutationIds = useRef(new Map<string, string>());
+  function pendingMutationId(intent: string): string {
+    const existing = pendingLocalMutationIds.current.get(intent);
+    if (existing) return existing;
+    const created = createOfflineCartMutationId();
+    pendingLocalMutationIds.current.set(intent, created);
+    return created;
+  }
+  function finishLocalMutation(intent: string) {
+    pendingLocalMutationIds.current.delete(intent);
+  }
   const catalogQuery = catalogSearch.trim().toLocaleLowerCase();
   const matchingCatalogRows = catalogRows.filter((product) => {
     if (!catalogQuery) return true;
@@ -2126,6 +2139,7 @@ function Offline() {
     }
   }
   function addToLocalDraft(productId: string, productName: string) {
+    const intent = "adjust:" + productId + ":1";
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل حفظ مسودة سلة مرتبطة بحسابك.");
       const catalog = sanitizePublicCatalogCache(
@@ -2138,12 +2152,13 @@ function Offline() {
       );
       const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
-        id: createOfflineCartMutationId(),
+        id: pendingMutationId(intent),
         kind: "adjust",
         product_id: productId,
         delta: 1,
       }, seedExists ? [] : legacy.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
       setCartLines(next.lines);
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(
@@ -2156,6 +2171,7 @@ function Offline() {
     }
   }
   function adjustLocalDraft(productId: string, delta: 1 | -1) {
+    const intent = "adjust:" + productId + ":" + delta;
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
       const initialLines = (() => {
@@ -2165,12 +2181,13 @@ function Offline() {
         return readLegacyCartDraftForScope(localStorage, cartScopeKey, catalog.map((product) => product.id)).lines;
       })();
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
-        id: createOfflineCartMutationId(),
+        id: pendingMutationId(intent),
         kind: "adjust",
         product_id: productId,
         delta,
       }, initialLines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
       setCartLines(next.lines);
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(delta > 0 ? "تمت زيادة الكمية في المسودة المحلية." : "تم إنقاص الكمية في المسودة المحلية.");
@@ -2181,14 +2198,16 @@ function Offline() {
     }
   }
   function removeFromLocalDraft(productId: string, productName: string) {
+    const intent = "remove:" + productId;
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
-        id: createOfflineCartMutationId(),
+        id: pendingMutationId(intent),
         kind: "remove",
         product_id: productId,
       });
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
       setCartLines(next.lines);
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage("تمت إزالة " + productName + " من المسودة المحلية فقط.");
@@ -2199,6 +2218,7 @@ function Offline() {
     }
   }
   function clearLocalDraft() {
+    const intent = "clear";
     if (!user?.profileId) {
       setMessage("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
       return;
@@ -2211,10 +2231,11 @@ function Offline() {
     }
     try {
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
-        id: createOfflineCartMutationId(),
+        id: pendingMutationId(intent),
         kind: "clear",
       });
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
       setCartLines(next.lines);
       setCartCount(0);
       setMessage("تم تفريغ مسودة السلة المحلية فقط. لم يُرسل طلب ولم يتغير الكتالوج.");
