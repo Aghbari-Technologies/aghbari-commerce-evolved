@@ -250,11 +250,8 @@ describe("public catalog privacy and tenant query contract", () => {
 
     await expect(fetchProducts()).resolves.toEqual([]);
 
-    expect(queryFor("products").columns).toBe("*");
-    expect(queryFor("products").filters).toContainEqual({
-      column: "organization_id",
-      value: OTHER_ORGANIZATION_ID,
-    });
+    expect(mocks.rpc).toHaveBeenCalledWith("fetch_staff_products", { p_product_id: null });
+    expect(mocks.queries.some((query) => query.table === "products")).toBe(false);
     expect(queryFor("inventory_balances").columns).toBe("*");
     expect(queryFor("inventory_balances").filters).toContainEqual({
       column: "warehouse_id",
