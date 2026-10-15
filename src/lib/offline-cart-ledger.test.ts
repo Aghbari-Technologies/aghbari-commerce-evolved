@@ -5,6 +5,7 @@ import {
   createOfflineCartScopeKey,
   createStableOfflineCartMutationId,
   getOfflineCartLedgerPrefix,
+  getOfflineCatalogSyncTimestampKey,
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
   subscribeToOfflineCartLedger,
@@ -91,6 +92,16 @@ describe("scoped durable offline cart mutation journal", () => {
     expect(appendOfflineCartMutation(storage, scope, mutation({ id: "remove-p1", kind: "remove", product_id: "p1" })).lines)
       .toEqual([{ product_id: "p2", quantity: 3 }]);
     expect(appendOfflineCartMutation(storage, scope, mutation({ id: "clear-cart", kind: "clear" })).lines).toEqual([]);
+  });
+
+  it("scopes catalog sync freshness timestamps by account and origin", () => {
+    const accountA = createOfflineCartScopeKey("profile-a", "https://tenant-a.example");
+    const accountB = createOfflineCartScopeKey("profile-b", "https://tenant-a.example");
+    const tenantB = createOfflineCartScopeKey("profile-a", "https://tenant-b.example");
+    const keyA = getOfflineCatalogSyncTimestampKey(accountA);
+    expect(keyA).not.toBe(getOfflineCatalogSyncTimestampKey(accountB));
+    expect(keyA).not.toBe(getOfflineCatalogSyncTimestampKey(tenantB));
+    expect(keyA).toMatch(/^aghbari:catalog-synced-at:v1:/);
   });
 
   it("isolates local mutations by profile and origin", () => {

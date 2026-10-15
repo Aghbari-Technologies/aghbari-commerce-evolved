@@ -17,6 +17,7 @@ import { createOfflineCartScopeKey,
   getOfflineCatalogCacheKey,
   readOfflineCartLedger,
   getOfflineCartLedgerPrefix,
+  getOfflineCatalogSyncTimestampKey,
 } from "@/lib/offline-cart-ledger";
 
 const mocks = vi.hoisted(() => ({
@@ -638,6 +639,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
 
     const syncedSafe = JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(catalogScope)) || "[]");
     expect(mocks.fetchProducts).toHaveBeenCalledTimes(1);
+    expect(Number(window.localStorage.getItem(getOfflineCatalogSyncTimestampKey(catalogScope)))).toBeGreaterThan(0);
+    expect(host?.textContent).toContain("آخر مزامنة ناجحة من الخادم");
     expect(syncedSafe).toHaveLength(3);
     expect(syncedSafe[0].base_price).toBe(0);
     expect(syncedSafe[0]).not.toHaveProperty("display_price");

@@ -57,6 +57,7 @@ import {
   readOfflineCartLedger,
   writeLegacyCartOwner,
   subscribeToOfflineCartLedger,
+  getOfflineCatalogSyncTimestampKey,
 } from "@/lib/offline-cart-ledger";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
@@ -1931,6 +1932,7 @@ function Offline() {
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [cached, setCached] = useState(0);
   const [catalogRows, setCatalogRows] = useState<ReturnType<typeof sanitizePublicCatalogCache>>([]);
+  const [lastCatalogSyncAt, setLastCatalogSyncAt] = useState<number | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -1968,6 +1970,15 @@ function Offline() {
       }
       // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
       localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
+      const rawSyncTimestamp = localStorage.getItem(getOfflineCatalogSyncTimestampKey(cartScopeKey));
+      const syncTimestamp = rawSyncTimestamp === null ? Number.NaN : Number(rawSyncTimestamp);
+      setLastCatalogSyncAt(
+        Number.isSafeInteger(syncTimestamp) &&
+        syncTimestamp > 0 &&
+        syncTimestamp <= Date.now() + 5 * 60 * 1000
+          ? syncTimestamp
+          : null,
+      );
       setCached(safeCatalog.length);
       setCatalogRows(safeCatalog);
       const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, safeCatalog.map((product) => product.id));
@@ -1981,6 +1992,7 @@ function Offline() {
       setCached(0);
       setCatalogRows([]);
       setCartCount(0);
+      setLastCatalogSyncAt(null);
       setStorageError("تعذر التحقق من التخزين المحلي أو سجل السلة؛ لم تُرسل أي عملية. أعد المحاولة بعد التحقق من مساحة التخزين.");
       return false;
     }
@@ -2014,7 +2026,27 @@ function Offline() {
       if (fetchedCatalog.length > 0 && rows.length === 0) {
         throw new Error("لم تتضمن استجابة الخادم أصنافًا صالحة؛ احتفظنا بالنسخة المحلية.");
       }
-      localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(rows));
+      const cacheKey = getOfflineCatalogCacheKey(cartScopeKey);
+      const timestampKey = getOfflineCatalogSyncTimestampKey(cartScopeKey);
+      const previousCache = localStorage.getItem(cacheKey);
+      const previousTimestamp = localStorage.getItem(timestampKey);
+      const syncTimestamp = Date.now();
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(rows));
+        localStorage.setItem(timestampKey, String(syncTimestamp));
+      } catch (cause) {
+        // localStorage has no transaction support; best-effort rollback prevents
+        // pairing a new catalog with an old freshness timestamp after quota failure.
+        try {
+          if (previousCache === null) localStorage.removeItem(cacheKey);
+          else localStorage.setItem(cacheKey, previousCache);
+        } catch { /* Disabled storage may also reject rollback. */ }
+        try {
+          if (previousTimestamp === null) localStorage.removeItem(timestampKey);
+          else localStorage.setItem(timestampKey, previousTimestamp);
+        } catch { /* Disabled storage may also reject rollback. */ }
+        throw cause;
+      }
       if (!refresh()) {
         setMessage("تعذر التحقق من سجل السلة المحلي؛ لم نعلن اكتمال المزامنة.");
         return;
@@ -2117,6 +2149,19 @@ function Offline() {
           placeholder="اسم الصنف أو الرمز..."
           style={{ width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, font: "inherit", marginBottom: 12, background: "#fff" }}
         />
+        {lastCatalogSyncAt !== null && Date.now() - lastCatalogSyncAt > 24 * 60 * 60 * 1000 ? (
+          <p role="status" style={{ ...quiet, color: "#92400e", marginTop: 0 }}>
+            نسخة الكتالوج قديمة (آخر مزامنة: {new Date(lastCatalogSyncAt).toLocaleString("ar-YE")}). لا تعتمد على المخزون المحلي لاتخاذ قرار شراء.
+          </p>
+        ) : lastCatalogSyncAt !== null ? (
+          <p style={{ ...quiet, marginTop: 0 }}>
+            آخر مزامنة ناجحة من الخادم: {new Date(lastCatalogSyncAt).toLocaleString("ar-YE")}. الأسعار والمخزون النهائيان يتطلبان تحققًا مباشرًا.
+          </p>
+        ) : catalogRows.length > 0 ? (
+          <p role="status" style={{ ...quiet, color: "#92400e", marginTop: 0 }}>
+            وقت تحديث هذه النسخة غير معروف؛ تعامل معها كبيانات قديمة حتى تنجح المزامنة مع الخادم.
+          </p>
+        ) : null}
         {catalogRows.length === 0 ? (
           <p role="status" style={quiet}>لا توجد أصناف محفوظة على هذا الجهاز. اتصل بالخادم ثم حدّث الكتالوج.</p>
         ) : (

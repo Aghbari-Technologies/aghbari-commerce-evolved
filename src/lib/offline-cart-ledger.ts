@@ -163,6 +163,11 @@ export function getOfflineCatalogCacheKey(scopeKey: string): string {
   return "aghbari:catalog:v2:" + encodeScope(scopeKey);
 }
 
+/** Timestamp of the last successfully persisted server catalog sync for this account/origin scope. */
+export function getOfflineCatalogSyncTimestampKey(scopeKey: string): string {
+  return "aghbari:catalog-synced-at:v1:" + encodeScope(scopeKey);
+}
+
 export function isGuestCartScope(scopeKey: string): boolean {
   return scopeKey.endsWith("::guest");
 }
