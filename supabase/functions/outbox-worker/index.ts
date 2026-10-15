@@ -187,6 +187,6 @@ if (runtime) {
       retry_scheduled: retryScheduled,
       dead_lettered: deadLettered,
       failures,
-    });
+    }, failures > 0 ? 503 : 200);
   });
 }
