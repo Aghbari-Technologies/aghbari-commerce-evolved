@@ -17,7 +17,7 @@ import type { AiAlert, AiTask, Notification, Supplier, AdminSetting, OrderItem }
 import { buildOnyxOrderWorkbook, onyxOrderWorkbookFilename } from '@/lib/onyx-export';
 
 import type { LucideIcon } from 'lucide-react';
-import { supabase, ORG_ID } from '@/lib/supabase';
+import { getCurrentTenantScope, supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 type IconType = LucideIcon;
 
@@ -404,7 +404,7 @@ function SupplierModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 }
 
 export function Devices({ onNotice }: { onNotice: (m: string) => void }) {
-  const { data: customers } = useFetch(async () => { const { data } = await supabase.from('customers').select('*').eq('organization_id', ORG_ID).order('created_at', { ascending: false }); return data ?? []; });
+  const { data: customers } = useFetch(async () => { const { organizationId } = await getCurrentTenantScope(); const { data, error } = await supabase.from('customers').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false }); if (error) throw error; return data ?? []; });
   const [query, setQuery] = useState('');
   const rows = (customers ?? []).filter((c: { business_name: string; customer_code: string; phone: string | null }) => `${c.business_name} ${c.customer_code} ${c.phone ?? ''}`.includes(query));
   return <AdminPage eyebrow="المبيعات والعملاء" title="أجهزة العملاء" description="متابعة أجهزة البيع لدى العملاء" icon={Smartphone} note={`${customers?.length ?? 0} جهاز مسجل`} toolbar={<Button variant="secondary" onClick={() => onNotice('تم تحديث الحالة')}><RefreshCw size={16} /> تحديث</Button>}>
