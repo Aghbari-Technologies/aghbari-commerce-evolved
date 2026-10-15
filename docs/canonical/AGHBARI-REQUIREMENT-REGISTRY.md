@@ -54,7 +54,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 **Current cursor values are maintained here and mirrored in the latest execution-state file; do not create another task/progress ledger.**
 
 - `blocked_task_id = AGH-EXT-SUPABASE-001` — last-known external blocker: the intended production Supabase project `ffxxjaolfntzbapmfbuv` was inaccessible through the connected integration. Verify access again before concluding it remains blocked; never substitute another project or apply a migration without verified identity/authorization.
-- `next_task_id = AGH-PRICE-PRIVACY-001` — PARTIAL: continue remaining API/RPC/export price-channel review. After those executable source gates, resume `AGH-SEC-BROWSER-E2E-001` for authenticated published-route and live-deployment-SHA proof.
+- Live cursor location: `ops/AGHBARI-LATEST-EXECUTION-STATE.md` only. This registry defines stable requirement IDs and evidence-backed statuses; it must not maintain a second `next_task_id`.
 - The high-level gap register IDs above are permanent. New acceptance gates use an `AGH-<AREA>-<PURPOSE>-<NNN>` identifier and reference their parent row; never renumber an existing ID.
 - A requirement is `DONE_VERIFIED` only when the implementation path, access boundary, allowed and denied behavior, failure handling, and required tests pass on the recorded SHA. Reopen only for a newer relevant SHA/change, regression/security finding, changed dependency/input, or invalidated evidence.
 - Each execution batch records: task ID; status; exact tested SHA; changed paths; executed commands/tests and their actual outcomes; resulting commit/remote SHA; exact-SHA CI URL/result; next task ID; external blocker plus evidence. Do not inherit PASS from a parent SHA.
