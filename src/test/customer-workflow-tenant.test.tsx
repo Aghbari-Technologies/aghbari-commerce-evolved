@@ -409,6 +409,87 @@ describe("customer quote workspace tenant boundary", () => {
     expect(syncedSafe[0].inventory).not.toHaveProperty("reorder_point");
   });
 
+  it("shows invoice prices in the customer preview only from the scoped invoice RPC", async () => {
+    const invoiceId = "22222222-2222-4222-8222-222222222222";
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-customer@example.test",
+      name: "CI Customer",
+      roles: ["customer"],
+      isStaff: false,
+    };
+    mocks.responses = {
+      customer_invoices: [{
+        id: invoiceId,
+        invoice_number: "INV-UI-001",
+        order_id: "33333333-3333-4333-8333-333333333333",
+        customer_id: "44444444-4444-4444-8444-444444444444",
+        status: "issued",
+        issued_at: "2026-10-15T09:00:00.000Z",
+        due_at: null,
+        currency: "YER",
+      }],
+      orders: [{
+        quantity_review_required: false,
+        customer_adjustment_note: null,
+        customer_payment_requested_at: null,
+        payment_request_status: "none",
+        status: "confirmed",
+      }],
+    };
+    mocks.rpc.mockImplementation(async (name: string, args: { p_invoice_id?: string }) => {
+      if (name !== "get_customer_invoice_pdf") return { data: null, error: null };
+      expect(args).toEqual({ p_invoice_id: invoiceId });
+      return {
+        data: {
+          invoice: {
+            id: invoiceId,
+            invoice_number: "INV-UI-001",
+            currency: "YER",
+            subtotal: "25.00",
+            tax_amount: "0.00",
+            total_amount: "25.00",
+          },
+          lines: [{
+            id: "55555555-5555-4555-8555-555555555555",
+            item_code: "000125",
+            description: "سكر أبيض",
+            unit: "كرتون",
+            quantity: "2",
+            unit_price: "12.50",
+            line_total: "25.00",
+          }],
+          customer: {
+            customer_code: "000042",
+            business_name: "متجر الاختبار",
+            contact_name: null,
+          },
+        },
+        error: null,
+      };
+    });
+
+    await mountQuoteWorkspace("/invoices");
+    expect(host?.textContent).toContain("فواتيري");
+    const openButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("عرض / طباعة"),
+    );
+    expect(openButton).toBeDefined();
+
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledWith("get_customer_invoice_pdf", { p_invoice_id: invoiceId });
+    expect(host?.textContent).toContain("سعر الوحدة");
+    expect(host?.textContent).toContain("الإجمالي المستحق");
+    expect(host?.textContent).toContain("متجر الاختبار");
+    expect(mocks.queries.some((query) => query.table === "customer_invoice_items")).toBe(false);
+    expect(mocks.queries.some((query) => query.table === "customers")).toBe(false);
+  });
+
   it("fails closed when the authenticated server scope cannot be resolved", async () => {
     mocks.user = {
       id: USER_ID,
