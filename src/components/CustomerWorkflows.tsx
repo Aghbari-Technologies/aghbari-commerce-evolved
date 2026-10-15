@@ -292,6 +292,8 @@ function Invoices() {
   const [busy, setBusy] = useState(true);
   const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState("");
   const load = useCallback(async () => {
     setBusy(true);
     setError("");
@@ -354,6 +356,56 @@ function Invoices() {
       );
     }
     setDetailBusy(false);
+  }
+  async function downloadInvoicePdf(invoiceId: string) {
+    setPdfBusyId(invoiceId);
+    setPdfError("");
+    try {
+      const sessionResult = await supabase.auth.getSession();
+      const accessToken = sessionResult.data.session?.access_token;
+      if (sessionResult.error || !accessToken) {
+        throw new Error("سجّل الدخول مجددًا لتنزيل الفاتورة.");
+      }
+
+      const response = await fetch(`/api/invoice-pdf/${encodeURIComponent(invoiceId)}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/pdf",
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        let message = "تعذر إنشاء ملف PDF للفاتورة.";
+        try {
+          const body = (await response.json()) as { error?: unknown };
+          if (typeof body.error === "string" && body.error.length < 240) message = body.error;
+        } catch {
+          // Preserve the safe fallback for non-JSON responses.
+        }
+        throw new Error(message);
+      }
+
+      if (!(response.headers.get("content-type") ?? "").toLowerCase().includes("application/pdf")) {
+        throw new Error("استجابة المستند غير صحيحة؛ لم يتم تنزيل الملف.");
+      }
+      const blob = await response.blob();
+      if (blob.size < 500) throw new Error("ملف PDF فارغ أو غير صالح.");
+
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = "aghbari-invoice.pdf";
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch (cause) {
+      setPdfError(cause instanceof Error ? cause.message : "تعذر تنزيل الفاتورة.");
+    } finally {
+      setPdfBusyId(null);
+    }
   }
   return (
     <WorkspaceShell
@@ -442,10 +494,19 @@ function Invoices() {
             <button style={secondary} onClick={() => setChosen(null)}>
               إغلاق
             </button>
-            <button style={primary} onClick={() => window.print()}>
-              <Printer size={16} /> طباعة / PDF
+            <button
+              style={primary}
+              onClick={() => void downloadInvoicePdf(chosen.id)}
+              disabled={pdfBusyId === chosen.id}
+            >
+              <FileText size={16} />
+              {pdfBusyId === chosen.id ? "جارٍ إنشاء PDF..." : "تنزيل PDF عربي"}
+            </button>
+            <button style={secondary} onClick={() => window.print()}>
+              <Printer size={16} /> طباعة من المتصفح
             </button>
           </div>
+          {pdfError && <ErrorBox message={pdfError} retry={() => void downloadInvoicePdf(chosen.id)} />}
           <header
             style={{
               borderBottom: "2px solid #087f8d",
