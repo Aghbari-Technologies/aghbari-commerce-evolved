@@ -1,6 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient } from "@tanstack/react-query";
+import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { routeTree } from "@/routeTree.gen";
 
 const mocks = vi.hoisted(() => ({
   user: null as null | {
@@ -49,7 +52,6 @@ vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
 }));
 
-import { QuoteWorkspacePage } from "@/components/CustomerWorkflows";
 
 const ORGANIZATION_ID = "a0000000-0000-0000-0000-000000000001";
 const PROFILE_ID = "f1111111-1111-4111-8111-111111111111";
@@ -143,8 +145,14 @@ describe("customer quote workspace tenant boundary", () => {
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: ["/quotes"] }),
+      context: { queryClient: new QueryClient() },
+    });
+    await router.load();
     await act(async () => {
-      root?.render(<QuoteWorkspacePage />);
+      root?.render(<RouterProvider router={router} />);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   }

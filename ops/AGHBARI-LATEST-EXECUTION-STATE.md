@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest CI correction — customer workflow router context
+
+- Test attempt SHA `d02e3f5408e67729a619616fcb56c03bca702b17` failed in two component cases with `TypeError: Cannot read properties of null (reading 'isServer')` from TanStack Router `useLinkProps`: the real `QuoteWorkspacePage` was mounted without router context. Aggregate unit result: 95 passed, 2 failed; no DB/lint/build gates ran after the unit failure.
+- Follow-up edits `src/test/customer-workflow-tenant.test.tsx` to mount the `/quotes` route via the actual generated `routeTree`, `RouterProvider`, memory history, and a `QueryClient`, so the page's real links have router context. This fixes the test harness, not product source behavior; the follow-up exact-SHA CI is pending.
+- Preserve the claim boundary: the test remains jsdom component/route acceptance, not live authenticated browser E2E or production DB proof. `AGH-SEC-BROWSER-E2E-001` remains OPEN.
+
+---
 ## Active subgate — customer workflow auth and tenant acceptance
 
 - The preceding tenant-scope resolver source tests at SHA `fe4440cd8a34c61facc06425abce7916dbd52fb1` passed exact-SHA CI [38694500854](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694500854). The follow-up state/blocker documentation at SHA `d5b404235f0b97347b4140281dbb44850e05d341` also passed exact-SHA CI [38694768595](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694768595).
