@@ -766,7 +766,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       expect(exportedBlob).not.toBeNull();
-      expect(exportedFilename).toMatch(/^aghbari-cart-draft-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+      expect(exportedFilename).toMatch(/^aghbari-cart-draft-\d{4}-\d{2}-\d{2}\.json$/);
       const backupText = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result));
