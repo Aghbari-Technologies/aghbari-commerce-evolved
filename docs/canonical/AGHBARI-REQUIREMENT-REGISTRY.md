@@ -3,7 +3,7 @@
 **Product:** متجر الأغبري | Aghbari Commerce  
 **Repository:** `Aghbari-Technologies/aghbari-commerce-evolved`  
 **Branch:** `main`  
-**Baseline before this batch:** `f385e3406d5b85b58c88d92d6db4e3029c002585`  
+**Last reviewed main before this documentation pointer update:** `971a49d75b546ccba0a05d8829c8d9c38cae085a`  
 **Canonical specification:** [AGHBARI-MASTER-PROJECT-SPECIFICATION.md](./AGHBARI-MASTER-PROJECT-SPECIFICATION.md)  
 **Technical supplement:** [Platform Intelligence requirements](../specs/PLATFORM-INTELLIGENCE-PRODUCTION-REQUIREMENTS-2026-10-09.md)
 
@@ -22,7 +22,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 
 | Area | Status | Evidence and required closure |
 |---|---|---|
-| Build gate | **BLOCKED by lint** | CI run [38681026977](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38681026977): unit and isolated PostgreSQL passed; lint failed at `previewAuthStorage.ts:38` (`prefer-const`); build and port 5173 smoke were skipped. |
+| Build gate | **FIXED ON VERIFIED SHA; NEWEST CI MUST BE CHECKED** | The lint fix passed unit, isolated PostgreSQL, lint, build and port 5173 smoke on [SHA f75dcb7, run 38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037). Expanded route/PWA smoke passed on [SHA 05fcacb, run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412). Run [38687897943](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687897943) for docs SHA `971a49d` was in progress at last observation; always inspect the latest run for the live `main` SHA. |
 | Production Supabase | **BLOCKED EXTERNALLY** | Repo references project `ffxxjaolfntzbapmfbuv`; connected Supabase account cannot access it. Never apply migrations to another project. |
 | Tenant isolation | **NOT PROVEN / HIGH PRIORITY** | `src/lib/supabase.ts` exports fixed `ORG_ID` / `WAREHOUSE_ID`; replace with authenticated server-derived scope and prove cross-tenant denial. |
 | Orders / checkout | **PARTIAL / isolated DB tested** | Atomic staff-order creation, server pricing, idempotency and state/stock rules have isolated PostgreSQL evidence; target DB and authenticated browser E2E are unproven. |
@@ -37,7 +37,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 | WhatsApp | **PARTIAL / external dependency** | Internal notifications exist. No official provider/credentials confirmed; never claim Sent without provider message ID/status. |
 | Offline/PWA | **PARTIAL** | Local catalog and cart draft exist; online server validation remains required before order creation. Conflict-safe mutation queue is unproven. |
 | Monitoring / DR / performance | **NOT PROVEN** | No production P95, 100k-row memory profile, backup restore, failover or DR drill evidence. |
-| Persistent memory | **GAP** | Preserve the canonical spec, registry, latest state and progress ledger here; update after each batch. |
+| Persistent memory | **PERSISTED / MAINTAINED** | `PROJECT_MEMORY.md`, this registry, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and progress ledger are committed on main. |
 
 ## Mandatory invariants
 1. Product identity is **متجر الأغبري | Aghbari Commerce** only.
@@ -50,7 +50,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 8. Do not claim CI, DB, E2E, Lovable sync, WhatsApp send or AI readiness without exact evidence.
 
 ## Next execution order
-1. Exact-head CI green: unit → isolated PostgreSQL acceptance → lint → build → port 5173 smoke.
+1. Check latest exact-head CI and keep unit → isolated PostgreSQL acceptance → lint → build → expanded route/PWA smoke green.
 2. Resolve intended Supabase access; verify migrations before any live writes.
 3. Replace fixed tenant assumptions with a server-derived contract and add cross-tenant negative tests.
 4. Prove three-tier privacy and full checkout E2E.

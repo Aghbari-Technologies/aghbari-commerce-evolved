@@ -1,11 +1,11 @@
 # Aghbari Commerce — Development Progress Ledger
 
-Rule: tests and evidence apply only to the exact SHA recorded with them. The push and Lovable sync are separate acceptance events.
+Rule: tests and evidence apply only to the exact SHA recorded with them. The push and Lovable sync are separate acceptance events. The master spec, mandate, registry, project memory and resume prompt are now persisted on main.
 
 | Item | Current status | Evidence | Next closure |
 |---|---|---|---|
 | CI at `f75dcb7fd3f4a598b2acf6db6d649e0f54c92fac` | PASS | [Run 38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037) unit/PostgreSQL/lint/build/5173 smoke all successful | The later `main` SHA has a separate CI run; do not transfer this PASS |
-| CI at `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459` | IN PROGRESS at last observation | [Run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412) adds more route and PWA asset smoke checks | Recheck outcome for the exact SHA after documentation commit |
+| CI at `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459` | PASS | [Run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412) including expanded route and PWA asset smoke checks | Check CI for the newest main SHA; proof is SHA-specific |
 | Persistent project requirements | PARTIALLY closed by this batch | Complete owner-uploaded master spec already exists at `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`; new durable mandate and resume files are being added | Keep updated after each implementation batch |
 | Supabase production | BLOCKED EXTERNALLY | Current connector cannot access expected project ref `ffxxjaolfntzbapmfbuv` | Owner/admin access and explicit project identity required; never substitute another project |
 | Tenant security | NOT PROVEN in target | Fixed tenant/warehouse IDs remain in client API layer; isolated PostgreSQL tests are not target project proof | Server-derived scope plus negative cross-tenant tests |

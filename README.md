@@ -14,6 +14,10 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 - **Stay in sync**: every change made in Lovable is committed straight to this repository.
 - **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
+## Canonical project memory and session recovery
+
+Start new or resumed work from [PROJECT_MEMORY.md](./PROJECT_MEMORY.md), then read [the session resume prompt](./ops/AGHBARI-SESSION-RESUME.md), [latest execution state](./ops/AGHBARI-LATEST-EXECUTION-STATE.md), [requirement registry](./docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md), and [execution mandate](./docs/canonical/AGHBARI-EXECUTION-MANDATE.md). The full owner-provided specification is preserved at [AGHBARI-MASTER-PROJECT-SPECIFICATION.md](./docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md). Always verify the live `main` SHA and CI before continuing; saved SHAs are history, not a substitute for checking current state.
+
 ## Development
 
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
