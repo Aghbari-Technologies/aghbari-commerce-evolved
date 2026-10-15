@@ -260,10 +260,10 @@ async function main() {
     [foreignProfileId],
   );
   await db.unsafe(
-    \`insert into public.customers(
+    `insert into public.customers(
        organization_id,profile_id,customer_code,business_name,contact_name,phone,email,tier,credit_limit,current_balance,status,approved_at
      ) values($1,$2,'CI-CUST-FOREIGN','Foreign CI Customer','Foreign Contact','7773333333','foreign-ci-customer@example.test','retail',0,0,'approved',now())
-     on conflict (organization_id,customer_code) do nothing\`,
+     on conflict (organization_id,customer_code) do nothing`,
     [otherOrganizationId, foreignProfileId],
   );
   const foreignCustomerRows = await db.unsafe(
