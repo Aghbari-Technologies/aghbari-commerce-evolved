@@ -14,16 +14,15 @@
 المراجع المعتمدة: `PROJECT_MEMORY.md`، هذا الملف، `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`، `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`، و`docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 
 
-## Current resume checkpoint — refreshed from remote main on 2026-10-15
+## Current resume checkpoint — 2026-10-15 (Onyx audit merged; runtime E2E next)
 
-- **Verified baseline before this documentation refresh:** `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`; PR [#36](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/36) is merged to `main`.
-- **Exact-SHA CI for that baseline:** [run 38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465) **SUCCESS**. Do not transfer this result to a later SHA.
-- Latest Onyx XLSX change records a server-side preparation audit with active-tenant/staff/approved-order/item-count checks. It does not assert that a browser download completed or that the target Onyx Pro installation accepts the file.
-- **`next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL`** remains the only active task cursor. Recheck deployed finance/PDF deep routes and authenticated browser acceptance; the prior external 404 observations are clues to revalidate, not proof of a specific source defect.
-- Production Supabase project `ffxxjaolfntzbapmfbuv` remains inaccessible/unverified through the current integration; no production migration was applied and no similarly named project may be substituted.
-- **Persistent instruction loading:** root `AGENTS.md` and `.github/copilot-instructions.md` exist in remote `main`. Lovable's current official Knowledge documentation explicitly says it always reads root-level `AGENTS.md` files (https://docs.lovable.dev/features/knowledge). This verifies the documented auto-load path; direct readback of the live Lovable editor/deployment SHA remains **UNVERIFIED**.
-- This session's execution host has no local checkout; local `git fetch/status/HEAD` were unavailable. Remote `main`, its commit, and its exact-SHA Actions result were verified through GitHub API calls instead.
-- No Lovable credits/points were spent.
+- **Verified pre-refresh remote main SHA:** `90cf41ecb471b219c5f82f113d13bcc6ab76afb9`; exact-SHA CI [38754165794](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38754165794) **SUCCESS**.
+- PR [#36](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/36) merged at `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`; exact PR-head CI [38753274701](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753274701) **SUCCESS** and main merge CI [38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465) **SUCCESS**. The central `record_onyx_order_export` RPC and UI/test integration are in main. It verifies active staff identity, organization ownership, approved order/no pending review and exact persisted item count; central audit-write failure blocks the client download. The event records preparation only, not browser-download success or actual Onyx import compatibility.
+- PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) finance PDF source is also in main at `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`; main CI [38751531855](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751531855) **SUCCESS**.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001 — OPEN`.** Public readback on 2026-10-15 still returns 404 for `/invoices`, `/statement`, both server PDF endpoints and `/manifest.webmanifest`, while `/login` responds and local CI route smoke passes. Verify routes and authenticated finance downloads in the actual published runtime, then directly read back the Lovable deployment/editor SHA. An authenticated browser profile is not available in current tools.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001`.** The intended Supabase ref `ffxxjaolfntzbapmfbuv` returns permission denied; accessible `mrcyqezbhpncuvaehwgf` is a different project and must not be substituted. No production migration/write was made.
+- The root `AGENTS.md` and `.github/copilot-instructions.md` persist the resume entry point. Git pushes do not prove Lovable editor/deployment synchronization.
+- This execution host has no usable local checkout/network; verify remote GitHub refs/Actions via the connector and never claim local `git fetch/status/HEAD` succeeded.
 
 
 ## الحالة المرجعية المحفوظة
