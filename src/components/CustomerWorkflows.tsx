@@ -1922,6 +1922,17 @@ function Offline() {
   const [cartCount, setCartCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
+  const catalogQuery = catalogSearch.trim().toLocaleLowerCase();
+  const matchingCatalogRows = catalogRows.filter((product) => {
+    if (!catalogQuery) return true;
+    return [
+      product.name,
+      product.item_code,
+      product.barcode ?? "",
+      product.category?.name ?? "",
+    ].some((value) => String(value).toLocaleLowerCase().includes(catalogQuery));
+  });
+  const visibleCatalogRows = matchingCatalogRows.slice(0, 100);
   const refresh = useCallback(() => {
     try {
       let safeCatalog = [];
@@ -2079,25 +2090,13 @@ function Offline() {
           value={catalogSearch}
           onChange={(event) => setCatalogSearch(event.target.value)}
           placeholder="اسم الصنف أو الرمز..."
-          style={{ ...inputStyle, width: "100%", marginBottom: 12 }}
+          style={{ width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, font: "inherit", marginBottom: 12, background: "#fff" }}
         />
         {catalogRows.length === 0 ? (
           <p role="status" style={quiet}>لا توجد أصناف محفوظة على هذا الجهاز. اتصل بالخادم ثم حدّث الكتالوج.</p>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
-            {catalogRows
-              .filter((product) => {
-                const query = catalogSearch.trim().toLocaleLowerCase();
-                if (!query) return true;
-                return [
-                  product.name,
-                  product.item_code,
-                  product.barcode ?? "",
-                  product.category?.name ?? "",
-                ].some((value) => String(value).toLocaleLowerCase().includes(query));
-              })
-              .slice(0, 100)
-              .map((product) => (
+            {visibleCatalogRows.map((product) => (
               <article key={product.id} style={{ border: "1px solid #dbe5e7", borderRadius: 10, padding: 12 }}>
                 <strong>{product.name}</strong>
                 <p style={quiet}>رمز الصنف: {product.item_code} · الوحدة: {product.unit}</p>
@@ -2110,20 +2109,10 @@ function Offline() {
             ))}
           </div>
         )}
-        {catalogRows.filter((product) => {
-          const query = catalogSearch.trim().toLocaleLowerCase();
-          if (!query) return true;
-          return [product.name, product.item_code, product.barcode ?? "", product.category?.name ?? ""]
-            .some((value) => String(value).toLocaleLowerCase().includes(query));
-        }).length > 100 && (
+        {matchingCatalogRows.length > 100 && (
           <p style={quiet}>يُعرض أول 100 صنف مطابق لتجنب تحميل قائمة كبيرة؛ أضف كلمات بحث لتضييق النتائج.</p>
         )}
-        {catalogRows.length > 0 && catalogRows.filter((product) => {
-          const query = catalogSearch.trim().toLocaleLowerCase();
-          if (!query) return true;
-          return [product.name, product.item_code, product.barcode ?? "", product.category?.name ?? ""]
-            .some((value) => String(value).toLocaleLowerCase().includes(query));
-        }).length === 0 && <p role="status" style={quiet}>لا توجد أصناف مطابقة لبحثك.</p>}
+        {catalogRows.length > 0 && matchingCatalogRows.length === 0 && <p role="status" style={quiet}>لا توجد أصناف مطابقة لبحثك.</p>}
       </section>
       <section style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button style={primary} onClick={() => void sync()} disabled={syncing || !online}>
