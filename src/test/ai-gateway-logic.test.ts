@@ -24,11 +24,17 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
     });
   });
 
-  it("rejects email and phone-like personal identifiers before provider egress", () => {
+  it("rejects ASCII, Arabic-Indic and Eastern Arabic-Indic phone-like identifiers before provider egress", () => {
     expect(sanitizeAiQuestion("أرسل التقرير إلى owner@example.com")).toEqual({
       ok: false, reason: "personal_email_rejected",
     });
     expect(sanitizeAiQuestion("رقم العميل 777 123 4567")).toEqual({
+      ok: false, reason: "personal_phone_or_identifier_rejected",
+    });
+    expect(sanitizeAiQuestion("رقم التواصل ٧٧٧ ١٢٣ ٤٥٦٧")).toEqual({
+      ok: false, reason: "personal_phone_or_identifier_rejected",
+    });
+    expect(sanitizeAiQuestion("رقم التواصل ۰۹۱۲۳۴۵۶۷۸")).toEqual({
       ok: false, reason: "personal_phone_or_identifier_rejected",
     });
   });
