@@ -14,14 +14,14 @@
 المراجع المعتمدة: `PROJECT_MEMORY.md`، هذا الملف، `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`، `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`، و`docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 
 
-## Current resume checkpoint — 2026-10-15 (read before older history)
+## Current resume checkpoint — 2026-10-15 (merged implementation; deployment gate still open)
 
-- Active cursor is only `AGH-FINANCE-DOCS-001` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; its status is **PARTIAL**, not closed.
-- Server-generated Arabic invoice/account-statement PDF source on PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) passed exact implementation SHA `3f96b2b5aa5a28eabdbacf828ee5f09d66da0258` in [CI run 38750723505](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38750723505): frozen Bun lock check, unit tests, isolated PostgreSQL 17 acceptance, lint, build and route smoke.
-- Recheck the live PR head/merge state and Actions before resuming: a docs-only checkpoint commit may be newer than the source SHA above. Do not transfer PASS to another SHA.
-- Next actions: verify Actions for the latest PR head; merge only if that exact head is green; verify merged `main` SHA and its own CI; update the same canonical records; then perform authenticated browser/runtime and Lovable SHA-sync verification. No production DB was mutated.
-- The host has no working local Git network resolution; local `git fetch`/`git status`/`git rev-parse` were unavailable here. Remote refs, files and Actions were inspected through GitHub APIs; never describe that as a successful local Git command.
-- Lovable root `AGENTS.md` and `.github/copilot-instructions.md` provide persistent repository/agent entry points. Live editor sync of a particular SHA still requires direct evidence.
+- **Live main SHA at this checkpoint:** `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`; PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) is merged.
+- Exact PR-head CI [38751239902](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751239902) **SUCCESS** on `a77a9994de85e21015766b25becd551e38b96e78`; exact main-merge CI [38751531855](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751531855) **SUCCESS** on `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`. Both include Bun lockfile consistency, unit tests, isolated PostgreSQL 17 acceptance, lint, build and port-5173 route smoke.
+- Server-generated Arabic customer finance PDFs are present in main. Customer invoice PDF intentionally excludes amounts because existing customer permissions hide them. No production database was changed.
+- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL.** Public readback after merge: `/login` responds, but `/invoices`, `/statement`, both API PDF routes and `/manifest.webmanifest` returned 404 to the external fetch; CI's local routes pass. Investigate the published deployment/deep-route mismatch and verify authenticated browser access before closing.
+- Production Supabase identity/access remains unverified for ref `ffxxjaolfntzbapmfbuv`; never substitute a different project. Lovable live-editor/deployment SHA synchronization is **UNVERIFIED**.
+- The execution host cannot resolve GitHub through local shell networking; local `git fetch`, `git status` and `git rev-parse` were not successful here. Remote refs, files and Actions were verified through GitHub APIs instead.
 
 
 ## الحالة المرجعية المحفوظة
