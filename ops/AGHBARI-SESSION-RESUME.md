@@ -14,14 +14,16 @@
 المراجع المعتمدة: `PROJECT_MEMORY.md`، هذا الملف، `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`، `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`، و`docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 
 
-## Current resume checkpoint — 2026-10-15 (merged implementation; deployment gate still open)
+## Current resume checkpoint — refreshed from remote main on 2026-10-15
 
-- **Live main SHA at this checkpoint:** `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`; PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) is merged.
-- Exact PR-head CI [38751239902](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751239902) **SUCCESS** on `a77a9994de85e21015766b25becd551e38b96e78`; exact main-merge CI [38751531855](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751531855) **SUCCESS** on `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`. Both include Bun lockfile consistency, unit tests, isolated PostgreSQL 17 acceptance, lint, build and port-5173 route smoke.
-- Server-generated Arabic customer finance PDFs are present in main. Customer invoice PDF intentionally excludes amounts because existing customer permissions hide them. No production database was changed.
-- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL.** Public readback after merge: `/login` responds, but `/invoices`, `/statement`, both API PDF routes and `/manifest.webmanifest` returned 404 to the external fetch; CI's local routes pass. Investigate the published deployment/deep-route mismatch and verify authenticated browser access before closing.
-- Production Supabase identity/access remains unverified for ref `ffxxjaolfntzbapmfbuv`; never substitute a different project. Lovable live-editor/deployment SHA synchronization is **UNVERIFIED**.
-- The execution host cannot resolve GitHub through local shell networking; local `git fetch`, `git status` and `git rev-parse` were not successful here. Remote refs, files and Actions were verified through GitHub APIs instead.
+- **Verified baseline before this documentation refresh:** `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`; PR [#36](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/36) is merged to `main`.
+- **Exact-SHA CI for that baseline:** [run 38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465) **SUCCESS**. Do not transfer this result to a later SHA.
+- Latest Onyx XLSX change records a server-side preparation audit with active-tenant/staff/approved-order/item-count checks. It does not assert that a browser download completed or that the target Onyx Pro installation accepts the file.
+- **`next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL`** remains the only active task cursor. Recheck deployed finance/PDF deep routes and authenticated browser acceptance; the prior external 404 observations are clues to revalidate, not proof of a specific source defect.
+- Production Supabase project `ffxxjaolfntzbapmfbuv` remains inaccessible/unverified through the current integration; no production migration was applied and no similarly named project may be substituted.
+- **Persistent instruction loading:** root `AGENTS.md` and `.github/copilot-instructions.md` exist in remote `main`. Lovable's current official Knowledge documentation explicitly says it always reads root-level `AGENTS.md` files (https://docs.lovable.dev/features/knowledge). This verifies the documented auto-load path; direct readback of the live Lovable editor/deployment SHA remains **UNVERIFIED**.
+- This session's execution host has no local checkout; local `git fetch/status/HEAD` were unavailable. Remote `main`, its commit, and its exact-SHA Actions result were verified through GitHub API calls instead.
+- No Lovable credits/points were spent.
 
 
 ## الحالة المرجعية المحفوظة

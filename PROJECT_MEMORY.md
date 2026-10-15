@@ -61,9 +61,17 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 - Continuation prompt: `ops/AGHBARI-SESSION-RESUME.md`.
 
 
-## Current implementation pointer — 2026-10-15
+## Current implementation pointer — refreshed 2026-10-15
 
-PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) was merged to `main` at `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`; exact main CI [38751531855](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751531855) **SUCCESS**. The server-generated Arabic invoice/account-statement PDF endpoints, tests, UI download controls, regenerated `bun.lock` and frozen-lockfile CI check are in main. No production DB writes/migrations occurred. External post-merge readback finds `/login` responsive, but `/invoices`, `/statement`, both PDF API routes and `/manifest.webmanifest` return 404 from the external fetch while local CI route smoke passes. Treat published runtime/Lovable synchronization as **UNVERIFIED** until read back directly. The only live task cursor is `AGH-FINANCE-DOCS-001` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; it remains PARTIAL for authenticated browser/production/deployment gates.
+The live task cursor is maintained only in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`.
+
+- Latest remotely verified main baseline before this documentation refresh: `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`; exact-SHA Actions [38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465) **SUCCESS**.
+- PR [#36](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/36) added a tenant-scoped, staff-only central audit event before an approved-order Onyx XLSX download. The event correctly records preparation only; neither browser download completion nor compatibility with the owner's target Onyx version is proven.
+- The durable resume policy already exists remotely in root `AGENTS.md` and `.github/copilot-instructions.md`. Lovable's official Knowledge docs confirm root `AGENTS.md` is auto-read by its agent; Copilot's repository-wide instruction file points to the same single rulebook. See [Lovable Knowledge docs](https://docs.lovable.dev/features/knowledge). This is evidence of the documented instruction loader, not proof of live Lovable editor/deployment SHA synchronization.
+- The active next task remains `AGH-FINANCE-DOCS-001 — PARTIAL`: deployed route/PDF availability and authenticated-browser proof remain open. Do not alter the cursor based on historical SHAs; read the latest state and live remote HEAD at the next session.
+- This execution host has no local checkout. Remote refs/commit/CI were inspected with GitHub APIs; local `git fetch`, `git status`, local `HEAD`, and `origin/main` were not successfully obtained here. Do not claim otherwise.
+- No production database changes were made, and no Lovable points were spent. Actual editor sync remains **UNVERIFIED** until a live readback identifies the synchronized SHA.
+
 
 
 ## Historical source checkpoint — 2026-10-15 (the live cursor is in ops/AGHBARI-LATEST-EXECUTION-STATE.md)

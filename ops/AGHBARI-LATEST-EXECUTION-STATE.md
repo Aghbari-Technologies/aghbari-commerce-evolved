@@ -1,5 +1,17 @@
 # Aghbari Commerce — Latest Execution State
 
+## Current execution pointer — verified remote baseline before this documentation refresh (2026-10-15)
+
+- **Remote `main` baseline SHA:** `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`; latest merged PR [#36](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/36), *feat(onyx): audit approved order workbook exports*.
+- **Exact-SHA GitHub Actions:** [run 38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465) **SUCCESS** on `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`. The run belongs to that exact SHA, not to any later commit.
+- **Latest implementation update:** the Onyx XLSX preparation event is now written server-side through a tenant/role/order-state/item-count guarded RPC, and the browser download is blocked if audit persistence fails. CI covers the audit event and isolated PostgreSQL role/tenant/state guards. This does **not** prove that the browser completed the download or that the owner's real Onyx Pro version accepts the workbook.
+- **Only task cursor:** `AGH-FINANCE-DOCS-001` remains **PARTIAL** in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`: investigate deployed deep-route/PDF availability and prove authenticated browser access where possible. Preserve this cursor until the current live state justifies changing it.
+- **Permanent instruction entry points verified in the remote repository:** root `AGENTS.md` holds the concise resume contract; `.github/copilot-instructions.md` directs Copilot to load it and use the canonical records. Lovable's current official documentation says root-level `AGENTS.md` files are always read by its agent ([Knowledge documentation](https://docs.lovable.dev/features/knowledge), FAQ lines 330–334). This verifies the documented auto-load mechanism, not the live editor/deployment's synchronized SHA; keep that separate and **UNVERIFIED** until directly read back.
+- **Execution-host limitation:** no local repository checkout is available in this session, so local `git fetch`, `git status`, local branch/HEAD, and `origin/main` could not be executed/read here. The remote branch, commit and exact-SHA Actions were queried from GitHub; do not describe this as a successful local Git command.
+- **Product boundaries unchanged:** no production Supabase migration/write; expected project ref `ffxxjaolfntzbapmfbuv` remains unverified. Do not substitute another project. Lovable points were not spent.
+
+---
+
 ## Latest merged implementation checkpoint — AGH-FINANCE-DOCS-001: Arabic server-generated finance PDFs
 
 - **Current main code merge SHA:** `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`; PR [#35](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/35) was merged from tested PR head `a77a9994de85e21015766b25becd551e38b96e78`.
