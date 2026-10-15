@@ -63,11 +63,11 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 
 ## Current implementation pointer — 2026-10-15
 
-Verified baseline before this cursor refresh: `4e4e00a48306b7f63e54f4949aee2ac58476801b`; exact-SHA CI [38754699365](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38754699365) **SUCCESS**. PR #35 provides authenticated server-generated Arabic finance PDFs; PR #36 provides the server-side, tenant/role/approved-order/item-count-guarded Onyx XLSX preparation audit, verified by exact PR and main CI. The audit does not claim browser download completion or actual Onyx Pro compatibility.
+Verified main SHA before this checkpoint refresh: `d8212a45d4282a3d1e5c7927651975c641e2d51c`; exact CI [38755977039](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755977039) **SUCCESS**. PR #37 added and merged route-specific Arabic document-title assertions to the dev-server smoke; PR CI [38755678481](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755678481) **SUCCESS**. This strengthens local evidence but does not prove public deployment routes are correct.
 
-**Only current task cursor:** `AGH-SEC-BROWSER-E2E-001 — OPEN` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`. Public runtime recheck shows `/login` responding but invoice/statement/PDF deep routes and `/manifest.webmanifest` returning 404 while local route smoke passes. Lovable editor/deployment SHA remains unverified.
+PR #35 Arabic server finance PDFs and PR #36 Onyx export-preparation audit are also merged and verified. The audit does not certify browser download completion or actual Onyx Pro compatibility.
 
-Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied; `mrcyqezbhpncuvaehwgf` is a different project, not a substitute. No production DB writes/migrations were performed.
+**Only current task cursor:** `AGH-SEC-BROWSER-E2E-001 — OPEN`. Read-only public runtime still shows `/login` responding but invoice/statement/PDF deep routes and the PWA manifest returning 404, while local CI checks specific route metadata. Direct Lovable editor/deployment SHA is unverified. Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied; do not substitute `mrcyqezbhpncuvaehwgf`.
 
 
 ## Historical source checkpoint — 2026-10-15 (the live cursor is in ops/AGHBARI-LATEST-EXECUTION-STATE.md)

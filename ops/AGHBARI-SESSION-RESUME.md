@@ -16,12 +16,12 @@
 
 ## Current resume checkpoint — 2026-10-15 (Onyx audit merged; runtime E2E next)
 
-- **Verified baseline before this cursor refresh:** `4e4e00a48306b7f63e54f4949aee2ac58476801b`; exact-SHA CI [38754699365](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38754699365) **SUCCESS**.
-- PR #36 Onyx audit merge SHA `ea3b525d2d383dc7c22c70108ebaff8abd244c3d` passed PR CI [38753274701](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753274701) and main CI [38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465). It records the server-side XLSX preparation event with identity, organization, order-state and persisted line-count checks; it does not certify completed browser download or target Onyx Pro compatibility.
-- PR #35 Arabic server PDF implementation is in main at `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56`; main CI [38751531855](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751531855) **SUCCESS**.
-- **`next_task_id = AGH-SEC-BROWSER-E2E-001 — OPEN`.** Public readback still yields 404 for invoice/statement/PDF deep routes and the PWA manifest even though local CI route smoke passes. A signed-in browser profile is unavailable; direct Lovable editor/deployment SHA remains unverified.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001`.** Intended Supabase ref `ffxxjaolfntzbapmfbuv` is permission-denied; `mrcyqezbhpncuvaehwgf` is a different project and must not be substituted. No production writes/migrations were performed.
-- Root `AGENTS.md` and `.github/copilot-instructions.md` remain in remote main; Git push/CI does not prove live Lovable sync. Local shell Git was unavailable; remote status was verified through GitHub APIs.
+- **Verified main SHA before this checkpoint refresh:** `d8212a45d4282a3d1e5c7927651975c641e2d51c`; exact-SHA CI [38755977039](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755977039) **SUCCESS**.
+- PR [#37](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/37) merged from tested head `ddebb148c198295af3e488efe34bb4c32860fc48`; PR CI [38755678481](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755678481) **SUCCESS**. Main CI now checks specific Arabic document metadata for `/invoices` and `/statement`, not HTTP 200 alone.
+- PR #36 Onyx audit and PR #35 server PDF work remain merged and exact-SHA CI verified. Onyx audit means preparation only; actual Onyx Pro compatibility and browser download completion are not proven.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001 — OPEN`.** Published `/login` responds, but invoice/statement/PDF routes and `/manifest.webmanifest` return 404 externally even though local smoke with specific Arabic route metadata passes. Read back the real Lovable editor/deployment SHA and run authenticated browser checks before closure.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001`.** Intended Supabase ref `ffxxjaolfntzbapmfbuv` is permission-denied; `mrcyqezbhpncuvaehwgf` is another project and cannot be substituted. No production writes/migrations were made.
+- Persistent repo entry points remain `AGENTS.md` and `.github/copilot-instructions.md`. Git push/green CI is not proof of Lovable live deployment sync. Local shell Git networking remains unavailable.
 
 
 ## الحالة المرجعية المحفوظة
