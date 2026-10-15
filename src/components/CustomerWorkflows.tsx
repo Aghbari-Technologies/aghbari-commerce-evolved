@@ -1948,55 +1948,83 @@ function Offline() {
   });
   const visibleCatalogRows = matchingCatalogRows.slice(0, 100);
   const refresh = useCallback(() => {
+    let safeCatalog: ReturnType<typeof sanitizePublicCatalogCache> = [];
+    let catalogStorageError = "";
+
+    // Catalog readability and cart integrity are independent. A corrupt cart journal
+    // must block edits without unnecessarily hiding a valid cached catalog.
     try {
-      let safeCatalog = [];
       try {
         safeCatalog = sanitizePublicCatalogCache(
           JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
         );
       } catch {
-        localStorage.removeItem(getOfflineCatalogCacheKey(cartScopeKey));
+        try { localStorage.removeItem(getOfflineCatalogCacheKey(cartScopeKey)); } catch {
+          catalogStorageError = "تعذر الوصول إلى التخزين المحلي؛ قد تكون مساحة المتصفح ممتلئة.";
+        }
+        safeCatalog = [];
       }
 
-      // An old global cache has no trustworthy account scope. Scrub sensitive fields,
-      // then remove it instead of replaying its inventory into an arbitrary account.
+      // A legacy global cache has no trustworthy account scope: remove it without replaying it.
       try {
         const oldGlobalCache = localStorage.getItem("aghbari:catalog:v1");
         if (oldGlobalCache) {
-          localStorage.setItem("aghbari:catalog:v1", JSON.stringify(sanitizePublicCatalogCache(JSON.parse(oldGlobalCache))));
+          try { sanitizePublicCatalogCache(JSON.parse(oldGlobalCache)); } catch { /* Never restore this unscoped cache. */ }
           localStorage.removeItem("aghbari:catalog:v1");
         }
       } catch {
-        localStorage.removeItem("aghbari:catalog:v1");
+        try { localStorage.removeItem("aghbari:catalog:v1"); } catch {
+          catalogStorageError = catalogStorageError || "تعذر حذف نسخة الكتالوج القديمة غير المرتبطة بحساب.";
+        }
       }
-      // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
-      localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
-      const rawSyncTimestamp = localStorage.getItem(getOfflineCatalogSyncTimestampKey(cartScopeKey));
-      const syncTimestamp = rawSyncTimestamp === null ? Number.NaN : Number(rawSyncTimestamp);
-      setLastCatalogSyncAt(
-        Number.isSafeInteger(syncTimestamp) &&
-        syncTimestamp > 0 &&
-        syncTimestamp <= Date.now() + 5 * 60 * 1000
-          ? syncTimestamp
-          : null,
-      );
+
       setCached(safeCatalog.length);
       setCatalogRows(safeCatalog);
+      try {
+        // Rewrite cache entries through the public allowlist, even when only reading them.
+        localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
+      } catch {
+        catalogStorageError = catalogStorageError || "تعذر حفظ نسخة الكتالوج محليًا؛ راجع مساحة التخزين.";
+      }
+
+      try {
+        const rawSyncTimestamp = localStorage.getItem(getOfflineCatalogSyncTimestampKey(cartScopeKey));
+        const syncTimestamp = rawSyncTimestamp === null ? Number.NaN : Number(rawSyncTimestamp);
+        setLastCatalogSyncAt(
+          Number.isSafeInteger(syncTimestamp) &&
+          syncTimestamp > 0 &&
+          syncTimestamp <= Date.now() + 5 * 60 * 1000
+            ? syncTimestamp
+            : null,
+        );
+      } catch {
+        setLastCatalogSyncAt(null);
+        catalogStorageError = catalogStorageError || "تعذر قراءة وقت مزامنة الكتالوج؛ لا يمكن تأكيد حداثته.";
+      }
+    } catch {
+      setCached(0);
+      setCatalogRows([]);
+      setLastCatalogSyncAt(null);
+      catalogStorageError = "تعذر قراءة الكتالوج المحلي؛ ستحتاج إلى مزامنة جديدة.";
+    }
+
+    try {
       const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, safeCatalog.map((product) => product.id));
       const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
       const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
       setCartLines(ledger.lines);
       setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
-      setStorageError("");
-      return true;
+      setStorageError(catalogStorageError);
+      return !catalogStorageError;
     } catch {
-      setCached(0);
-      setCatalogRows([]);
       setCartLines([]);
       setCartCount(0);
-      setLastCatalogSyncAt(null);
-      setStorageError("تعذر التحقق من التخزين المحلي أو سجل السلة؛ لم تُرسل أي عملية. أعد المحاولة بعد التحقق من مساحة التخزين.");
+      setStorageError(
+        catalogStorageError
+          ? catalogStorageError + " كما تعذر التحقق من سجل السلة؛ لم تُرسل أي عملية."
+          : "تعذر التحقق من سجل السلة المحلي؛ الكتالوج المحفوظ يبقى للقراءة فقط حتى إصلاح المسودة. لم تُرسل أي عملية.",
+      );
       return false;
     }
   }, [cartScopeKey]);

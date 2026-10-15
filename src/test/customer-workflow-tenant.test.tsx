@@ -752,6 +752,14 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       isStaff: true,
     };
     const scope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    window.localStorage.setItem(getOfflineCatalogCacheKey(scope), JSON.stringify([{
+      id: "catalog-available-1",
+      name: "Stored Flour",
+      item_code: "000901",
+      unit: "bag",
+      base_price: 0,
+      category: { id: "grains", name: "Grains" },
+    }]));
     window.localStorage.setItem(
       getOfflineCartLedgerPrefix(scope) + "seed",
       JSON.stringify({
@@ -766,8 +774,9 @@ describe("customer workflow tenant and monetary display boundaries", () => {
 
     await mountQuoteWorkspace("/offline");
 
-    expect(host?.textContent).toContain("تعذر التحقق من التخزين المحلي أو سجل السلة");
+    expect(host?.textContent).toContain("تعذر التحقق من سجل السلة المحلي");
     expect(host?.textContent).not.toContain("لا توجد أصناف محفوظة على هذا الجهاز");
+    expect(host?.textContent).toContain("Stored Flour");
     expect(host?.querySelector('[role="alert"]')?.textContent).toContain("لم تُرسل أي عملية");
     const retryButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
       button.textContent?.includes("إعادة محاولة قراءة التخزين"),
