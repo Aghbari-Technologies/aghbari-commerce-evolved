@@ -51,6 +51,20 @@ export type Supplier = {
   status: string;
 };
 
+export type OrderDeliveryAddressSnapshot = {
+  source_address_id: string;
+  label: string;
+  recipient_name: string;
+  phone: string;
+  address_line1: string;
+  address_line2: string | null;
+  city: string;
+  region: string | null;
+  postal_code: string | null;
+  country: string;
+  delivery_instructions: string | null;
+};
+
 export type Order = {
   id: string;
   order_number: string;
@@ -66,6 +80,7 @@ export type Order = {
   customer_confirmed_at?: string | null;
   admin_adjusted_at?: string | null;
   payment_request_status?: 'not_requested' | 'requested' | 'reported' | 'verified' | 'cancelled';
+  delivery_address_snapshot?: OrderDeliveryAddressSnapshot | null;
 };
 
 export type OrderItem = {

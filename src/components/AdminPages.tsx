@@ -316,6 +316,16 @@ export function OrderDetail({ orderId, onBack, onNotice, onBlockedChange }: { or
       </div>
     </div>}
 
+
+    {order?.delivery_address_snapshot && <section className="panel" style={{ marginTop: 16, padding: 16 }}>
+      <h3 style={{ margin: '0 0 10px' }}>عنوان التوصيل المحفوظ مع الطلب</h3>
+      <p style={{ margin: '0 0 4px', fontWeight: 800 }}>{order.delivery_address_snapshot.label}</p>
+      <p style={{ margin: '6px 0 4px' }}>{order.delivery_address_snapshot.recipient_name} — <span dir="auto">{order.delivery_address_snapshot.phone}</span></p>
+      <p style={{ margin: '0 0 4px' }}>{order.delivery_address_snapshot.address_line1}{order.delivery_address_snapshot.address_line2 ? '، ' + order.delivery_address_snapshot.address_line2 : ''}</p>
+      <p style={{ margin: '0 0 4px', color: '#536b70' }}>{[order.delivery_address_snapshot.city, order.delivery_address_snapshot.region, order.delivery_address_snapshot.postal_code].filter(Boolean).join('، ')} — {order.delivery_address_snapshot.country}</p>
+      {order.delivery_address_snapshot.delivery_instructions && <p style={{ margin: '7px 0 0', color: '#536b70' }}>تعليمات المندوب: {order.delivery_address_snapshot.delivery_instructions}</p>}
+    </section>}
+
     {editable && <section className="panel table-panel" style={{ marginTop: 16 }}>
       <div className="panel-head"><div><h2>مراجعة بنود الطلب</h2><p>Enter ينتقل إلى كمية السطر التالي. اللون الأزرق الفاتح يميز الحقول القابلة للتعديل. أي تغيير يبقى غير معتمد حتى تنفيذ الاعتماد.</p></div>
         <span className={'badge ' + (blocked ? 'warning' : 'success')}>{blocked ? 'مراجعة غير معتمدة' : 'جاهز للمراجعة'}</span>
