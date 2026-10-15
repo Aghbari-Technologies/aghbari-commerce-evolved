@@ -40,8 +40,7 @@ function makeQuery(table: string): MockQuery {
     orderBy: undefined as string | undefined,
   };
 
-  let builder: MockQuery;
-  builder = {
+  const builder: MockQuery = {
     select(columns = "*") {
       query.columns = columns;
       return builder;

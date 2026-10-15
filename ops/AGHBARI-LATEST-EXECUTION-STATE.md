@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest result — AGH-SEC-BROWSER-E2E-001 lint fix
+
+- First source-test SHA `e26e71e4ec05ef90e42da922bdf513cff43c22ed`: Actions [38693899113](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38693899113) showed **unit tests PASS** and **isolated PostgreSQL acceptance PASS**, then Lint failed only on `prefer-const` at `src/test/public-catalog-privacy.test.ts:44` (`builder` never reassigned). Build and server smoke were skipped by workflow dependency.
+- The fix changes the query-builder declaration from `let` plus assignment to one `const` declaration. This follow-up SHA's exact CI is pending; don't infer a pass from the previous unit/DB successes.
+- Once CI passes, the source-level query-contract subgate may be recorded as passing. `AGH-SEC-BROWSER-E2E-001` remains OPEN for real authenticated browser E2E and full price-tier privacy across API/RPC/cache/export.
+
+---
 ## Active task — AGH-SEC-BROWSER-E2E-001 (source-runnable subgate)
 
 - Remote `main` baseline before this batch: `85dab55ec8e9ca903fe54b5f9845abe409037fad`, exact-SHA CI [38693335507](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38693335507) **SUCCESS**.
