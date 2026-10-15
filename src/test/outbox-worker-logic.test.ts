@@ -1,14 +1,30 @@
-import { readFile } from "node:fs/promises";
+import {
+  readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe,
+  expect,
+  it } from "vitest";
 import {
   classifyOutboxProcessResult,
   parseClaimedOutboxEvents,
   readBoundedRequestBody,
   sanitizeOutboxErrorMessage,
+  parseOutboxBatchSize,
 } from "../../supabase/functions/outbox-worker/logic";
 
 describe("outbox worker logical RPC result handling", () => {
+  it("rejects non-object worker request bodies rather than defaulting them", () => {
+    expect(parseOutboxBatchSize({})).toEqual({ ok: true, batch_size: 20 });
+    expect(parseOutboxBatchSize({ batch_size: 1 })).toEqual({ ok: true, batch_size: 1 });
+    expect(parseOutboxBatchSize({ batch_size: 50 })).toEqual({ ok: true, batch_size: 50 });
+    for (const payload of [null, [], "20", 20, true]) {
+      expect(parseOutboxBatchSize(payload)).toEqual({ ok: false, reason: "invalid_shape" });
+    }
+    for (const batch_size of [0, -1, 51, "20", null, 1.5]) {
+      expect(parseOutboxBatchSize({ batch_size })).toEqual({ ok: false, reason: "invalid_batch_size" });
+    }
+  });
+
   it("accepts only a complete, unique and bounded outbox claim batch", () => {
     expect(parseClaimedOutboxEvents([])).toEqual({ ok: true, events: [] });
     expect(parseClaimedOutboxEvents([{

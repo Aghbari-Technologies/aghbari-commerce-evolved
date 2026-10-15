@@ -87,6 +87,23 @@ export async function readBoundedRequestBody(
   }
 }
 
+export type OutboxBatchSizeResult =
+  | { ok: true; batch_size: number }
+  | { ok: false; reason: "invalid_shape" | "invalid_batch_size" };
+
+/** A non-object payload must never silently turn into a default-size worker run. */
+export function parseOutboxBatchSize(payload: unknown): OutboxBatchSizeResult {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, reason: "invalid_shape" };
+  }
+  const requested = (payload as Record<string, unknown>).batch_size;
+  const batchSize = requested === undefined ? 20 : requested;
+  if (!Number.isInteger(batchSize) || Number(batchSize) < 1 || Number(batchSize) > 50) {
+    return { ok: false, reason: "invalid_batch_size" };
+  }
+  return { ok: true, batch_size: Number(batchSize) };
+}
+
 export type ClaimedOutboxEvent = { id: string; event_type: string; attempts: number };
 
 export type ClaimedOutboxEventsResult =

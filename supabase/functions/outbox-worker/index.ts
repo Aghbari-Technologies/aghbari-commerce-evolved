@@ -3,6 +3,7 @@ import {
   classifyOutboxProcessResult,
   readBoundedRequestBody,
   sanitizeOutboxErrorMessage,
+  parseOutboxBatchSize,
 } from "./logic.ts";
 
 type WorkerRuntime = {
@@ -59,13 +60,13 @@ if (runtime) {
         return json({ error: "invalid_json" }, 400);
       }
     }
-    const input = payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as Record<string, unknown>
-      : {};
-    const batchSize = input.batch_size === undefined ? 20 : input.batch_size;
-    if (!Number.isInteger(batchSize) || Number(batchSize) < 1 || Number(batchSize) > 50) {
-      return json({ error: "batch_size_must_be_between_1_and_50" }, 400);
+    const batch = parseOutboxBatchSize(payload);
+    if (!batch.ok) {
+      return json({
+        error: batch.reason === "invalid_shape" ? "request_body_must_be_an_object" : "batch_size_must_be_between_1_and_50",
+      }, 400);
     }
+    const batchSize = batch.batch_size;
 
     const workerId = "edge-outbox:" + crypto.randomUUID();
     const client = createClient(url, serviceKey, {
