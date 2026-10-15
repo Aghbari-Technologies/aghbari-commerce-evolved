@@ -1852,6 +1852,10 @@ export type Database = {
     }
     Functions: {
       current_profile_id: { Args: never; Returns: string }
+      customer_respond_to_quote: {
+        Args: { p_accept: boolean; p_quote_id: string }
+        Returns: undefined
+      }
       ensure_profile: { Args: { _full_name?: string }; Returns: Json }
       is_staff: { Args: never; Returns: boolean }
       place_order: {
@@ -1864,9 +1868,28 @@ export type Database = {
         }
         Returns: Json
       }
+      record_customer_payment: {
+        Args: {
+          p_amount: number
+          p_invoice_id: string
+          p_notes?: string
+          p_payment_method: string
+          p_reference?: string
+        }
+        Returns: string
+      }
       request_sales_quote: {
         Args: { p_lines: Json; p_notes?: string }
         Returns: string
+      }
+      respond_to_sales_quote: {
+        Args: {
+          p_prices: Json
+          p_quote_id: string
+          p_response_note?: string
+          p_valid_until?: string
+        }
+        Returns: undefined
       }
       save_reorder_template: {
         Args: { p_lines: Json; p_name: string; p_source_order_id?: string }
