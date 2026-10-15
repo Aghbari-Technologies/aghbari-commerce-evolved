@@ -484,10 +484,128 @@ async function main() {
   assert.equal(persistedDelivery[0].delivery_address_id, firstId, "the selected own address ID must be retained for dispatch linkage");
   assert.equal(Object.hasOwn(persistedDelivery[0].delivery_address_snapshot, "source_address_id"), false, "the customer-visible snapshot must not expose the internal address record ID");
   assert.equal(persistedDelivery[0].delivery_address_snapshot.address_line1, "Street 1", "the order must snapshot the actual selected destination");
-  const createdEvents = await db.unsafe("select event_type,payload from public.outbox_events where organization_id=$1 and event_type='OrderCreated' and aggregate_id=$2", [organizationId, order.id]);
+  const createdEvents = await db.unsafe("select id,event_type,payload from public.outbox_events where organization_id=$1 and event_type='OrderCreated' and aggregate_id=$2", [organizationId, order.id]);
   assert.equal(createdEvents.length, 1, "order creation and its outbox event must commit exactly once");
   assert.equal(createdEvents[0].payload.delivery_address_snapshot.city, "Sanaa", "the transactional event must include the frozen destination");
+
+  // AGH-ASYNC-OUTBOX-001: lease, deliver and prove replay idempotency on isolated PostgreSQL.
+  const eventId = createdEvents[0].id;
+  const workerId = "ci-outbox-worker-order";
+  const beforeOrderNotifications = await db.unsafe(
+    "select count(*)::int as count from public.notifications where organization_id=$1 and title='طلب جديد' and body like $2",
+    [organizationId, "%" + createdEvents[0].payload.order_number + "%"],
+  );
+  const claimedOrder = await db.unsafe(
+    "select id,status,attempts,locked_by from public.claim_outbox_events($1::text,$2::integer,$3::integer,$4::uuid)",
+    [workerId, 1, 300, eventId],
+  );
+  assert.equal(claimedOrder.length, 1, "outbox worker must claim the targeted committed order event");
+  assert.equal(claimedOrder[0].status, "processing");
+  assert.equal(claimedOrder[0].attempts, 1, "claim increments attempt count atomically");
+  assert.equal(claimedOrder[0].locked_by, workerId);
+  const processedOrder = await db.unsafe(
+    "select public.process_outbox_event($1::uuid,$2::text) as result",
+    [eventId, workerId],
+  );
+  assert.equal(processedOrder[0].result.status, "processed");
+  assert.ok(processedOrder[0].result.notifications_created >= 1,
+    "OrderCreated must emit an in-app notification to active organization staff");
+  const deliveredEvent = await db.unsafe(
+    "select status,processed_at,locked_by from public.outbox_events where id=$1",
+    [eventId],
+  );
+  assert.equal(deliveredEvent[0].status, "processed");
+  assert.ok(deliveredEvent[0].processed_at);
+  assert.equal(deliveredEvent[0].locked_by, null);
+  const deliveryRows = await db.unsafe(
+    "select event_id,consumer_key,result from public.outbox_event_deliveries where event_id=$1",
+    [eventId],
+  );
+  assert.equal(deliveryRows.length, 1, "one event can commit one delivery record per consumer");
+  assert.equal(deliveryRows[0].consumer_key, "in_app_order_created");
+  const replayedOrder = await db.unsafe(
+    "select public.process_outbox_event($1::uuid,$2::text) as result",
+    [eventId, workerId],
+  );
+  assert.equal(replayedOrder[0].result.status, "already_processed");
+  const afterOrderNotifications = await db.unsafe(
+    "select count(*)::int as count from public.notifications where organization_id=$1 and title='طلب جديد' and body like $2",
+    [organizationId, "%" + createdEvents[0].payload.order_number + "%"],
+  );
+  assert.equal(afterOrderNotifications[0].count, beforeOrderNotifications[0].count + processedOrder[0].result.notifications_created,
+    "replaying the same event cannot duplicate staff notifications");
+
+  const retryEventRows = await db.unsafe(
+    "insert into public.outbox_events(organization_id,event_type,payload,idempotency_key,status,attempts,next_attempt_at) values($1,'CIUnsupportedEvent','{}'::jsonb,'ci-outbox-reclaim-retry','pending',0,now()) returning id",
+    [organizationId],
+  );
+  const retryEventId = retryEventRows[0].id;
+  const firstLease = await db.unsafe(
+    "select id,status,attempts,locked_by from public.claim_outbox_events($1::text,$2::integer,$3::integer,$4::uuid)",
+    ["ci-outbox-worker-crash", 1, 300, retryEventId],
+  );
+  assert.equal(firstLease.length, 1);
+  assert.equal(firstLease[0].attempts, 1);
+  await db.unsafe("update public.outbox_events set locked_at=now()-interval '10 minutes' where id=$1", [retryEventId]);
+  const reclaimedLease = await db.unsafe(
+    "select id,status,attempts,locked_by from public.claim_outbox_events($1::text,$2::integer,$3::integer,$4::uuid)",
+    ["ci-outbox-worker-recovery", 1, 300, retryEventId],
+  );
+  assert.equal(reclaimedLease.length, 1, "an expired processing lease must be reclaimable after worker crash");
+  assert.equal(reclaimedLease[0].attempts, 2);
+  assert.equal(reclaimedLease[0].locked_by, "ci-outbox-worker-recovery");
+  await expectFailure(
+    "outbox worker refuses an unregistered event consumer",
+    () => db.unsafe("select public.process_outbox_event($1::uuid,$2::text)", [retryEventId, "ci-outbox-worker-recovery"]),
+    /unsupported outbox event type/i,
+  );
+  const retryResult = await db.unsafe(
+    "select public.fail_outbox_event($1::uuid,$2::text,$3::text,$4::text) as result",
+    [retryEventId, "ci-outbox-worker-recovery", "unsupported_event", "No handler registered for CIUnsupportedEvent"],
+  );
+  assert.equal(retryResult[0].result.status, "retry");
+  assert.equal(retryResult[0].result.attempts, 2);
+  const retryState = await db.unsafe("select status,next_attempt_at,locked_by,last_error from public.outbox_events where id=$1", [retryEventId]);
+  assert.equal(retryState[0].status, "retry");
+  assert.ok(new Date(retryState[0].next_attempt_at).getTime() > Date.now(), "retry uses delayed backoff");
+  assert.equal(retryState[0].locked_by, null);
+  assert.equal(retryState[0].last_error.error_class, "unsupported_event");
+
+  const poisonRows = await db.unsafe(
+    "insert into public.outbox_events(organization_id,event_type,payload,idempotency_key,status,attempts,next_attempt_at) values($1,'CIUnsupportedPoisonEvent','{}'::jsonb,'ci-outbox-poison','pending',7,now()) returning id",
+    [organizationId],
+  );
+  const poisonId = poisonRows[0].id;
+  const poisonClaim = await db.unsafe(
+    "select id,attempts,locked_by from public.claim_outbox_events($1::text,$2::integer,$3::integer,$4::uuid)",
+    ["ci-outbox-worker-poison", 1, 300, poisonId],
+  );
+  assert.equal(poisonClaim.length, 1);
+  assert.equal(poisonClaim[0].attempts, 8);
+  const deadLetterResult = await db.unsafe(
+    "select public.fail_outbox_event($1::uuid,$2::text,$3::text,$4::text) as result",
+    [poisonId, "ci-outbox-worker-poison", "poison_test", "poison test reached max attempts"],
+  );
+  assert.equal(deadLetterResult[0].result.status, "dead_letter", "max-attempt events go to a dead-letter state");
+  const deadLetterState = await db.unsafe(
+    "select status,dead_letter_at,locked_by from public.outbox_events where id=$1",
+    [poisonId],
+  );
+  assert.equal(deadLetterState[0].status, "dead_letter");
+  assert.ok(deadLetterState[0].dead_letter_at);
+  assert.equal(deadLetterState[0].locked_by, null);
   await db.unsafe("set role authenticated");
+
+  await expectFailure(
+    "customer cannot claim internal outbox events",
+    () => db.unsafe("select * from public.claim_outbox_events('untrusted',1,300,null)"),
+    /permission denied/i,
+  );
+  await expectFailure(
+    "customer cannot read internal outbox delivery receipts",
+    () => db.unsafe("select * from public.outbox_event_deliveries limit 1"),
+    /permission denied/i,
+  );
 
   const customerSafeOrder = await db.unsafe(
     "select id,order_number,status,total_items,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status,delivery_address_snapshot from public.orders where id=$1",
