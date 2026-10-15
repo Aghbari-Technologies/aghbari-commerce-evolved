@@ -63,11 +63,12 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 
 ## Current implementation pointer — 2026-10-15
 
-Verified main SHA before this checkpoint refresh: `d8212a45d4282a3d1e5c7927651975c641e2d51c`; exact CI [38755977039](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755977039) **SUCCESS**. PR #37 added and merged route-specific Arabic document-title assertions to the dev-server smoke; PR CI [38755678481](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755678481) **SUCCESS**. This strengthens local evidence but does not prove public deployment routes are correct.
-
-PR #35 Arabic server finance PDFs and PR #36 Onyx export-preparation audit are also merged and verified. The audit does not certify browser download completion or actual Onyx Pro compatibility.
-
-**Only current task cursor:** `AGH-SEC-BROWSER-E2E-001 — OPEN`. Read-only public runtime still shows `/login` responding but invoice/statement/PDF deep routes and the PWA manifest returning 404, while local CI checks specific route metadata. Direct Lovable editor/deployment SHA is unverified. Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied; do not substitute `mrcyqezbhpncuvaehwgf`.
+- Verified latest main SHA: d0cbee114ebff7da4338edd658ba0453b88d1bf3; PR #40 server-derived customer-tier pricing merged; exact main CI [38760352659](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38760352659) **SUCCESS**.
+- PR #38 added built-artifact CI via Wrangler; it checks production-output route/manifest response behavior and unauthenticated PDF handlers, preventing development-server smoke alone from being treated as deployability proof. PR #39 fixed inactive public catalog records. PR #40 removed raw base-price selection for non-staff flows and routes customer price display through a session/tier-derived RPC, with fail-closed behavior and no account-tier price saved offline.
+- Exact PR-head evidence: PR #38 [38757497714](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38757497714) **SUCCESS**; PR #39 [38757944496](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38757944496) **SUCCESS**; PR #40 [38760040133](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38760040133) **SUCCESS**. The merge SHA has its own successful run [38760352659](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38760352659).
+- Current source-price acceptance is improved but **AGH-PRICE-PRIVACY-001 remains PARTIAL** until route-level and full-channel verification finishes. It is the only next task cursor in ops/AGHBARI-LATEST-EXECUTION-STATE.md.
+- External readback still previously showed 404 for invoice/statement/PDF deep routes and the PWA manifest despite local built-artifact smoke succeeding. This points to a separate Lovable publish/editor snapshot or hosting configuration gap; the live editor SHA is not verified. Do not claim the published site is fixed from CI alone.
+- Production Supabase ref ffxxjaolfntzbapmfbuv is still inaccessible; no production migration or writes were applied and the similarly named alternate ref is not a substitute. No Lovable credits were spent.
 
 
 ## Historical source checkpoint — 2026-10-15 (the live cursor is in ops/AGHBARI-LATEST-EXECUTION-STATE.md)

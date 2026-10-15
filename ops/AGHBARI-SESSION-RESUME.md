@@ -14,14 +14,15 @@
 المراجع المعتمدة: `PROJECT_MEMORY.md`، هذا الملف، `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`، `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`، و`docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 
 
-## Current resume checkpoint — 2026-10-15 (Onyx audit merged; runtime E2E next)
+## Current resume checkpoint — verified pricing/privacy batch merged (2026-10-15)
 
-- **Verified main SHA before this checkpoint refresh:** `d8212a45d4282a3d1e5c7927651975c641e2d51c`; exact-SHA CI [38755977039](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755977039) **SUCCESS**.
-- PR [#37](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/37) merged from tested head `ddebb148c198295af3e488efe34bb4c32860fc48`; PR CI [38755678481](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38755678481) **SUCCESS**. Main CI now checks specific Arabic document metadata for `/invoices` and `/statement`, not HTTP 200 alone.
-- PR #36 Onyx audit and PR #35 server PDF work remain merged and exact-SHA CI verified. Onyx audit means preparation only; actual Onyx Pro compatibility and browser download completion are not proven.
-- **`next_task_id = AGH-SEC-BROWSER-E2E-001 — OPEN`.** Published `/login` responds, but invoice/statement/PDF routes and `/manifest.webmanifest` return 404 externally even though local smoke with specific Arabic route metadata passes. Read back the real Lovable editor/deployment SHA and run authenticated browser checks before closure.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001`.** Intended Supabase ref `ffxxjaolfntzbapmfbuv` is permission-denied; `mrcyqezbhpncuvaehwgf` is another project and cannot be substituted. No production writes/migrations were made.
-- Persistent repo entry points remain `AGENTS.md` and `.github/copilot-instructions.md`. Git push/green CI is not proof of Lovable live deployment sync. Local shell Git networking remains unavailable.
+- **Verified main SHA:** d0cbee114ebff7da4338edd658ba0453b88d1bf3; PR [#40](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/40) merged. Exact PR-head CI [38760040133](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38760040133) **SUCCESS** on ba8bc3db63ec22ae3479b71b810fe3d6f60344f9; exact main CI [38760352659](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38760352659) **SUCCESS** on d0cbee114ebff7da4338edd658ba0453b88d1bf3.
+- PR #38 added a separate Wrangler smoke test against the generated Cloudflare output; CI checks the actual built artifact and PDF-route authorization, not only vite dev. PR #39 closes inactive public catalog rows and overbroad public category projection. PR #40 resolves customer prices on the server from the authenticated customer membership/tier and removes raw base_price reads in the storefront, quotes, reorder, barcode and assistant paths.
+- Current unit/DB evidence includes server-resolved prices, failure on missing/invalid responses, anonymous retail pricing, approved wholesale quantity breaks, invalid quantity rejection, cache stripping, and cross-tenant denial. No production migration was applied; CI migrations are isolated.
+- **next_task_id = AGH-PRICE-PRIVACY-001 — PARTIAL**: add/assert route-level proofs for quote/reorder/barcode/assistant price paths and finish remaining tier/API/RPC/cache/export review. Then resume the separately open AGH-SEC-BROWSER-E2E-001 deployment/authenticated-browser gates.
+- **External blocker remains:** prior public readback showed /login responding but finance/PDF deep routes and PWA manifest 404. The new Wrangler smoke passes against the generated build, which narrows the issue to published Lovable snapshot/hosting or live environment, not a failed source build. Live editor/deployment SHA is still UNVERIFIED; browser profile has no Lovable sign-in.
+- Intended production Supabase ref ffxxjaolfntzbapmfbuv remains permission-denied. Do not substitute another project. No production DB changes or Lovable points.
+- Local checkout was not available; remote refs and CI were verified through GitHub APIs, without claiming local Git commands succeeded.
 
 
 ## الحالة المرجعية المحفوظة
