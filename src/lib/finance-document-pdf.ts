@@ -434,6 +434,24 @@ export async function buildCustomerStatementPdf(
     );
   }
 
+  if (y < 160) {
+    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    pages.push(page);
+    drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية — ملخص المبالغ");
+    y = PAGE_HEIGHT - 135;
+  }
+  drawRule(page, y - 4);
+  y -= 24;
+  drawArabic(page, font, "الإجمالي الفرعي", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
+  drawLtr(page, font, minorUnitsToText(subtotal) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
+  y -= 22;
+  drawArabic(page, font, "الضريبة", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
+  drawLtr(page, font, minorUnitsToText(taxAmount) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
+  y -= 24;
+  drawRule(page, y + 8);
+  drawArabic(page, font, "الإجمالي المستحق", PAGE_WIDTH - 47, y - 8, 10, BRAND, 125);
+  drawLtr(page, font, minorUnitsToText(totalAmount) + " " + currency, PAGE_WIDTH - 210, y - 8, 10, BRAND, 160);
+
   pages.forEach((current, index) => appendPageNumber(current, index, pages.length, font));
   return pdf.save({ useObjectStreams: false });
 }
@@ -446,6 +464,9 @@ export type CustomerInvoiceDocument = {
   issued_at: string;
   due_at?: string | null;
   currency: string;
+  subtotal: number | string;
+  tax_amount: number | string;
+  total_amount: number | string;
 };
 
 export type CustomerInvoiceLineDocument = {
@@ -454,6 +475,8 @@ export type CustomerInvoiceLineDocument = {
   description: string;
   unit?: string | null;
   quantity: number | string;
+  unit_price: number | string;
+  line_total: number | string;
 };
 
 export type CustomerInvoiceCustomerDocument = {
@@ -477,9 +500,16 @@ function normalizeQuantity(value: unknown): string {
   return raw;
 }
 
+/** Parse a non-negative invoice amount without changing the table-level privacy grants. */
+function normalizeInvoiceMoney(value: unknown): bigint {
+  const amount = moneyToMinorUnits(value);
+  if (amount < 0n) throw new Error("Invoice contains a negative monetary value.");
+  return amount;
+}
+
 /**
- * Customer-facing invoice PDF intentionally excludes unit prices and amounts.
- * Those fields are restricted from the customer's invoice table/API permissions.
+ * Customer invoice PDF receives financial values only from the narrowly scoped
+ * get_customer_invoice_pdf RPC; direct customer SELECT grants remain non-financial.
  */
 export async function buildCustomerInvoicePdf(
   invoiceInput: unknown,
@@ -501,7 +531,10 @@ export async function buildCustomerInvoicePdf(
   ) {
     throw new Error("Invoice record is incomplete.");
   }
-  normalizeCurrency(invoice.currency);
+  const currency = normalizeCurrency(invoice.currency);
+  const subtotal = normalizeInvoiceMoney(invoice.subtotal);
+  const taxAmount = normalizeInvoiceMoney(invoice.tax_amount);
+  const totalAmount = normalizeInvoiceMoney(invoice.total_amount);
   const lines = Array.isArray(linesInput) ? (linesInput as CustomerInvoiceLineDocument[]) : [];
   if (lines.length > 500) throw new Error("Invoice exceeds the item-count limit.");
   for (const line of lines) {
@@ -513,7 +546,13 @@ export async function buildCustomerInvoicePdf(
       throw new Error("Invoice contains an incomplete line.");
     }
     normalizeQuantity(line.quantity);
+    normalizeInvoiceMoney(line.unit_price);
+    normalizeInvoiceMoney(line.line_total);
   }
+  const lineAmounts = lines.map((line) => ({
+    unitPrice: minorUnitsToText(normalizeInvoiceMoney(line.unit_price)),
+    lineTotal: minorUnitsToText(normalizeInvoiceMoney(line.line_total)),
+  }));
   const customer =
     customerInput && typeof customerInput === "object"
       ? (customerInput as CustomerInvoiceCustomerDocument)
@@ -524,7 +563,7 @@ export async function buildCustomerInvoicePdf(
   const font = await pdf.embedFont(fontBytes, { subset: false });
   pdf.setTitle(`فاتورة ${cleanLabel(invoice.invoice_number, 40)} | متجر الأغبري`);
   pdf.setAuthor("Aghbari Commerce");
-  pdf.setSubject("Customer invoice document");
+  pdf.setSubject("Customer invoice document with scoped financial totals");
   pdf.setCreator("Aghbari Commerce");
   pdf.setCreationDate(generatedAt);
   pdf.setModificationDate(generatedAt);
@@ -560,7 +599,7 @@ export async function buildCustomerInvoicePdf(
   drawArabic(page, font, "رمز العميل", PAGE_WIDTH - 40, PAGE_HEIGHT - 258, 8, MUTED, 85);
   drawLtr(page, font, cleanLabel(customer.customer_code, 32), PAGE_WIDTH - 145, PAGE_HEIGHT - 258, 9, INK, 120);
 
-  drawArabic(page, font, "تفاصيل الأصناف والكميات", PAGE_WIDTH - 40, PAGE_HEIGHT - 296, 10, BRAND, 180);
+  drawArabic(page, font, "تفاصيل الأصناف والمبالغ", PAGE_WIDTH - 40, PAGE_HEIGHT - 296, 10, BRAND, 190);
   const drawItemsHeader = (targetPage: PDFPage, y: number) => {
     targetPage.drawRectangle({
       x: 40,
@@ -569,16 +608,18 @@ export async function buildCustomerInvoicePdf(
       height: 25,
       color: TINT,
     });
-    drawArabic(targetPage, font, "الصنف", PAGE_WIDTH - 47, y, 8, BRAND, 250);
-    drawArabic(targetPage, font, "رمز الصنف", 305, y, 8, BRAND, 95);
-    drawArabic(targetPage, font, "الوحدة", 205, y, 8, BRAND, 70);
-    drawArabic(targetPage, font, "الكمية", 115, y, 8, BRAND, 65);
+    drawArabic(targetPage, font, "الصنف", PAGE_WIDTH - 47, y, 8, BRAND, 170);
+    drawArabic(targetPage, font, "رمز الصنف", 370, y, 8, BRAND, 78);
+    drawArabic(targetPage, font, "الوحدة", 282, y, 8, BRAND, 60);
+    drawArabic(targetPage, font, "الكمية", 211, y, 8, BRAND, 55);
+    drawArabic(targetPage, font, "سعر الوحدة", 145, y, 7.5, BRAND, 70);
+    drawArabic(targetPage, font, "الإجمالي", 72, y, 7.5, BRAND, 58);
     drawRule(targetPage, y - 8);
   };
 
   drawItemsHeader(page, PAGE_HEIGHT - 320);
   let y = PAGE_HEIGHT - 350;
-  for (const line of lines) {
+  for (const [lineIndex, line] of lines.entries()) {
     if (y < 80) {
       page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
       pages.push(page);
@@ -586,10 +627,12 @@ export async function buildCustomerInvoicePdf(
       drawItemsHeader(page, PAGE_HEIGHT - 125);
       y = PAGE_HEIGHT - 155;
     }
-    drawArabic(page, font, cleanLabel(line.description, 100), PAGE_WIDTH - 47, y, 8.5, INK, 245);
-    drawLtr(page, font, cleanLabel(line.item_code, 36), 235, y, 8, INK, 78);
-    drawArabic(page, font, cleanLabel(line.unit, 24), 160, y, 8, INK, 58);
-    drawLtr(page, font, normalizeQuantity(line.quantity), 72, y, 8.5, INK, 65);
+    drawArabic(page, font, cleanLabel(line.description, 80), PAGE_WIDTH - 47, y, 8, INK, 168);
+    drawLtr(page, font, cleanLabel(line.item_code, 36), 370, y, 7.5, INK, 78);
+    drawArabic(page, font, cleanLabel(line.unit, 24), 282, y, 7.5, INK, 60);
+    drawLtr(page, font, normalizeQuantity(line.quantity), 211, y, 8, INK, 55);
+    drawLtr(page, font, lineAmounts[lineIndex].unitPrice, 145, y, 7.5, INK, 70);
+    drawLtr(page, font, lineAmounts[lineIndex].lineTotal, 72, y, 7.5, INK, 60);
     drawRule(page, y - 7);
     y -= 23;
   }
