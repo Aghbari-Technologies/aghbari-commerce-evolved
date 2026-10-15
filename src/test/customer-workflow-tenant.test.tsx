@@ -919,7 +919,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(host?.querySelector('[role="alert"]')).toBeNull();
-    expect(host?.textContent).toContain("تمت إعادة قراءة النسخة المحلية");
+    expect(host?.textContent).toContain("تم التحقق من التخزين وتسوية الحركات غير المحسومة دون تكرارها");
     expect(host?.textContent).toContain("Stored Flour");
     expect(host?.textContent).not.toContain("لا توجد أصناف محفوظة على هذا الجهاز");
   });
@@ -982,6 +982,9 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     const priorTimestamp = String(Date.now() - 60_000);
     window.localStorage.setItem(cacheKey, JSON.stringify(priorCatalog));
     window.localStorage.setItem(timestampKey, priorTimestamp);
+    const navigatorOnlineDescriptor = Object.getOwnPropertyDescriptor(window.navigator, "onLine");
+    // Disable mount-time connectivity sync; this test targets the explicit refresh button.
+    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: false });
     await mountQuoteWorkspace("/offline");
     // Capture the allowlisted cache as rendered by the initial mount; the component
     // intentionally rewrites legacy cache entries before any sync attempt.
@@ -989,8 +992,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     const timestampBeforeSync = window.localStorage.getItem(timestampKey);
     expect(cacheBeforeSync).not.toBeNull();
     expect(timestampBeforeSync).toBe(priorTimestamp);
-    // A mount-time connectivity sync may run before the explicit button action.
-    // Set the one-shot response after mount so the storage-failure branch is deterministic.
+    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
+    // The explicit refresh click now owns this response and persistence failure.
     mocks.fetchProducts.mockResolvedValueOnce([{
       id: "new-cache-product",
       name: "New Catalog",
@@ -1025,6 +1028,11 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     );
     expect(addButton?.disabled).toBe(true);
     writeSpy.mockRestore();
+    if (navigatorOnlineDescriptor) {
+      Object.defineProperty(window.navigator, "onLine", navigatorOnlineDescriptor);
+    } else {
+      delete (window.navigator as Partial<Navigator>).onLine;
+    }
   });
 
   it("warns when the saved local catalog is older than 24 hours", async () => {
