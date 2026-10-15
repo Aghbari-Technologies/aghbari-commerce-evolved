@@ -19,7 +19,7 @@ vi.mock("@/lib/supabase", () => ({
   getCurrentTenantScope: mocks.getCurrentTenantScope,
 }));
 
-import { fetchProducts } from "@/lib/api";
+import { fetchCategories, fetchProducts } from "@/lib/api";
 
 type MockResult = { data: unknown[]; error: { message: string } | null };
 type MockQuery = PromiseLike<MockResult> & {
@@ -97,6 +97,7 @@ describe("public catalog privacy and tenant query contract", () => {
       column: "organization_id",
       value: ORGANIZATION_ID,
     });
+    expect(products.filters).toContainEqual({ column: "status", value: "active" });
 
     const inventory = queryFor("inventory_balances");
     expect(inventory.columns).toBe(
@@ -109,9 +110,15 @@ describe("public catalog privacy and tenant query contract", () => {
     });
 
     const categories = queryFor("categories");
+    expect(categories.columns).toBe("id,name,code,parent_id,sort_order,is_active");
+    expect(categories.columns).not.toMatch(/description|created_at/i);
     expect(categories.filters).toContainEqual({
       column: "organization_id",
       value: ORGANIZATION_ID,
+    });
+    expect(categories.filters).toContainEqual({
+      column: "is_active",
+      value: true,
     });
     expect(mocks.from).toHaveBeenCalledTimes(3);
   });
@@ -146,5 +153,36 @@ describe("public catalog privacy and tenant query contract", () => {
       column: "warehouse_id",
       value: WAREHOUSE_ID,
     });
+    expect(queryFor("categories").columns).toBe("*");
+    expect(queryFor("categories").filters).not.toContainEqual({ column: "is_active", value: true });
+  });
+
+  it("returns only active public categories through the dedicated category fetcher", async () => {
+    mocks.responses.categories = {
+      data: [{ id: "category-1", name: "Public category", code: "PUB", parent_id: null, sort_order: 1, is_active: true }],
+      error: null,
+    } as never;
+    await expect(fetchCategories()).resolves.toEqual(mocks.responses.categories.data);
+
+    const categories = queryFor("categories");
+    expect(categories.columns).toBe("id,name,code,parent_id,sort_order,is_active");
+    expect(categories.columns).not.toMatch(/description|created_at/i);
+    expect(categories.filters).toContainEqual({ column: "organization_id", value: ORGANIZATION_ID });
+    expect(categories.filters).toContainEqual({ column: "is_active", value: true });
+    expect(categories.orderBy).toBe("sort_order");
+  });
+
+  it("preserves all tenant-scoped categories for staff maintenance", async () => {
+    mocks.getStorefrontDataScope.mockResolvedValueOnce({
+      organizationId: OTHER_ORGANIZATION_ID,
+      warehouseId: WAREHOUSE_ID,
+      isStaff: true,
+    });
+    await expect(fetchCategories()).resolves.toEqual([]);
+
+    const categories = queryFor("categories");
+    expect(categories.columns).toBe("*");
+    expect(categories.filters).toContainEqual({ column: "organization_id", value: OTHER_ORGANIZATION_ID });
+    expect(categories.filters).not.toContainEqual({ column: "is_active", value: true });
   });
 });
