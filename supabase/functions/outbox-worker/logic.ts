@@ -3,7 +3,15 @@
  * from being copied into the durable outbox error ledger.
  */
 export function sanitizeOutboxErrorMessage(value: unknown): string {
-  const raw = value instanceof Error ? value.message : "Unclassified worker error";
+  let raw = "Unclassified worker error";
+  if (value instanceof Error) {
+    raw = value.message;
+  } else if (typeof value === "string") {
+    raw = value;
+  } else if (value && typeof value === "object" && !Array.isArray(value)) {
+    const message = (value as Record<string, unknown>).message;
+    if (typeof message === "string") raw = message;
+  }
   return raw
     .replace(/\b(Bearer|service_role|anon_key|api[_-]?key|password|secret|access[_-]?token)\b[=: ]+\S+/gi, "$1=[redacted]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email redacted]")

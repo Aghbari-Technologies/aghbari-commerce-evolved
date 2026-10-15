@@ -111,7 +111,7 @@ if (runtime) {
         p_worker: workerId,
         p_error_class: error?.code ?? "unexpected_process_result",
         p_error_message: error
-          ? safeErrorMessage(error.message)
+          ? sanitizeOutboxErrorMessage(error)
           : "process_outbox_event returned no recognized status",
       });
       if (failureError) {

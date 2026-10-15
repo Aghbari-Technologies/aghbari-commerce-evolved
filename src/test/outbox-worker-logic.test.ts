@@ -45,6 +45,23 @@ describe("outbox worker logical RPC result handling", () => {
     expect(safe).toContain("[redacted]");
   });
 
+  it("sanitizes Supabase RPC error objects and string messages without losing useful text", () => {
+    const objectError = sanitizeOutboxErrorMessage({
+      code: "XX000",
+      message: "dispatch failed for buyer@example.com with Bearer provider-secret",
+      details: "private provider response",
+    });
+    expect(objectError).toContain("dispatch failed");
+    expect(objectError).toContain("[email redacted]");
+    expect(objectError).not.toContain("buyer@example.com");
+    expect(objectError).not.toContain("provider-secret");
+
+    const stringError = sanitizeOutboxErrorMessage("provider api_key=provider-secret rejected request");
+    expect(stringError).toContain("rejected request");
+    expect(stringError).not.toContain("provider-secret");
+    expect(sanitizeOutboxErrorMessage({ code: "XX000" })).toBe("Unclassified worker error");
+  });
+
   it("provides a bounded, non-empty fallback for unknown worker errors", () => {
     expect(sanitizeOutboxErrorMessage(null)).toBe("Unclassified worker error");
     expect(sanitizeOutboxErrorMessage(new Error("x".repeat(700)))).toHaveLength(500);
