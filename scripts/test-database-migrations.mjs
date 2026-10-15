@@ -347,10 +347,10 @@ async function main() {
   const itemPayload = [{ product_id: productId, quantity: 10 }];
   const orderArgs = [
     db.json(itemPayload), "CI smoke order", "CI Company One", "CI Customer One",
-    "7771111111", "credit", "ci-idempotency-key-000001",
+    "7771111111", "credit", "ci-idempotency-key-000001", firstId,
   ];
   const firstOrder = await db.unsafe(
-    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
+    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7,$8::uuid) as result",
     orderArgs,
   );
   const order = firstOrder[0].result;
@@ -361,13 +361,24 @@ async function main() {
   await db.unsafe("reset role");
   const persistedOrderAmount = await db.unsafe("select total_amount from public.orders where id=$1", [order.id]);
   assert.equal(Number(persistedOrderAmount[0].total_amount), 370000, "server order total must match tier pricing");
+  const persistedDelivery = await db.unsafe("select delivery_address_id,delivery_address_snapshot,delivery_address_fingerprint from public.orders where id=$1", [order.id]);
+  assert.equal(persistedDelivery[0].delivery_address_id, firstId, "the selected own address ID must be retained for dispatch linkage");
+  assert.equal(Object.hasOwn(persistedDelivery[0].delivery_address_snapshot, "source_address_id"), false, "the customer-visible snapshot must not expose the internal address record ID");
+  assert.equal(persistedDelivery[0].delivery_address_snapshot.address_line1, "Street 1", "the order must snapshot the actual selected destination");
+  const createdEvents = await db.unsafe("select event_type,payload from public.outbox_events where organization_id=$1 and event_type='OrderCreated' and aggregate_id=$2", [organizationId, order.id]);
+  assert.equal(createdEvents.length, 1, "order creation and its outbox event must commit exactly once");
+  assert.equal(createdEvents[0].payload.delivery_address_snapshot.city, "Sanaa", "the transactional event must include the frozen destination");
   await db.unsafe("set role authenticated");
 
   const customerSafeOrder = await db.unsafe(
-    "select id,order_number,status,total_items,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status from public.orders where id=$1",
+    "select id,order_number,status,total_items,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status,delivery_address_snapshot from public.orders where id=$1",
     [order.id],
   );
   assert.equal(customerSafeOrder.length, 1, "customer may read safe order status fields");
+  assert.equal(customerSafeOrder[0].delivery_address_snapshot.address_line1, "Street 1", "customer sees only the safe address snapshot fields through its own order row");
+  await expectFailure("customer cannot read the internal address relation or idempotency fingerprint",
+    () => db.unsafe("select delivery_address_id,delivery_address_fingerprint from public.orders where id=$1", [order.id]),
+    /permission denied/i);
   await expectFailure(
     "customer direct order total access",
     () => db.unsafe("select total_amount from public.orders where id=$1", [order.id]),
@@ -409,7 +420,7 @@ async function main() {
   );
 
   const replay = await db.unsafe(
-    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7) as result",
+    "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7,$8::uuid) as result",
     orderArgs,
   );
   assert.equal(replay[0].result.id, order.id, "same idempotency key and payload must return the original order");
@@ -417,7 +428,7 @@ async function main() {
   await expectFailure(
     "idempotency payload mismatch",
     () => db.unsafe(
-      "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7)",
+      "select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7,$8::uuid)",
       [db.json([{ product_id: productId, quantity: 11 }]), ...orderArgs.slice(1)],
     ),
     /different|مختلفة/i,
@@ -429,6 +440,16 @@ async function main() {
   );
   assert.equal(orderCount[0].count, 1, "a replay must not create a duplicate order");
   await db.unsafe("set role authenticated");
+  await db.unsafe("reset role");
+  await db.unsafe("update public.customer_addresses set address_line1='Street changed after order' where id=$1", [firstId]);
+  const frozenAfterEdit = await db.unsafe("select delivery_address_snapshot from public.orders where id=$1", [order.id]);
+  assert.equal(frozenAfterEdit[0].delivery_address_snapshot.address_line1, "Street 1", "later edits to the address book must not rewrite a historical order snapshot");
+  const outboxAfterReplay = await db.unsafe("select count(*)::int as count from public.outbox_events where organization_id=$1 and event_type='OrderCreated' and aggregate_id=$2", [organizationId, order.id]);
+  assert.equal(outboxAfterReplay[0].count, 1, "idempotent retry must not duplicate OrderCreated events");
+  await db.unsafe("set role authenticated");
+  await expectFailure("same idempotency key cannot silently rebind a changed delivery address",
+    () => db.unsafe("select public.submit_customer_order($1::jsonb,$2,$3,$4,$5,$6,$7,$8::uuid)", orderArgs),
+    /عنوان التوصيل|delivery address|different/i);
 
   const firstQuote = await db.unsafe(
     "select public.request_sales_quote($1::jsonb,$2) as id",

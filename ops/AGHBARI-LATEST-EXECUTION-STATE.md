@@ -1,15 +1,15 @@
 # Aghbari Commerce — Latest Execution State
 
-## Active implementation — AGH-CUSTOMER-360-001: customer address book
+## Active implementation — AGH-CUSTOMER-360-001: freeze delivery address into the checkout/order lifecycle
 
-- Added customer-facing `/addresses` route and account-workspace UI for creating, editing, deleting and listing delivery addresses, with a single default-address policy.
-- Added `supabase/migrations/20261015130000_customer_address_book.sql`: identity and organization are server-derived, RLS limits rows to the owner or same-organization staff, direct client writes are revoked, RPC mutations are audited, and a lock plus partial unique index enforces one default address.
-- Added data-contract tests and isolated PostgreSQL regressions for direct-write denial, same-organization cross-customer isolation, RPC ownership, default replacement, deletion promotion and audit events. Added the route to the actual port-5173 smoke matrix.
-- Added global `prefers-reduced-motion: reduce` rules for animation, transitions and smooth scrolling.
-- **Exact-SHA CI:** implementation SHA `64a7056274a7b24324c53f9020ec1b710133a724`, [run 38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) **SUCCESS** for unit tests, isolated PostgreSQL 17 migrations/workflow acceptance, lint, build, and port-5173 route smoke. No production database was changed. Intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible; no live browser or Lovable editor sync is claimed. Checkout delivery-address snapshots and company contacts/users remain open.
-- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. CI passes on the implementation SHA; record this source/isolated-CI subgate as verified, then connect delivery-address snapshots to checkout/orders and implement company contacts/users. Keep `AGH-SEC-BROWSER-E2E-001` separately OPEN for real authenticated browser and production evidence.
+- Customer address book merged to `main` at `12b31fa9c1a9ad89934e936ef822b1288f342649`; implementation head `64a7056274a7b24324c53f9020ec1b710133a724`, exact-head CI [38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) **SUCCESS** across unit tests, isolated PostgreSQL 17, lint, build and port-5173 route smoke.
+- Follow-up on `feat/checkout-delivery-address-20261015-v2` adds an optional saved-address picker to checkout; server-side ownership validation; immutable `orders.delivery_address_snapshot`; idempotency/address mismatch guards; and a transactional, idempotent `OrderCreated` outbox event.
+- Customer/staff order detail surfaces display only the safe frozen delivery snapshot. Authenticated customer SELECT stays column-limited: internal `delivery_address_id` and `delivery_address_fingerprint` are not granted. Isolated PostgreSQL regressions cover snapshot immutability, retry mismatch, event idempotency and privacy.
+- **Exact-SHA CI is pending for this follow-up.** Do not treat a route, migration source, or pending PR as completion. No production database was changed; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible.
+- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. Validate this follow-up in exact-SHA CI, fix any failure, merge only after proof, then continue to company contacts/member management. `AGH-SEC-BROWSER-E2E-001` remains separately OPEN for live authenticated browser and production evidence.
 
 ---
+
 
 ## Verified offline catalog cache privacy subgate
 

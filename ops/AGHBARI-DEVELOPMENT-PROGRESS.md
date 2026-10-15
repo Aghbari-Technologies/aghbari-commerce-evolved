@@ -139,3 +139,11 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Passed gates: `npm test`; `npm run test:db` applying all migrations/workflow assertions on isolated PostgreSQL 17; lint excluding the repository-wide Prettier rule; production build; dev-server port-5173 smoke including `/addresses`.
 - The first attempt found the invalid PostgreSQL column privilege name `DELETE`; it was corrected to verify INSERT/UPDATE at column level and DELETE at table level. The fixed exact SHA passed all gates.
 - Evidence is repository code + isolated CI only. No production migration or live authenticated browser test; checkout order-address snapshots and company contact/member management remain open.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: delivery-address snapshot wired into checkout/order lifecycle
+
+- Follow-up head `ad6659930e45d197b512837819df853b4ede1c29` is being rebased onto the current `main` docs checkpoint `74ca3ed043a0790e03fdfbfea56f8e6ec89a6dd8` to avoid replacing the latest verified address-book evidence.
+- Checkout reads the saved address book, proposes the default, supports an explicit no-address path, incorporates the selected address into retry intent, and submits its opaque ID only.
+- New additive migration `20261015140000_checkout_delivery_address_snapshot.sql` adds a frozen safe order snapshot, server-derived ownership checking, private internal address FK/fingerprint, address-sensitive idempotent replay rules and transactional `OrderCreated` outbox event.
+- Customer and staff order details display the persisted snapshot; the customer projection reveals only the display-safe snapshot field. Existing server-side price/credit/idempotency transaction remains the authoritative order creator.
+- Expanded isolated PostgreSQL test coverage for frozen snapshot, direct-column denial, idempotent outbox, retry mismatch and history immutability. This follow-up's exact-SHA CI remains pending; no production migration or live browser claim.
