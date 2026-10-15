@@ -652,7 +652,12 @@ async function main() {
   );
   const retryResult = await db.unsafe(
     "select public.fail_outbox_event($1::uuid,$2::text,$3::text,$4::text) as result",
-    [retryEventId, "ci-outbox-worker-recovery", "unsupported_event", "No handler registered for CIUnsupportedEvent"],
+    [
+      retryEventId,
+      "ci-outbox-worker-recovery",
+      "unsupported_event",
+      "No handler registered for CIUnsupportedEvent; buyer@example.com; Authorization: Bearer opaque-access-token; sk-12345678901234567890; ?access_token=opaque-query-token",
+    ],
   );
   assert.equal(retryResult[0].result.status, "retry");
   assert.equal(retryResult[0].result.attempts, 2);
@@ -661,6 +666,15 @@ async function main() {
   assert.ok(new Date(retryState[0].next_attempt_at).getTime() > Date.now(), "retry uses delayed backoff");
   assert.equal(retryState[0].locked_by, null);
   assert.equal(retryState[0].last_error.error_class, "unsupported_event");
+  const durableError = String(retryState[0].last_error.message);
+  assert.ok(durableError.includes("[email redacted]"), "database redacts email addresses even when called without the Edge worker");
+  assert.ok(durableError.includes("Bearer [redacted]"), "database redacts bearer credentials");
+  assert.ok(durableError.includes("[secret redacted]"), "database redacts provider-key formats");
+  assert.ok(durableError.includes("[redacted]"), "database redacts query-string tokens");
+  assert.ok(!durableError.includes("buyer@example.com"));
+  assert.ok(!durableError.includes("opaque-access-token"));
+  assert.ok(!durableError.includes("sk-12345678901234567890"));
+  assert.ok(!durableError.includes("opaque-query-token"));
 
   const poisonRows = await db.unsafe(
     "insert into public.outbox_events(organization_id,event_type,payload,idempotency_key,status,attempts,next_attempt_at) values($1,'CIUnsupportedPoisonEvent','{}'::jsonb,'ci-outbox-poison','pending',7,now()) returning id",
