@@ -39,7 +39,14 @@ export function sanitizeAiQuestion(value: unknown): { ok: true; question: string
   if (!clean) return { ok: false, reason: "question_required" };
   if (clean.length > 1200) return { ok: false, reason: "question_too_long" };
 
-  const lowered = clean.toLocaleLowerCase("en");
+  // Arabic-Indic and Eastern Arabic-Indic numerals are common in Arabic user input.
+  // Normalize digits only for privacy detection; retain the original question for the provider.
+  const privacyCheckText = clean.replace(/[٠-٩۰-۹]/g, (digit) => {
+    const code = digit.charCodeAt(0);
+    const ascii = code >= 0x06f0 ? code - 0x06f0 : code - 0x0660;
+    return String(ascii);
+  });
+  const lowered = privacyCheckText.toLocaleLowerCase("en");
   const injectionMarkers = [
     "ignore all previous instructions", "ignore previous instructions",
     "disregard all previous instructions", "reveal the system prompt",
@@ -49,10 +56,10 @@ export function sanitizeAiQuestion(value: unknown): { ok: true; question: string
   if (injectionMarkers.some((marker) => lowered.includes(marker.toLocaleLowerCase("en")))) {
     return { ok: false, reason: "prompt_injection_rejected" };
   }
-  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(clean)) {
+  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(privacyCheckText)) {
     return { ok: false, reason: "personal_email_rejected" };
   }
-  if (/\b\+?\d(?:[\s().-]*\d){7,14}\b/.test(clean)) {
+  if (/\b\+?\d(?:[\s().-]*\d){7,14}\b/.test(privacyCheckText)) {
     return { ok: false, reason: "personal_phone_or_identifier_rejected" };
   }
   return { ok: true, question: clean };
