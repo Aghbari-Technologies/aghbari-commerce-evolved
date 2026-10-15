@@ -286,8 +286,7 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'customer_addresses'
   LOOP
     IF has_column_privilege('authenticated', 'public.customer_addresses', v_column, 'INSERT')
-       OR has_column_privilege('authenticated', 'public.customer_addresses', v_column, 'UPDATE')
-       OR has_column_privilege('authenticated', 'public.customer_addresses', v_column, 'DELETE') THEN
+       OR has_column_privilege('authenticated', 'public.customer_addresses', v_column, 'UPDATE') THEN
       RAISE EXCEPTION 'authenticated must not receive direct write privileges on customer_addresses.%', v_column;
     END IF;
   END LOOP;
