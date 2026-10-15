@@ -771,6 +771,35 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("Legacy Sugar");
   });
 
+  it("warns when the saved local catalog is older than 24 hours", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    const scope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    const cacheKey = getOfflineCatalogCacheKey(scope);
+    const timestampKey = getOfflineCatalogSyncTimestampKey(scope);
+    window.localStorage.setItem(cacheKey, JSON.stringify([{
+      id: "offline-stale-1",
+      name: "Legacy Rice",
+      item_code: "000781",
+      unit: "carton",
+      base_price: 0,
+    }]));
+    window.localStorage.setItem(timestampKey, String(Date.now() - 48 * 60 * 60 * 1000));
+
+    await mountQuoteWorkspace("/offline");
+
+    expect(host?.textContent).toContain("نسخة الكتالوج قديمة");
+    expect(host?.textContent).toContain("Legacy Rice");
+    expect(host?.textContent).toContain("لا تعتمد على المخزون المحلي");
+    expect(host?.textContent).not.toContain("سعر الوحدة");
+  });
+
   it("shows invoice prices in the customer preview only from the scoped invoice RPC", async () => {
     const invoiceId = "22222222-2222-4222-8222-222222222222";
     mocks.user = {
