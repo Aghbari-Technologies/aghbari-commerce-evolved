@@ -599,7 +599,7 @@ function Invoices() {
                     <td style={{ padding: 10 }}>{l.description}</td>
                     <td>{l.item_code ?? "—"}</td>
                     <td>{formatNumber(Number(l.quantity))} {l.unit ?? ""}</td>
-                    {amountsVisible && <><td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td><td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</>}</>
+                    {amountsVisible && <><td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td><td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</td></>}
                   </tr>
                 ))}
               </tbody>
