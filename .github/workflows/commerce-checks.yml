@@ -84,7 +84,7 @@ jobs:
           SUPABASE_URL: https://ci-placeholder.supabase.co
           SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
         run: |
-          npm run preview -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/aghbari-preview.log 2>&1 &
+          npx nitro preview --dir . --host 127.0.0.1 --port 4173 > /tmp/aghbari-preview.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
           ready=0
