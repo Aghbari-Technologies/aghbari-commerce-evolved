@@ -111,6 +111,10 @@ BEGIN
   IF p_event_id IS NULL OR coalesce(length(btrim(p_worker)),0) < 1 OR length(p_worker)>120 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid outbox event or worker';
   END IF;
+  IF coalesce(current_setting('request.jwt.claim.role',true),'') <> 'service_role'
+     AND session_user NOT IN ('postgres','supabase_admin') THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='outbox processing requires a trusted worker';
+  END IF;
 
   SELECT e.* INTO v_event
     FROM public.outbox_events e
@@ -213,6 +217,10 @@ DECLARE
 BEGIN
   IF p_event_id IS NULL OR coalesce(length(btrim(p_worker)),0)<1 OR length(p_worker)>120 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid outbox event or worker';
+  END IF;
+  IF coalesce(current_setting('request.jwt.claim.role',true),'') <> 'service_role'
+     AND session_user NOT IN ('postgres','supabase_admin') THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='outbox failure reporting requires a trusted worker';
   END IF;
 
   SELECT e.* INTO v_event
