@@ -454,7 +454,12 @@ export function appendOfflineCartMutation(
   }
   if (current.applied_mutation_ids.includes(mutation.id)) {
     const priorSignature = current.applied_mutation_signatures[mutation.id];
-    if (priorSignature && priorSignature !== mutationSignature(mutation)) {
+    if (!priorSignature) {
+      // Old checkpoints written before payload signatures cannot prove that a retry
+      // has the same operation body. Fail closed rather than silently accepting ID reuse.
+      throw new Error("تعذر التحقق من تغيير محفوظ في نقطة استئناف قديمة؛ لم تُكرر العملية المحلية.");
+    }
+    if (priorSignature !== mutationSignature(mutation)) {
       throw new Error("تعارض معرّف تغيير السلة؛ استُخدم هذا المعرّف سابقًا لمحتوى مختلف.");
     }
     return current;

@@ -219,6 +219,31 @@ describe("scoped durable offline cart mutation journal", () => {
     expect(readOfflineCartLedger(storage, scope).lines).toEqual([{ product_id: "p1", quantity: 1 }]);
   });
 
+  it("fails closed when a legacy checkpoint cannot verify an already-applied mutation body", () => {
+    const storage = new MemoryStorage();
+    const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
+    const applied = mutation({ id: "legacy-checkpoint-operation", kind: "adjust", product_id: "p1", delta: 1 });
+    appendOfflineCartMutation(storage, scope, applied);
+    compactOfflineCartLedger(storage, scope);
+
+    const checkpointKey = Array.from({ length: storage.length }, (_, index) => storage.key(index))
+      .find((key) => {
+        if (!key?.startsWith(getOfflineCartLedgerPrefix(scope) + "op:")) return false;
+        try { return JSON.parse(storage.getItem(key) || "null").kind === "checkpoint"; } catch { return false; }
+      });
+    expect(checkpointKey).toBeDefined();
+    const checkpoint = JSON.parse(storage.getItem(checkpointKey!) || "null");
+    delete checkpoint.applied_signatures;
+    storage.setItem(checkpointKey!, JSON.stringify(checkpoint));
+
+    expect(() => appendOfflineCartMutation(
+      storage,
+      scope,
+      mutation({ id: "legacy-checkpoint-operation", kind: "adjust", product_id: "p1", delta: 99 }),
+    )).toThrow(/نقطة استئناف قديمة/);
+    expect(readOfflineCartLedger(storage, scope).lines).toEqual([{ product_id: "p1", quantity: 1 }]);
+  });
+
   it("rejects reuse of an active mutation ID with a different payload", () => {
     const storage = new MemoryStorage();
     const scope = createOfflineCartScopeKey("profile-a", "https://store.example");
