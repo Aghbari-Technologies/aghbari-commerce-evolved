@@ -2048,6 +2048,7 @@ function Offline() {
     }
     setSyncing(true);
     setMessage("");
+    let localPersistenceFailed = false;
     try {
       const fetchedCatalog: unknown = await fetchProducts();
       if (!Array.isArray(fetchedCatalog)) {
@@ -2066,6 +2067,7 @@ function Offline() {
         localStorage.setItem(cacheKey, JSON.stringify(rows));
         localStorage.setItem(timestampKey, String(syncTimestamp));
       } catch (cause) {
+        localPersistenceFailed = true;
         // localStorage has no transaction support; best-effort rollback prevents
         // pairing a new catalog with an old freshness timestamp after quota failure.
         try {
@@ -2087,8 +2089,17 @@ function Offline() {
           rows.length +
           " صنف. السعر والمخزون النهائيان يخضعان للتحقق المباشر عند الشراء.",
       );
-    } catch {
-      setMessage("تعذر تحديث الكتالوج أو حفظه محليًا؛ راجع حالة النسخة المحفوظة قبل المتابعة.");
+    } catch (cause) {
+      const detail = cause instanceof Error
+        ? cause.message
+        : "تعذر تحديث الكتالوج من الخادم.";
+      if (localPersistenceFailed) {
+        setStorageError(detail + " احتفظنا بالنسخة السابقة قدر الإمكان؛ أعد التحقق من التخزين قبل تعديل السلة.");
+        setMessage("فشل حفظ تحديث الكتالوج محليًا؛ لم نعلن نجاح المزامنة.");
+      } else {
+        // Network and validation failures must not disable a valid saved cart/catalog.
+        setMessage(detail + " احتفظنا بالنسخة المحلية السابقة.");
+      }
     } finally {
       setSyncing(false);
     }

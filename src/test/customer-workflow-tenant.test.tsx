@@ -881,6 +881,65 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("Legacy Sugar");
   });
 
+  it("preserves prior cache data and blocks edits when persisting a sync fails", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+    const scope = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    const cacheKey = getOfflineCatalogCacheKey(scope);
+    const timestampKey = getOfflineCatalogSyncTimestampKey(scope);
+    const priorCatalog = [{
+      id: "existing-cache-product",
+      name: "Previous Catalog",
+      item_code: "000111",
+      unit: "carton",
+      base_price: 0,
+    }];
+    const priorTimestamp = String(Date.now() - 60_000);
+    window.localStorage.setItem(cacheKey, JSON.stringify(priorCatalog));
+    window.localStorage.setItem(timestampKey, priorTimestamp);
+    mocks.fetchProducts.mockResolvedValueOnce([{
+      id: "new-cache-product",
+      name: "New Catalog",
+      item_code: "000222",
+      unit: "carton",
+      base_price: 0,
+    }]);
+
+    await mountQuoteWorkspace("/offline");
+    const originalSetItem = Storage.prototype.setItem;
+    let failedTimestampWrite = false;
+    const writeSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (key === timestampKey && !failedTimestampWrite && value !== priorTimestamp) {
+        failedTimestampWrite = true;
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    const syncButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("تحديث الكتالوج المحلي"),
+    );
+    expect(syncButton).toBeDefined();
+    await act(async () => {
+      syncButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(window.localStorage.getItem(cacheKey)).toBe(JSON.stringify(priorCatalog));
+    expect(window.localStorage.getItem(timestampKey)).toBe(priorTimestamp);
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain("فشل حفظ تحديث الكتالوج محليًا");
+    const addButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("إضافة إلى المسودة المحلية"),
+    );
+    expect(addButton?.disabled).toBe(true);
+    writeSpy.mockRestore();
+  });
+
   it("warns when the saved local catalog is older than 24 hours", async () => {
     mocks.user = {
       id: USER_ID,
