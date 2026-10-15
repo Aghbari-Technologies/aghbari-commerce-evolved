@@ -1,5 +1,13 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest verification — tenant-scope tests and exact-SHA CI
+
+- Remote `main` is `fe4440cd8a34c61facc06425abce7916dbd52fb1`; exact-head Actions [38694500854](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694500854) completed **SUCCESS**.
+- Actual CI steps on that SHA passed: unit tests (including `src/test/tenant-scope.test.ts`), all migrations and workflows on isolated PostgreSQL 17, lint, build, and port-5173 dev-server smoke.
+- The new resolver tests cover authenticated tenant mapping/cache, missing session, malformed scope denial, retry after RPC failure, anonymous public binding/fail-closed behavior, signed-in tenant selection, and auth-event cache invalidation.
+- **Scope boundary:** this is source-level/unit and isolated database evidence, not authenticated end-to-end browser proof or production database proof. `AGH-SEC-BROWSER-E2E-001` remains OPEN.
+
+---
 ## Active subgate — authenticated tenant-scope resolver regression tests
 
 - Previous source privacy test fix SHA `127fb2b001c1ae4414cd8ee8baf9864cdd8fac12` is now **CI SUCCESS**: [run 38694129297](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694129297); unit tests, isolated PostgreSQL 17 workflows, lint, build and port-5173 smoke all passed on that exact SHA.
@@ -40,7 +48,7 @@
 - **Remote ref safety:** GitHub reports branch protection disabled. Any direct `main` update must use an expected-SHA lease with `force=false`; abort on SHA mismatch.
 - **Local Git limitation:** this execution host has no mounted checkout. The remote branch, commit and Actions were verified by GitHub API; local `git fetch`, `git status`, local branch and local `HEAD` were not run. Working-tree state remains **UNKNOWN**.
 - **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Resume here; implement/execute source-runnable authenticated customer/staff browser acceptance and tenant/pricing privacy checks with non-production fixtures. Do not repeat broad discovery.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001` — external / recheck before production use.** Expected Supabase project ref is `ffxxjaolfntzbapmfbuv`; do not migrate a different project. Keep production tenant isolation unproven until authorized access and required E2E evidence exist.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001` — external, rechecked 2026-10-15.** `get_project(ffxxjaolfntzbapmfbuv)` returns permission denied in the connected Supabase integration. The only visible project with the matching name `aghbari-commerce` is ref `mrcyqezbhpncuvaehwgf`, ACTIVE_HEALTHY; its migration history has 133 rows and ends at `20260925040254`, behind current repository migrations. Similar name is not proof of identical project; do not apply migrations to `mrcyq...` as a substitute. No production mutation occurred; keep production isolation unproven until intended project identity/access is confirmed.
 - **Lovable persistence/sync:** root `AGENTS.md` auto-reading is documented by Lovable's official docs (https://docs.lovable.dev/features/knowledge), so it is the no-cost instruction mechanism. Synchronization of the newest SHA into the live editor remains unverified; do not spend credits on discovery or claim sync based on Git push alone.
 
 ---
