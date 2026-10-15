@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { estimateCost,estimateInputTokens,isSafeProviderBaseUrl,parseProviderResponse,sanitizeAiQuestion,type AiProvider,type AiCostRates } from "./logic.ts";
+import { buildGeminiRequestConfig, estimateCost,estimateInputTokens,isSafeProviderBaseUrl,parseProviderResponse,sanitizeAiQuestion,type AiProvider,type AiCostRates } from "./logic.ts";
 type Runtime={env:{get(n:string):string|undefined};serve(h:(r:Request)=>Response|Promise<Response>):void};
 type Settings={status:string;primary_provider:AiProvider;primary_model:string;primary_base_url:string;fallback_enabled:boolean;fallback_provider:AiProvider;fallback_model:string;fallback_base_url:string};
 type Candidate={provider:AiProvider;model:string;baseUrl:string;key:string;rates:AiCostRates;fallback:boolean};
@@ -26,8 +26,9 @@ async function callProvider(c:Candidate,q:string,signal:AbortSignal){
   url=new URL(c.baseUrl+"/chat/completions");headers={"content-type":"application/json",authorization:"Bearer "+c.key};
   payload={model:c.model,messages:[{role:"system",content:SYSTEM},{role:"user",content:q}],temperature:0.2,max_tokens:384};
  }else{
-  url=new URL(c.baseUrl+"/models/"+encodeURIComponent(c.model)+":generateContent");url.searchParams.set("key",c.key);
-  headers={"content-type":"application/json"};payload={systemInstruction:{parts:[{text:SYSTEM}]},contents:[{role:"user",parts:[{text:q}]}],generationConfig:{temperature:0.2,maxOutputTokens:384}};
+  const request=buildGeminiRequestConfig(c.baseUrl,c.model,c.key);
+  url=request.url;headers=request.headers;
+  payload={systemInstruction:{parts:[{text:SYSTEM}]},contents:[{role:"user",parts:[{text:q}]}],generationConfig:{temperature:0.2,maxOutputTokens:384}};
  }
  const r=await fetch(url,{method:"POST",headers,body:JSON.stringify(payload),signal});
  if(!r.ok)throw new Error("provider_http_"+r.status);
