@@ -1494,6 +1494,9 @@ async function main() {
     [finalizedImport[0].result.snapshot_id],
   );
   assert.equal(analyticsRowsBefore.length, 2, "quality regression fixture must contain both import rows");
+  // Change isolated fixture rows only with the privileged test connection, then verify
+  // the SECURITY DEFINER analytics contract under the authenticated staff role.
+  await db.unsafe("reset role");
   await db.unsafe(
     "update public.onyx_snapshot_rows set data=data || jsonb_build_object('quantity','not-a-number') where id=$1",
     [analyticsRowsBefore[0].id],
@@ -1502,6 +1505,7 @@ async function main() {
     "update public.onyx_snapshot_rows set data=data - 'revenue' where id=$1",
     [analyticsRowsBefore[1].id],
   );
+  await db.unsafe("set role authenticated");
   const incompleteOnyxAnalytics = await db.unsafe(
     "select public.get_onyx_snapshot_analytics($1::uuid) as result",
     [finalizedImport[0].result.snapshot_id],
@@ -1520,6 +1524,7 @@ async function main() {
   const missingRevenueItem = incompleteOnyxAnalytics[0].result.top_items.find((item) => item.item_code === "000126");
   assert.equal(invalidItem.quantity, null, "top-item quantity should stay unavailable when one of its rows is malformed");
   assert.equal(missingRevenueItem.revenue, null, "top-item revenue should stay unavailable when its row is missing the field");
+  await db.unsafe("reset role");
   await db.unsafe(
     "update public.onyx_snapshot_rows set data=$2::jsonb where id=$1",
     [analyticsRowsBefore[0].id, db.json(analyticsRowsBefore[0].data)],
@@ -1528,6 +1533,7 @@ async function main() {
     "update public.onyx_snapshot_rows set data=$2::jsonb where id=$1",
     [analyticsRowsBefore[1].id, db.json(analyticsRowsBefore[1].data)],
   );
+  await db.unsafe("set role authenticated");
   const restoredOnyxAnalytics = await db.unsafe(
     "select public.get_onyx_snapshot_analytics($1::uuid) as result",
     [finalizedImport[0].result.snapshot_id],
