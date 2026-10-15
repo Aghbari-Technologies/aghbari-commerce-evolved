@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { classifyOutboxProcessResult } from "../../supabase/functions/outbox-worker/logic";
+import {
+  classifyOutboxProcessResult,
+  sanitizeOutboxErrorMessage,
+} from "../../supabase/functions/outbox-worker/logic";
 
 describe("outbox worker logical RPC result handling", () => {
   it.each([
