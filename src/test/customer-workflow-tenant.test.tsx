@@ -685,8 +685,8 @@ describe("customer workflow tenant and monetary display boundaries", () => {
         searchInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
     });
-    expect(host?.textContent).toContain("سُكَّر أبيض");
-    expect(host?.textContent).not.toContain("Rice");
+    expect(host?.querySelector('[aria-labelledby="offline-catalog-heading"]')?.textContent).toContain("سُكَّر أبيض");
+    expect(host?.querySelector('[aria-labelledby="offline-catalog-heading"]')?.textContent).not.toContain("Rice");
 
     await act(async () => {
       if (searchInput) {
