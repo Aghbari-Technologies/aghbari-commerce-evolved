@@ -59,6 +59,7 @@ import {
   writeLegacyCartOwner,
   getOfflineCatalogSyncTimestampKey,
   subscribeToOfflineCartState,
+  getOfflineCartRestoreEpochKey,
 } from "@/lib/offline-cart-ledger";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
@@ -2288,7 +2289,8 @@ function Offline() {
         return;
       }
 
-      const mutationId = createStableOfflineCartMutationId("backup-restore", lines);
+      const restoreEpoch = localStorage.getItem(getOfflineCartRestoreEpochKey(cartScopeKey)) || "initial";
+      const mutationId = createStableOfflineCartMutationId("backup-restore", { epoch: restoreEpoch, lines });
       let next: ReturnType<typeof readOfflineCartLedger>;
       try {
         next = appendOfflineCartMutation(localStorage, cartScopeKey, {
@@ -2374,6 +2376,8 @@ function Offline() {
         kind: "clear",
       });
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      // A new restore generation allows an intentionally cleared draft to restore the same backup again.
+      localStorage.setItem(getOfflineCartRestoreEpochKey(cartScopeKey), pendingMutationId(intent));
       finishLocalMutation(intent);
       setCartLines(next.lines);
       setCartCount(0);
@@ -2399,6 +2403,7 @@ function Offline() {
             id,
             kind: "clear",
           }, initialOfflineCartLines());
+          localStorage.setItem(getOfflineCartRestoreEpochKey(cartScopeKey), id);
         } else if (intent.startsWith("remove:")) {
           appendOfflineCartMutation(localStorage, cartScopeKey, {
             id,

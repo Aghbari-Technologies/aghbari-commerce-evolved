@@ -880,6 +880,26 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       return window.localStorage.getItem(key) || "";
     }).join("\n");
     expect(storedLedgerRows).not.toMatch(/base_price|cost_price|internal_notes|888888|999999/i);
+
+    // Deliberately clear the draft, then restore the same file again. Within the
+    // new draft generation, a repeat import remains idempotent.
+    const clearAgain = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("تفريغ المسودة المحلية"),
+    );
+    await act(async () => {
+      clearAgain?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines).toEqual([]);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      Object.defineProperty(restoreInput, "files", { configurable: true, value: [fakeBackupFile] });
+      await act(async () => {
+        restoreInput?.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     restoreConfirm.mockRestore();
   });

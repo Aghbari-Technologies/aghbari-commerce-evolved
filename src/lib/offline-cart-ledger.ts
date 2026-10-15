@@ -168,6 +168,11 @@ export function getOfflineCatalogSyncTimestampKey(scopeKey: string): string {
   return "aghbari:catalog-synced-at:v1:" + encodeScope(scopeKey);
 }
 
+/** Generation changes only after a confirmed local-draft clear; same backup can then be restored again. */
+export function getOfflineCartRestoreEpochKey(scopeKey: string): string {
+  return "aghbari:cart-restore-epoch:v1:" + encodeScope(scopeKey);
+}
+
 export function isGuestCartScope(scopeKey: string): boolean {
   return scopeKey.endsWith("::guest");
 }
