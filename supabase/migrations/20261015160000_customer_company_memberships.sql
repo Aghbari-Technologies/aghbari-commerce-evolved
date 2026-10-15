@@ -636,7 +636,6 @@ DECLARE
   v_invoices jsonb;
   v_payments jsonb;
 BEGIN
-  IF NOT public.current_customer_can('statement.read') THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='company member is not allowed to read the account statement'; END IF;
   IF auth.uid() IS NULL OR v_profile IS NULL OR NOT EXISTS (
     SELECT 1
       FROM public.profiles p
@@ -646,6 +645,8 @@ BEGIN
   ) THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='authenticated active customer required for account statement';
   END IF;
+
+  IF NOT public.current_customer_can('statement.read') THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='company member is not allowed to read the account statement'; END IF;
 
   SELECT c.id, c.organization_id INTO v_customer, v_org
     FROM public.customers c WHERE c.id=public.current_customer_id();
