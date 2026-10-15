@@ -1,6 +1,6 @@
 import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeInvoiceAmounts, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
 function makeStoredZip(files: Record<string, string>): Blob {
   const encoder = new TextEncoder();
@@ -131,14 +131,39 @@ describe('commerce completion utilities', () => {
     expect(summarizeAccount(
       [{ id: 'i1', total_amount: '125.50' }, { id: 'i2', total_amount: 50 }],
       [{ invoice_id: 'i1', amount: '25.50' }, { invoice_id: 'i1', amount: 10 }],
-    )).toEqual({ invoiced: 175.5, paid: 35.5, outstanding: 140 });
+    )).toEqual({ valid: true, invoiced: 175.5, paid: 35.5, outstanding: 140 });
   });
 
   it('excludes void invoices from the account balance', () => {
     expect(summarizeAccount(
       [{ id: 'live', total_amount: 100 }, { id: 'void', total_amount: 500, status: 'void' }],
       [{ invoice_id: 'live', amount: 20 }, { invoice_id: 'void', amount: 500 }],
-    )).toEqual({ invoiced: 100, paid: 20, outstanding: 80 });
+    )).toEqual({ valid: true, invoiced: 100, paid: 20, outstanding: 80 });
+  });
+
+  it('uses exact minor-unit arithmetic across many decimal payments', () => {
+    const payments = Array.from({ length: 100 }, () => ({ invoice_id: 'i1', amount: '0.10' }));
+    expect(summarizeAccount([{ id: 'i1', total_amount: '10.00' }], payments)).toEqual({
+      valid: true, invoiced: 10, paid: 10, outstanding: 0,
+    });
+    expect(summarizeInvoiceAmounts(
+      { id: 'i1', total_amount: '10.00' }, payments,
+    )).toEqual({ valid: true, total: 10, paid: 10, outstanding: 0 });
+  });
+
+  it('marks malformed monetary fields unavailable rather than treating them as zero', () => {
+    expect(summarizeAccount(
+      [{ id: 'i1', total_amount: 'not-a-number' }],
+      [],
+    )).toEqual({ valid: false, invoiced: 0, paid: 0, outstanding: 0 });
+    expect(summarizeAccount(
+      [{ id: 'i1', total_amount: '10.00' }],
+      [{ invoice_id: 'i1', amount: '' }],
+    )).toEqual({ valid: false, invoiced: 0, paid: 0, outstanding: 0 });
+    expect(summarizeInvoiceAmounts(
+      { id: 'i1', total_amount: '10.00' },
+      [{ invoice_id: 'i1', amount: 'NaN' }],
+    )).toEqual({ valid: false, total: 0, paid: 0, outstanding: 0 });
   });
 
   it('rejects malformed, duplicate, fractional, and unbounded offline cart lines', () => {

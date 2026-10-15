@@ -3,27 +3,98 @@ import type { ProductWithInventory } from './types';
 export type InvoiceAmount = { id: string; total_amount: number | string; status?: string };
 export type PaymentAmount = { invoice_id: string; amount: number | string };
 
-function money(value: unknown): number {
-  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : 0;
+type InvoiceBalance = {
+  valid: boolean;
+  total: number;
+  paid: number;
+  outstanding: number;
+};
+
+/** Parse database money as integer minor units; never use floating-point addition for balances. */
+function moneyMinorUnits(value: unknown): bigint | null {
+  const raw = typeof value === 'number'
+    ? String(value)
+    : typeof value === 'string'
+      ? value.trim()
+      : '';
+  if (!raw || raw.length > 40 || !/^\d+(?:\.\d{1,2})?$/.test(raw)) return null;
+  const [whole = '0', fraction = ''] = raw.split('.');
+  try {
+    return BigInt(whole) * 100n + BigInt((fraction + '00').slice(0, 2));
+  } catch {
+    return null;
+  }
+}
+
+function moneyNumber(minorUnits: bigint): number {
+  return Number(minorUnits) / 100;
+}
+
+function invalidInvoiceBalance(): InvoiceBalance {
+  return { valid: false, total: 0, paid: 0, outstanding: 0 };
+}
+
+/** Return an explicit invalid state instead of disguising malformed financial values as zero. */
+export function summarizeInvoiceAmounts(
+  invoice: InvoiceAmount,
+  payments: PaymentAmount[],
+): InvoiceBalance {
+  const total = moneyMinorUnits(invoice.total_amount);
+  if (total === null) return invalidInvoiceBalance();
+
+  let paid = 0n;
+  for (const payment of payments) {
+    if (payment.invoice_id !== invoice.id) continue;
+    const amount = moneyMinorUnits(payment.amount);
+    if (amount === null) return invalidInvoiceBalance();
+    paid += amount;
+  }
+
+  const outstanding = invoice.status === 'void' || total <= paid ? 0n : total - paid;
+  return {
+    valid: true,
+    total: moneyNumber(total),
+    paid: moneyNumber(paid),
+    outstanding: moneyNumber(outstanding),
+  };
 }
 
 export function summarizeAccount(invoices: InvoiceAmount[], payments: PaymentAmount[]) {
-  const paidByInvoice = new Map<string, number>();
-  for (const payment of payments) {
-    paidByInvoice.set(payment.invoice_id, (paidByInvoice.get(payment.invoice_id) ?? 0) + money(payment.amount));
-  }
   const activeInvoices = invoices.filter((invoice) => invoice.status !== 'void');
   const activeIds = new Set(activeInvoices.map((invoice) => invoice.id));
-  const invoiced = activeInvoices.reduce((sum, invoice) => sum + money(invoice.total_amount), 0);
-  const paid = payments
-    .filter((payment) => activeIds.has(payment.invoice_id))
-    .reduce((sum, payment) => sum + money(payment.amount), 0);
-  const outstanding = activeInvoices.reduce(
-    (sum, invoice) => sum + Math.max(0, money(invoice.total_amount) - (paidByInvoice.get(invoice.id) ?? 0)),
-    0,
-  );
-  return { invoiced, paid, outstanding };
+  const totalsByInvoice = new Map<string, bigint>();
+  const paidByInvoice = new Map<string, bigint>();
+
+  let invoiced = 0n;
+  for (const invoice of activeInvoices) {
+    const amount = moneyMinorUnits(invoice.total_amount);
+    if (amount === null) return { valid: false, invoiced: 0, paid: 0, outstanding: 0 };
+    totalsByInvoice.set(invoice.id, amount);
+    invoiced += amount;
+  }
+
+  let paid = 0n;
+  for (const payment of payments) {
+    // Orphaned rows and payments for void invoices must not change the visible account summary.
+    if (!activeIds.has(payment.invoice_id)) continue;
+    const amount = moneyMinorUnits(payment.amount);
+    if (amount === null) return { valid: false, invoiced: 0, paid: 0, outstanding: 0 };
+    paid += amount;
+    paidByInvoice.set(payment.invoice_id, (paidByInvoice.get(payment.invoice_id) ?? 0n) + amount);
+  }
+
+  let outstanding = 0n;
+  for (const [invoiceId, total] of totalsByInvoice) {
+    const invoicePaid = paidByInvoice.get(invoiceId) ?? 0n;
+    if (total > invoicePaid) outstanding += total - invoicePaid;
+  }
+
+  return {
+    valid: true,
+    invoiced: moneyNumber(invoiced),
+    paid: moneyNumber(paid),
+    outstanding: moneyNumber(outstanding),
+  };
 }
 
 export type CartLineDraft = { product_id: string; quantity: number };
