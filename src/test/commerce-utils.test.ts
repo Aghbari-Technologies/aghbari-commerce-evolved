@@ -1,6 +1,6 @@
 import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
 
 function makeStoredZip(files: Record<string, string>): Blob {
   const encoder = new TextEncoder();
@@ -72,6 +72,45 @@ describe('commerce completion utilities', () => {
     expect(normalizeSavedProductIds(['a', 'b', 'c', 'd'], 3)).toEqual(['a', 'b', 'c']);
     expect(normalizeSavedProductIds({ ids: ['a'] })).toEqual([]);
     expect(normalizeSavedProductIds(['a', 'b'], 0)).toEqual([]);
+  });
+
+  it('strips cost, tier prices, inventory reservations, and thresholds from persisted public catalog cache', () => {
+    const [safe] = sanitizePublicCatalogCache([{
+      id: 'p1',
+      name: 'Sugar',
+      item_code: '000125',
+      barcode: '628123',
+      unit: 'carton',
+      base_price: 1200,
+      cost_price: 800,
+      retail_price: 1200,
+      wholesale_price: 1000,
+      min_stock: 50,
+      internal_notes: 'should not persist',
+      inventory: {
+        id: 'inv1',
+        product_id: 'p1',
+        warehouse_id: 'wh1',
+        quantity_on_hand: 20,
+        quantity_reserved: 4,
+        quantity_available: 16,
+        reorder_point: 8,
+        internal_movement_note: 'should not persist',
+      },
+      category: { id: 'c1', name: 'Food', code: 'FOOD', internal_note: 'should not persist' },
+    }]);
+    expect(safe).toBeDefined();
+    expect(safe).not.toHaveProperty('cost_price');
+    expect(safe).not.toHaveProperty('retail_price');
+    expect(safe).not.toHaveProperty('wholesale_price');
+    expect(safe).not.toHaveProperty('min_stock');
+    expect(safe).not.toHaveProperty('internal_notes');
+    expect(safe?.inventory).not.toHaveProperty('quantity_reserved');
+    expect(safe?.inventory).not.toHaveProperty('reorder_point');
+    expect(safe?.inventory).not.toHaveProperty('internal_movement_note');
+    expect(safe?.category).not.toHaveProperty('internal_note');
+    expect(safe?.inventory?.quantity_available).toBe(16);
+    expect(sanitizePublicCatalogCache([{ id: 'bad', name: 'bad', item_code: 'x', unit: 'box', base_price: 'NaN' }])).toEqual([]);
   });
 
   it('calculates totals only from persisted invoice and payment records', () => {

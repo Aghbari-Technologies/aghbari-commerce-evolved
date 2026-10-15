@@ -1,3 +1,5 @@
+import type { ProductWithInventory } from './types';
+
 export type InvoiceAmount = { id: string; total_amount: number | string; status?: string };
 export type PaymentAmount = { invoice_id: string; amount: number | string };
 
@@ -226,4 +228,77 @@ export function classifyAssistantIntent(question: string): AssistantIntent {
   if (/طلب|شحن|توصيل|حالة الطلب|تتبع/.test(q)) return 'order_status';
   if (/منتج|صنف|سعر|باركود|مخزون|متوفر|ابحث|بحث/.test(q)) return 'catalog_search';
   return 'general';
+}
+
+/**
+ * Persist an explicit public catalog projection, never raw API records.
+ * This strips staff costs, tier prices, reorder thresholds and reservations from browser storage.
+ */
+export function sanitizePublicCatalogCache(value: unknown): ProductWithInventory[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+    const product = candidate as Record<string, unknown>;
+    if (
+      typeof product.id !== 'string' ||
+      typeof product.name !== 'string' ||
+      typeof product.item_code !== 'string' ||
+      typeof product.unit !== 'string'
+    ) return [];
+
+    const basePrice = typeof product.base_price === 'number' || typeof product.base_price === 'string'
+      ? Number(product.base_price)
+      : Number.NaN;
+    if (!Number.isFinite(basePrice) || basePrice < 0) return [];
+
+    const rawInventory = product.inventory;
+    let inventory: Record<string, unknown> | undefined;
+    if (rawInventory && typeof rawInventory === 'object' && !Array.isArray(rawInventory)) {
+      const row = rawInventory as Record<string, unknown>;
+      const quantity = Number(row.quantity_available);
+      if (typeof row.product_id === 'string' && row.product_id === product.id && Number.isFinite(quantity) && quantity >= 0) {
+        inventory = {
+          id: typeof row.id === 'string' ? row.id : '',
+          product_id: row.product_id,
+          warehouse_id: typeof row.warehouse_id === 'string' ? row.warehouse_id : '',
+          quantity_on_hand: Number.isFinite(Number(row.quantity_on_hand)) ? Number(row.quantity_on_hand) : quantity,
+          quantity_available: quantity,
+        };
+      }
+    }
+
+    const rawCategory = product.category;
+    let category: Record<string, unknown> | undefined;
+    if (rawCategory && typeof rawCategory === 'object' && !Array.isArray(rawCategory)) {
+      const row = rawCategory as Record<string, unknown>;
+      if (typeof row.id === 'string' && typeof row.name === 'string') {
+        category = {
+          id: row.id,
+          name: row.name,
+          code: typeof row.code === 'string' ? row.code : null,
+          parent_id: typeof row.parent_id === 'string' ? row.parent_id : null,
+          sort_order: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : 0,
+          is_active: row.is_active === true,
+        };
+      }
+    }
+
+    const safe: Record<string, unknown> = {
+      id: product.id,
+      name: product.name,
+      item_code: product.item_code,
+      barcode: typeof product.barcode === 'string' ? product.barcode : null,
+      description: typeof product.description === 'string' ? product.description : null,
+      unit: product.unit,
+      base_price: basePrice,
+      status: typeof product.status === 'string' ? product.status : 'active',
+      category_id: typeof product.category_id === 'string' ? product.category_id : null,
+      image_url: typeof product.image_url === 'string' ? product.image_url : null,
+      created_at: typeof product.created_at === 'string' ? product.created_at : '',
+    };
+    if (inventory) safe.inventory = inventory;
+    if (category) safe.category = category;
+    return [safe as unknown as ProductWithInventory];
+  });
 }

@@ -1,4 +1,4 @@
-import { getCurrentTenantScope, supabase } from './supabase';
+import { getCurrentTenantScope, getStorefrontDataScope, supabase } from './supabase';
 import type {
   Product, Category, Customer, Supplier, Order, OrderItem,
   InventoryBalance, PricingRule, CreatePricingRuleInput, Promotion, AiAlert, AiTask, Notification,
@@ -7,16 +7,21 @@ import type {
 
 // ─── Products ───
 export async function fetchProducts(): Promise<ProductWithInventory[]> {
-  const { organizationId: orgId, warehouseId } = await getCurrentTenantScope();
+  const scope = await getStorefrontDataScope();
+  const { organizationId: orgId, warehouseId, isStaff } = scope;
+  const publicProductColumns = 'id,organization_id,category_id,name,item_code,barcode,description,unit,base_price,status,image_url,created_at';
   const { data: products, error } = await supabase
     .from('products')
-    .select('*')
+    .select(isStaff ? '*' : publicProductColumns)
     .eq('organization_id', orgId)
     .order('name');
   if (error) throw error;
 
   const inventoryResult = warehouseId
-    ? await supabase.from('inventory_balances').select('*').eq('warehouse_id', warehouseId)
+    ? await supabase
+        .from('inventory_balances')
+        .select(isStaff ? '*' : 'id,product_id,warehouse_id,quantity_on_hand,quantity_available')
+        .eq('warehouse_id', warehouseId)
     : { data: [] as InventoryBalance[], error: null };
   const { data: inventory, error: inventoryError } = inventoryResult;
   if (inventoryError) throw inventoryError;
@@ -68,7 +73,7 @@ export async function deleteProduct(id: string): Promise<void> {
 
 // ─── Categories ───
 export async function fetchCategories(): Promise<Category[]> {
-  const { organizationId: orgId } = await getCurrentTenantScope();
+  const { organizationId: orgId } = await getStorefrontDataScope();
   const { data, error } = await supabase
     .from('categories')
     .select('*')
@@ -445,7 +450,7 @@ export async function approvePricingRule(id: string, approvalNote: string): Prom
 
 // ─── Promotions ───
 export async function fetchPromotions(): Promise<Promotion[]> {
-  const { organizationId: orgId } = await getCurrentTenantScope();
+  const { organizationId: orgId } = await getStorefrontDataScope();
   const { data, error } = await supabase
     .from('promotions')
     .select('*')
@@ -548,10 +553,13 @@ export async function updateSetting(key: string, value: unknown, category: strin
 }
 
 export async function fetchSettingsMap(): Promise<Record<string, unknown>> {
-  const settings = await fetchSettings();
-  const map: Record<string, unknown> = {};
-  settings.forEach((s) => { map[s.key] = s.value; });
-  return map;
+  // Storefront must never read the full private admin-settings table.
+  const { data, error } = await supabase.rpc('get_public_storefront_settings');
+  if (error) throw new Error('تعذر تحميل إعدادات العرض العام: ' + error.message);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('أعاد الخادم إعدادات عرض عام غير صالحة.');
+  }
+  return data as Record<string, unknown>;
 }
 
 // ─── Unified import engine ───
