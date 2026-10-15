@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active subgate — customer workflow auth and tenant acceptance
+
+- The preceding tenant-scope resolver source tests at SHA `fe4440cd8a34c61facc06425abce7916dbd52fb1` passed exact-SHA CI [38694500854](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694500854). The follow-up state/blocker documentation at SHA `d5b404235f0b97347b4140281dbb44850e05d341` also passed exact-SHA CI [38694768595](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694768595).
+- This batch adds `src/test/customer-workflow-tenant.test.tsx`, which mounts the actual `QuoteWorkspacePage` component and verifies unauthenticated users cause no tenant or database read, authenticated customers load products only after tenant scope resolution and query by the resolved organization, and scope failure stops data reads.
+- This is component-level jsdom acceptance, not a live browser session, real auth-provider integration or production database proof. Keep `AGH-SEC-BROWSER-E2E-001` OPEN until live authenticated customer/staff browser acceptance and full pricing privacy channels are proven.
+
+---
 ## Latest verification — tenant-scope tests and exact-SHA CI
 
 - Remote `main` is `fe4440cd8a34c61facc06425abce7916dbd52fb1`; exact-head Actions [38694500854](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694500854) completed **SUCCESS**.
