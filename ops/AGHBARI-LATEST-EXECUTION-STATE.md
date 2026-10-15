@@ -1,22 +1,23 @@
 # Aghbari Commerce — Latest Execution State
 
-## Current execution pointer — 2026-10-16 (offline/PWA and outbox reliability hardening)
+## Current execution pointer — 2026-10-16 (offline cart interaction and Outbox hardening)
 
 - Active PR #72: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72
-- Working branch: fix/acceptance-hardening-cart-finance-20261015; target main. Do not merge or publish from this session.
-- Branch HEAD at this checkpoint: 4cfe0e01294cb774b5f11eeff947cfb8a66b3e24. Exact-head CI for this SHA is not confirmed.
-- Latest complete exact-head CI success: 8a79ab137eacec9630c1f3d6e7cbc69176cbc8f4, Actions run 38815228717 SUCCESS. It passed the then-current unit tests, isolated PostgreSQL 17 migrations/workflows, lint, build, production preview smoke on 4173, and dev/PWA smoke on 5173. Do not transfer PASS to newer commits.
-- Offline cart journal: src/lib/offline-cart-ledger.ts fingerprints compacted mutation bodies, rejects changed payloads for applied IDs, fails closed for unsigned legacy checkpoints, and compacts/replays by included operation IDs instead of timestamp-only cutoffs. Tests cover collisions and competing write/checkpoint races.
-- Offline workspace: src/components/CustomerWorkflows.tsx displays the scoped sanitized catalog, adds items to the local cart draft only, warns that price/stock/order acceptance requires the server, supports searching name/item code/barcode/category with a 100-row render limit, and preserves the local cache on malformed sync responses. A cross-tab storage listener was added after the last passing SHA and has an isolated test in src/lib/offline-cart-ledger.test.ts.
-- Service worker: public/sw.js reads only from its own shell cache, caches only public shell/build assets/favicon, skips order-commit POSTs, avoids arbitrary same-origin image caching and suppresses best-effort cache-write rejection.
-- Outbox worker: bounded streaming 4096-byte body reads, strict UTF-8/content-length/payload/claim validation, caught claim/process/failure RPC transport errors, and sanitization of PII/auth/cookies/JWT/provider key formats. Tests passed at exact SHA 8a79ab1; the later cross-tab change at 4cfe0e0 is unverified.
-- Requirements remain PARTIAL for AGH-OFFLINE-PWA-001 and AGH-ASYNC-OUTBOX-001 until authenticated runtime/deployment and deployed worker crash/replay acceptance are proven. Customer monetary policies remain hidden by default; source/isolated DB proof is not production certification.
-- External boundary: intended Supabase project ffxxjaolfntzbapmfbuv is inaccessible; never substitute mrcyqezbhpncuvaehwgf. Browser profiles have no saved sign-in state. No production DB write/migration, Lovable publish, or merge to main has been performed.
-- next_task_id = AGH-OFFLINE-PWA-001 — OPEN. Verify the newest cross-tab storage listener test on exact head, fix any failure, then continue offline resume/retry hardening. Next continue AGH-ASYNC-OUTBOX-001 and later published-route acceptance if authorized runtime access becomes available.
-- Resume rule: read this file first, resolve live PR/branch refs, check evidence only for the exact tested SHA, continue directly with code, and push coherent batches. Do not restart discovery or ask the owner to repeat the mandate.
+- Work branch: fix/acceptance-hardening-cart-finance-20261015, target main. Do not merge or publish from this session.
+- Branch HEAD at this checkpoint: dde148960bd077dc9fd01f716e9494b59e3bb728. Exact-head CI is still in progress/unconfirmed.
+- Last known exact-head CI success: 5796aa16949d1fcd256bb9db5152f43d74e45bfb, run 38816536023 SUCCESS. This included offline legacy-cart preservation. Do not transfer PASS to newer commits.
+- Newer code awaiting exact-head CI: 1b51e003ba89268b8df54d9ac8e335e0d5a8ed49 added editable local cart lines (increase/decrease/remove) and a focused test; its initial run failed because a search assertion checked the whole page while the cart legitimately retained Rice. That assertion now targets the catalog panel only in dde148960bd077dc9fd01f716e9494b59e3bb728.
+- Offline cart journal: compacted operation signatures, fail-closed legacy unsigned checkpoint retries, concurrent-compaction safety, legacy draft preservation during first ledger seed, and scoped storage change subscriptions are implemented. Latest source includes the real editable local cart draft with no prices or order submission.
+- Offline workspace: scoped sanitized catalog, Arabic storefront search, 100-row result limit, explicit old/unknown cache freshness, preservation on malformed sync, storage-error recovery action, and local add/edit/remove are implemented. Orders and money remain server-only.
+- Service worker: reads only from its owned cache, writes only public shell/build assets/favicon, no order-commit POST replay, no arbitrary image caching, cache-write/storage-open failures are handled.
+- Outbox worker: streaming 4096-byte request limit, strict UTF-8/body/claim validation, controlled transport exceptions for claim/process/failure RPCs, and sanitization of PII/auth/cookies/JWT/provider secrets. Isolated PostgreSQL test already proves claims/lease recovery/idempotency/retry/dead-letter semantics.
+- Requirement status remains PARTIAL for AGH-OFFLINE-PWA-001 and AGH-ASYNC-OUTBOX-001 pending current exact-head CI and authenticated live/deployed acceptance. Current branch SHA must be tested exactly; do not use older passing runs as proof for newer source.
+- External boundary: intended Supabase project ffxxjaolfntzbapmfbuv inaccessible; never substitute mrcyqezbhpncuvaehwgf. No production DB writes/migrations, Lovable publish, or merge to main.
+- next_task_id = AGH-OFFLINE-PWA-001 — OPEN. Finish exact-head acceptance, then harden/verify retry of local catalog and cart restoration; continue with Outbox worker recovery once this feature batch is stable.
+- Resume rule: read this file first, resolve live branch/PR refs, verify current SHA evidence, make code changes directly, commit and push coherent batches. Do not restart discovery or ask the owner to repeat the mandate.
 
 ## Persistent execution protocol
-- Existing authority files: AGENTS.md, ops/AGHBARI-PERSISTENT-EXECUTION-PROTOCOL.md, and docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md. Keep one execution pointer and one requirement registry.
+- Canonical references already exist: AGENTS.md, ops/AGHBARI-PERSISTENT-EXECUTION-PROTOCOL.md, and docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md. Keep one resume pointer and one requirement registry.
 
 ---
 
