@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   ],
 }));
 
+const initialProducts = [...mocks.products];
+
 vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCategories: mocks.fetchCategories,
@@ -92,11 +94,21 @@ function clickButton(host: HTMLElement, selector: string, index: number) {
 describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    mocks.products.splice(0, mocks.products.length, ...initialProducts);
   });
 
   afterEach(async () => {
     for (const mount of mounts.splice(0)) await unmount(mount);
     window.localStorage.clear();
+  });
+
+  it("distinguishes an empty published catalog from a filtered empty result", async () => {
+    mocks.products.splice(0, mocks.products.length);
+    const empty = await mountAt("/");
+
+    expect(empty.host.textContent).toContain("لا توجد أصناف منشورة حالياً");
+    expect(empty.host.textContent).toContain("لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً");
+    expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
   });
 
   it("persists wishlist and caps comparison at three across direct route loads", async () => {
