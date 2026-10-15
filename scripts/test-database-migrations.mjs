@@ -1665,12 +1665,16 @@ async function main() {
     () => db.unsafe("select public.configure_ai_usage_budget($1::jsonb)", [db.json({ ...aiSettings, primary_base_url: "http://localhost:8000/v1" })]),
     /endpoint configuration is invalid/i,
   );
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
   await expectFailure("customers cannot access AI gateway administration",
     () => db.unsafe("select public.get_ai_gateway_budget()"), /administrator or manager/i);
   await expectFailure("authenticated users cannot read AI reservation rows directly",
     () => db.unsafe("select * from public.ai_usage_reservations"), /permission denied/i);
 
   await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   const runtimeConfig = await db.unsafe("select public.get_ai_gateway_runtime_config($1::uuid) as result", [staffAuthUserId]);
   assert.equal(runtimeConfig[0].result.status, "enabled");
   assert.equal(runtimeConfig[0].result.organization_id, organizationId);

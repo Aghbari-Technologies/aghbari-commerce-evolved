@@ -82,7 +82,7 @@ if(d)d.serve(async(request)=>{
   catch{inputTokens+=inputEstimate;actualCost+=estimateCost(inputEstimate,0,c.rates);}
   finally{clearTimeout(timer);}
  }
- const fallbackUsed=Boolean(used&&used!==attempts[0]),last=used??attempts[attempts.length-1];
+ const fallbackUsed=Boolean(used?.fallback),last=used??attempts[attempts.length-1];
  const {error:recordError}=await db.rpc("complete_ai_gateway_usage",{
   p_reservation_id:reservation.reservation_id,p_input_tokens:Math.min(inputTokens,2000000),p_output_tokens:Math.min(outputTokens,100000),
   p_actual_cost:Math.min(Number(actualCost.toFixed(6)),10000),p_execution_time_ms:Math.min(Math.max(0,Date.now()-started),600000),
