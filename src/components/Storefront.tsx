@@ -246,7 +246,19 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
                 ? <div className="sf-empty" role="status"><Package size={30} /><span>جار تحميل كتالوج المنتجات...</span></div>
                 : productsError && !products.length
                   ? <div className="sf-empty" role="alert"><Package size={30} /><strong>تعذر تحميل الكتالوج</strong><small>{productsError}</small><button type="button" className="sf-btn-secondary" onClick={() => void refetchProducts()}>إعادة المحاولة</button></div>
-                  : <ProductGrid products={filtered} wishlist={wishlist} compare={compare} onOpen={openProduct} onAdd={addToCart} onWishlist={toggleWishlist} onCompare={toggleCompare} />}
+                  : <ProductGrid
+                    products={filtered}
+                    wishlist={wishlist}
+                    compare={compare}
+                    emptyTitle={products.length === 0 ? 'لا توجد أصناف منشورة حالياً' : 'لا توجد منتجات مطابقة'}
+                    emptyDescription={products.length === 0
+                      ? 'لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً. يُرجى التواصل مع إدارة المتجر إذا كنت تتوقع ظهور المنتجات.'
+                      : 'جرّب تغيير البحث أو التصنيف'}
+                    onOpen={openProduct}
+                    onAdd={addToCart}
+                    onWishlist={toggleWishlist}
+                    onCompare={toggleCompare}
+                  />}
             </section>
           </>
         )}
@@ -310,8 +322,8 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
   );
 }
 
-function ProductGrid({ products, wishlist, compare, onOpen, onAdd, onWishlist, onCompare }: { products: ProductWithInventory[]; wishlist: string[]; compare: string[]; onOpen: (product: ProductWithInventory) => void; onAdd: (product: ProductWithInventory) => void; onWishlist: (id: string) => void; onCompare: (id: string) => void }) {
-  if (!products.length) return <div className="sf-empty"><Package size={30} /><span>لا توجد منتجات مطابقة</span><small>جرّب تغيير البحث أو التصنيف</small></div>;
+function ProductGrid({ products, wishlist, compare, emptyTitle, emptyDescription, onOpen, onAdd, onWishlist, onCompare }: { products: ProductWithInventory[]; wishlist: string[]; compare: string[]; emptyTitle: string; emptyDescription: string; onOpen: (product: ProductWithInventory) => void; onAdd: (product: ProductWithInventory) => void; onWishlist: (id: string) => void; onCompare: (id: string) => void }) {
+  if (!products.length) return <div className="sf-empty" role="status"><Package size={30} /><strong>{emptyTitle}</strong><small>{emptyDescription}</small></div>;
   return <div className="sf-product-grid">{products.map((product) => { const qty = product.inventory?.quantity_available ?? 0; const out = qty <= 0; const liked = wishlist.includes(product.id); const compared = compare.includes(product.id); return <article className="sf-product-card" key={product.id}><div className="sf-product-img" onClick={() => onOpen(product)}>{product.image_url ? <img src={product.image_url} alt={product.name} /> : <Package size={36} />}<div className="sf-card-actions"><button aria-label="إضافة للمفضلة" className={liked ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onWishlist(product.id); }}><Heart size={16} fill={liked ? 'currentColor' : 'none'} /></button><button aria-label="إضافة للمقارنة" className={compared ? 'active' : ''} onClick={(event) => { event.stopPropagation(); onCompare(product.id); }}><GitCompare size={16} /></button></div></div><button className="sf-product-body sf-product-open" onClick={() => onOpen(product)}><h3>{product.name}</h3><p>{product.category?.name ?? 'غير مصنف'} · {product.item_code}</p><div className="sf-product-price"><strong>{typeof product.display_price === 'number' ? formatCurrency(product.display_price) : 'اتصل بالإنترنت لعرض سعر فئتك'}</strong><span>{product.unit}</span></div><div className="sf-product-stock">{out ? <span className="sf-out">نفد المخزون</span> : <span className="sf-in">{formatNumber(qty)} متوفر</span>}</div></button><button className="sf-add-btn" disabled={out} onClick={() => onAdd(product)}>{out ? 'غير متوفر' : <><Plus size={16} /> أضف للسلة</>}</button></article>; })}</div>;
 }
 
