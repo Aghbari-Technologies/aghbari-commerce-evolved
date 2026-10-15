@@ -49,6 +49,26 @@ describe("outbox worker logical RPC result handling", () => {
     });
   });
 
+  it("rejects oversized and malformed declared content lengths before reading", async () => {
+    const tooLarge = {
+      headers: new Headers({ "content-length": "4097" }),
+      body: null,
+    } as unknown as Request;
+    await expect(readBoundedRequestBody(tooLarge, 4096)).resolves.toEqual({
+      ok: false,
+      reason: "too_large",
+    });
+
+    const malformed = {
+      headers: new Headers({ "content-length": "four-kilobytes" }),
+      body: null,
+    } as unknown as Request;
+    await expect(readBoundedRequestBody(malformed, 4096)).resolves.toEqual({
+      ok: false,
+      reason: "read_failed",
+    });
+  });
+
   it("accepts a body exactly at the byte limit and rejects invalid UTF-8", async () => {
     const exactLimit = new Request("https://worker.example", {
       method: "POST",

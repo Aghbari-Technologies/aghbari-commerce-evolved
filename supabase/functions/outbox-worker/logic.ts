@@ -45,7 +45,7 @@ export async function readBoundedRequestBody(
 
   const contentLength = request.headers.get("content-length");
   if (contentLength !== null) {
-    if (!/^\\d+$/.test(contentLength)) return { ok: false, reason: "read_failed" };
+    if (!/^\d+$/.test(contentLength)) return { ok: false, reason: "read_failed" };
     if (Number(contentLength) > maxBytes) return { ok: false, reason: "too_large" };
   }
 
