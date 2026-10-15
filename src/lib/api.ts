@@ -124,22 +124,34 @@ async function fetchStaffProductById(id: string): Promise<Product> {
 export async function createProduct(p: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
   const productId = typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID();
-  const { error } = await supabase
+  // The id column is explicitly safe to SELECT. Use RETURNING id to distinguish a real
+  // insert from an API response that affected no row, then load private fields through the RPC.
+  const { data: inserted, error } = await supabase
     .from('products')
-    .insert({ ...p, id: productId, organization_id: orgId });
+    .insert({ ...p, id: productId, organization_id: orgId })
+    .select('id')
+    .single();
   if (error) throw error;
-  return fetchStaffProductById(productId);
+  if (!inserted?.id) throw new Error('تعذر تأكيد إنشاء الصنف من قاعدة البيانات.');
+  return fetchStaffProductById(inserted.id);
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
-  const { error } = await supabase
+  // Avoid a false-success when RLS/tenant filters match no row. Only the safe id column is
+  // returned from the write; all sensitive product details still come from the staff-only RPC.
+  const { data: updated, error } = await supabase
     .from('products')
     .update(updates)
     .eq('id', id)
-    .eq('organization_id', orgId);
+    .eq('organization_id', orgId)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
-  return fetchStaffProductById(id);
+  if (!updated?.id || updated.id !== id) {
+    throw new Error('لم يُحفظ تعديل الصنف؛ الصنف غير موجود في المؤسسة الحالية أو لا تملك صلاحية تعديله.');
+  }
+  return fetchStaffProductById(updated.id);
 }
 
 export async function deleteProduct(id: string): Promise<void> {
