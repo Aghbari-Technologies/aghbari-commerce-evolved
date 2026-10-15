@@ -197,7 +197,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $function$
 DECLARE v_org uuid; v_profile uuid; v_budget public.ai_usage_budgets%ROWTYPE;
 BEGIN
-  IF coalesce(current_setting('request.jwt.claim.role',true),'')<>'service_role' THEN
+  IF coalesce(current_setting('request.jwt.claim.role',true),'')<>'service_role' AND session_user NOT IN ('postgres','supabase_admin') THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='trusted AI gateway required';
   END IF;
   SELECT p.id,p.organization_id INTO v_profile,v_org FROM public.profiles p
@@ -230,7 +230,7 @@ DECLARE
   v_daily_tokens bigint:=0; v_month_tokens bigint:=0; v_res_cost numeric(15,6):=0;
   v_res_daily_tokens bigint:=0; v_res_month_tokens bigint:=0; v_reservation public.ai_usage_reservations%ROWTYPE;
 BEGIN
-  IF coalesce(current_setting('request.jwt.claim.role',true),'')<>'service_role' THEN
+  IF coalesce(current_setting('request.jwt.claim.role',true),'')<>'service_role' AND session_user NOT IN ('postgres','supabase_admin') THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='trusted AI gateway required';
   END IF;
   IF p_user_id IS NULL OR coalesce(length(btrim(p_request_id)),0)<1 OR length(p_request_id)>120
@@ -288,7 +288,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=''
 AS $function$
 DECLARE v_res public.ai_usage_reservations%ROWTYPE;
 BEGIN
-  IF coalesce(current_setting('request.jwt.claim.role',true),'')<>'service_role' THEN
+  IF coalesce(current_setting('request.jwt.claim.role',true),'')<>'service_role' AND session_user NOT IN ('postgres','supabase_admin') THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='trusted AI gateway required';
   END IF;
   IF p_reservation_id IS NULL OR p_input_tokens IS NULL OR p_input_tokens<0 OR p_input_tokens>2000000
