@@ -51,6 +51,23 @@ describe('Onyx order workbook draft', () => {
     expect(archiveText).toContain('inlineStr');
   });
 
+  it('removes XML 1.0-forbidden control characters from dirty imported cells', () => {
+    const dirty = {
+      ...order,
+      orderNumber: 'ORD\\u0001-002',
+      customerName: 'شركة\\u0002 الاختبار',
+      items: [{
+        ...order.items[0],
+        product_name_snapshot: 'سكر\\u0003 برازيلي',
+      }],
+    };
+    const archiveText = new TextDecoder().decode(buildOnyxOrderWorkbook(dirty));
+    expect(archiveText).not.toContain('\\u0001');
+    expect(archiveText).not.toContain('\\u0002');
+    expect(archiveText).not.toContain('\\u0003');
+    expect(archiveText).toContain('سكر برازيلي');
+  });
+
   it('rejects empty exports and sanitizes filenames', () => {
     expect(() => buildOnyxOrderWorkbook({ ...order, items: [] })).toThrow('بلا أصناف');
     expect(onyxOrderWorkbookFilename('ORD/001 2026')).toBe('Aghbari-Onyx-ORD-001-2026.xlsx');
