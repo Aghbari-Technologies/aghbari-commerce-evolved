@@ -1408,7 +1408,7 @@ async function main() {
   );
   await db.unsafe("update public.pricing_rules set is_active=false where organization_id=$1 and is_active=true", [organizationId]);
   const pricingBaseRow = await db.unsafe(
-    "select base_price,retail_price,wholesale_price from public.products where id=$1 and organization_id=$2",
+    "select base_price,retail_price,wholesale_price from public.fetch_staff_products($1::uuid) where organization_id=$2",
     [productId, organizationId],
   );
   assert.equal(pricingBaseRow.length, 1, "pricing acceptance product should exist in the active organization");
@@ -1427,34 +1427,34 @@ async function main() {
     [organizationId, productId],
   );
   const pricingRuleId = insertedRule[0].id;
-  let derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  let derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.fetch_staff_products($1::uuid)", [productId]);
   const addPercentageExpected = Math.round(pricingBase * 1.1 * 100) / 100;
   assert.equal(Number(derivedPrices[0].retail_price), addPercentageExpected, "percentage addition must recalculate retail");
   assert.equal(Number(derivedPrices[0].wholesale_price), addPercentageExpected, "percentage addition must recalculate wholesale");
 
   await db.unsafe("update public.pricing_rules set calculation_method='margin_percentage',adjustment_type='margin',adjustment_value=25 where id=$1", [pricingRuleId]);
-  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.fetch_staff_products($1::uuid)", [productId]);
   const marginExpected = Math.round((pricingBase / 0.75) * 100) / 100;
   assert.equal(Number(derivedPrices[0].retail_price), marginExpected, "margin percentage must calculate margin on sale price");
   assert.equal(Number(derivedPrices[0].wholesale_price), marginExpected, "margin percentage must update both selected tiers");
 
   await db.unsafe("update public.pricing_rules set calculation_method='fixed_price',adjustment_type='fixed',adjustment_value=123.45 where id=$1", [pricingRuleId]);
-  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.fetch_staff_products($1::uuid)", [productId]);
   assert.equal(Number(derivedPrices[0].retail_price), 123.45, "fixed price must update retail");
   assert.equal(Number(derivedPrices[0].wholesale_price), 123.45, "fixed price must update wholesale");
 
   await db.unsafe("update public.pricing_rules set calculation_method='add_subtract_amount',adjustment_type='amount',adjustment_value=-12.50 where id=$1", [pricingRuleId]);
-  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.fetch_staff_products($1::uuid)", [productId]);
   assert.equal(Number(derivedPrices[0].retail_price), pricingBase - 12.5, "negative amount must deduct from retail base");
   assert.equal(Number(derivedPrices[0].wholesale_price), pricingBase - 12.5, "negative amount must deduct from wholesale base");
 
   await db.unsafe("update public.pricing_rules set target_tier='wholesale',calculation_method='fixed_price',adjustment_type='fixed',adjustment_value=111.10 where id=$1", [pricingRuleId]);
-  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.fetch_staff_products($1::uuid)", [productId]);
   assert.equal(Number(derivedPrices[0].retail_price), pricingBase, "wholesale-only rule must leave retail at base when no other rules apply");
   assert.equal(Number(derivedPrices[0].wholesale_price), 111.1, "wholesale-only rule must update wholesale");
 
   await db.unsafe("delete from public.pricing_rules where id=$1", [pricingRuleId]);
-  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.products where id=$1", [productId]);
+  derivedPrices = await db.unsafe("select retail_price,wholesale_price from public.fetch_staff_products($1::uuid)", [productId]);
   assert.equal(Number(derivedPrices[0].retail_price), pricingBase, "deleting last applicable rule must reset retail exactly to base_price");
   assert.equal(Number(derivedPrices[0].wholesale_price), pricingBase, "deleting last applicable rule must reset wholesale exactly to base_price");
   const pricingAudit = await db.unsafe(
