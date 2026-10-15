@@ -738,7 +738,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
+      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
     expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
 
@@ -781,7 +781,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
         item_code: "000126",
         name: "Rice",
         unit: "carton",
-        quantity: 6001,
+        quantity: 3,
       }]);
       expect(backup.disclaimer).toContain("Not an order");
       expect(backupText).not.toMatch(/base_price|cost_price|retail_price|wholesale_price|purchase_cost|quantity_on_hand|quantity_reserved|quantity_available|internal_notes/i);
@@ -804,7 +804,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
+      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
     expect(host?.textContent).toContain("أُلغي تفريغ المسودة");
     confirmSpy.mockReturnValue(true);
     await act(async () => {
@@ -850,7 +850,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
         item_code: "000126",
         name: "Rice",
         unit: "carton",
-        quantity: 3,
+        quantity: 6001,
         base_price: 999999,
         cost_price: 888888,
         internal_notes: "must not be imported",
