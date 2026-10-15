@@ -2198,6 +2198,32 @@ function Offline() {
       setMessage(detail);
     }
   }
+  function clearLocalDraft() {
+    if (!user?.profileId) {
+      setMessage("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
+      return;
+    }
+    if (!cartLines.length) return;
+    const approved = window.confirm("سيتم تفريغ مسودة السلة المحلية على هذا الجهاز فقط. لن يُرسل طلب ولن تُحذف الأصناف من الكتالوج. هل تريد المتابعة؟");
+    if (!approved) {
+      setMessage("أُلغي تفريغ المسودة؛ بقيت الكميات كما هي.");
+      return;
+    }
+    try {
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "clear",
+      });
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(next.lines);
+      setCartCount(0);
+      setMessage("تم تفريغ مسودة السلة المحلية فقط. لم يُرسل طلب ولم يتغير الكتالوج.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر تفريغ مسودة السلة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
+    }
+  }
   function retryLocalStorage() {
     const recovered = refresh();
     setMessage(
@@ -2296,6 +2322,15 @@ function Offline() {
       <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-draft-heading">
         <h2 id="offline-draft-heading" style={{ marginTop: 0, fontSize: 18 }}>مسودة السلة المحلية</h2>
         <p style={quiet}>هذه كميات محفوظة على الجهاز فقط؛ لا تظهر أسعار ولا تُرسل طلبات من هذه الشاشة.</p>
+        {cartLines.length > 0 && (
+          <button
+            style={{ ...secondary, color: "#991b1b", borderColor: "#fecaca", marginBottom: 10 }}
+            disabled={Boolean(storageError)}
+            onClick={clearLocalDraft}
+          >
+            تفريغ المسودة المحلية
+          </button>
+        )}
         {cartLines.length === 0 ? (
           <p role="status" style={quiet}>مسودة السلة فارغة.</p>
         ) : (

@@ -741,6 +741,28 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
     expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+
+    const clearButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("تفريغ المسودة المحلية"),
+    );
+    expect(clearButton).toBeDefined();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await act(async () => {
+      clearButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+    expect(host?.textContent).toContain("أُلغي تفريغ المسودة");
+    confirmSpy.mockReturnValue(true);
+    await act(async () => {
+      clearButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines).toEqual([]);
+    expect(host?.textContent).toContain("تم تفريغ مسودة السلة المحلية فقط");
+    expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+    confirmSpy.mockRestore();
   });
 
   it("blocks subsequent local cart edits after an operation write fails", async () => {
