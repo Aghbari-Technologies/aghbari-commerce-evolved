@@ -174,6 +174,14 @@ $function$;
 REVOKE ALL ON FUNCTION public.get_current_tenant_context() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_current_tenant_context() TO authenticated;
 
+-- organizations uses its primary key as tenant identity rather than an organization_id column.
+-- Restrict authenticated reads/writes so the legacy staff_all_organizations policy cannot cross tenants.
+DROP POLICY IF EXISTS tenant_org_scope_organizations ON public.organizations;
+CREATE POLICY tenant_org_scope_organizations
+  ON public.organizations AS RESTRICTIVE FOR ALL TO authenticated
+  USING (id = public.current_organization_id())
+  WITH CHECK (id = public.current_organization_id());
+
 -- Restrict anonymous catalog reads even when the original broad public_read_* policies exist.
 DO $block$
 DECLARE
