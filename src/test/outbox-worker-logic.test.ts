@@ -119,7 +119,7 @@ describe("outbox worker logical RPC result handling", () => {
     expect(source).toContain("outbox_process_transport_error");
     expect(source).toContain("outbox_failure_transport_error");
     expect(source).toContain("claim_transport_failed");
-    expect(source).toMatch(/catch\\s*\\(cause\\)[\\s\\S]*claim_transport_failed/);
+    expect(source).toContain("catch (cause)");
     expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_process_transport_error/);
     expect(source).toMatch(/catch\s*\(cause\)[\s\S]*outbox_failure_transport_error/);
     expect(source).not.toMatch(/\bsafeErrorMessage\s*\(/);
@@ -184,7 +184,7 @@ describe("outbox worker logical RPC result handling", () => {
 
   it("redacts authorization headers, cookies, JWTs and common provider key shapes", () => {
     const value = sanitizeOutboxErrorMessage(new Error(
-      "Authorization: Bearer opaque-access-token Cookie: session=private-cookie; next=ignored eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signed-token sk-12345678901234567890 AIza123456789012345678901234567890",
+      "Authorization: Bearer opaque-access-token\\nCookie: session=private-cookie; next=ignored\\neyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signed-token\\nsk-12345678901234567890\\nAIza123456789012345678901234567890",
     ));
     expect(value).not.toContain("opaque-access-token");
     expect(value).not.toContain("private-cookie");

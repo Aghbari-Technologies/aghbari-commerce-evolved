@@ -163,7 +163,10 @@ describe("Aghbari PWA offline shell", () => {
   it("never reads a matching response from an unrelated Cache Storage namespace", async () => {
     const foreign = new Response("foreign cache response", { status: 200 });
     const worker = await loadServiceWorker({
-      cacheMatch: async (key) => key === "/assets/app.js" ? null : foreign,
+      cacheMatch: async (key) => {
+        const pathname = typeof key === "string" ? key : new URL(key.url).pathname;
+        return pathname === "/assets/app.js" ? null : foreign;
+      },
       fetcher: async () => new Response("own cache response", { status: 200 }),
     });
     const pending: Promise<Response>[] = [];
@@ -177,6 +180,7 @@ describe("Aghbari PWA offline shell", () => {
     });
     const responses = await Promise.all(pending);
     expect(responses[0]).not.toBe(foreign);
+    expect(await responses[0].text()).toBe("own cache response");
     expect(worker.cachesMock.match).not.toHaveBeenCalled();
     expect(worker.cacheMatch).toHaveBeenCalled();
   });
