@@ -987,14 +987,6 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     const priorTimestamp = String(Date.now() - 60_000);
     window.localStorage.setItem(cacheKey, JSON.stringify(priorCatalog));
     window.localStorage.setItem(timestampKey, priorTimestamp);
-    mocks.fetchProducts.mockResolvedValueOnce([{
-      id: "new-cache-product",
-      name: "New Catalog",
-      item_code: "000222",
-      unit: "carton",
-      base_price: 0,
-    }]);
-
     await mountQuoteWorkspace("/offline");
     // Capture the allowlisted cache as rendered by the initial mount; the component
     // intentionally rewrites legacy cache entries before any sync attempt.
@@ -1002,6 +994,15 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     const timestampBeforeSync = window.localStorage.getItem(timestampKey);
     expect(cacheBeforeSync).not.toBeNull();
     expect(timestampBeforeSync).toBe(priorTimestamp);
+    // A mount-time connectivity sync may run before the explicit button action.
+    // Set the one-shot response after mount so the storage-failure branch is deterministic.
+    mocks.fetchProducts.mockResolvedValueOnce([{
+      id: "new-cache-product",
+      name: "New Catalog",
+      item_code: "000222",
+      unit: "carton",
+      base_price: 0,
+    }]);
 
     const originalSetItem = Storage.prototype.setItem;
     let failedTimestampWrite = false;

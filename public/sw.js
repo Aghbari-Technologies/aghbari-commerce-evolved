@@ -13,7 +13,7 @@ async function cachePublicBuildAsset(cache, request, response) {
       const cachedUrl = new URL(key.url);
       return cachedUrl.origin === self.location.origin &&
         cachedUrl.pathname.startsWith('/assets/') &&
-        /\\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(cachedUrl.pathname);
+        /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(cachedUrl.pathname);
     });
     const excess = assets.length - MAX_CACHED_BUILD_ASSETS;
     if (excess > 0) {
