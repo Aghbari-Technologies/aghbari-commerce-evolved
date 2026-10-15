@@ -151,7 +151,12 @@ function drawRule(page: PDFPage, y: number) {
   });
 }
 
-function drawDocumentHeader(page: PDFPage, font: PDFFont, generatedAt: Date) {
+function drawDocumentHeader(
+  page: PDFPage,
+  font: PDFFont,
+  generatedAt: Date,
+  documentTitle = "كشف الحساب",
+) {
   drawArabic(page, font, "الأغبري", PAGE_WIDTH - 40, PAGE_HEIGHT - 45, 20, BRAND, 150);
   page.drawText("AGHBARI COMMERCE", {
     x: 40,
@@ -160,7 +165,7 @@ function drawDocumentHeader(page: PDFPage, font: PDFFont, generatedAt: Date) {
     font,
     color: MUTED,
   });
-  drawArabic(page, font, "كشف الحساب", PAGE_WIDTH - 40, PAGE_HEIGHT - 70, 14, INK, 180);
+  drawArabic(page, font, documentTitle, PAGE_WIDTH - 40, PAGE_HEIGHT - 70, 14, INK, 180);
   drawArabic(page, font, "تاريخ الإصدار", PAGE_WIDTH - 40, PAGE_HEIGHT - 95, 8, MUTED, 90);
   drawLtr(page, font, generatedAt.toISOString().replace("T", " ").slice(0, 16) + " UTC", 40, PAGE_HEIGHT - 95, 8, MUTED, 190);
   drawRule(page, PAGE_HEIGHT - 108);
@@ -426,6 +431,181 @@ export async function buildCustomerStatementPdf(
     );
   }
 
+  pages.forEach((current, index) => appendPageNumber(current, index, pages.length, font));
+  return pdf.save({ useObjectStreams: false });
+}
+
+export type CustomerInvoiceDocument = {
+  id: string;
+  invoice_number: string;
+  customer_id: string;
+  status: string;
+  issued_at: string;
+  due_at?: string | null;
+  currency: string;
+};
+
+export type CustomerInvoiceLineDocument = {
+  id: string;
+  item_code?: string | null;
+  description: string;
+  unit?: string | null;
+  quantity: number | string;
+};
+
+export type CustomerInvoiceCustomerDocument = {
+  customer_code?: string | null;
+  business_name?: string | null;
+  contact_name?: string | null;
+};
+
+function normalizeQuantity(value: unknown): string {
+  if (typeof value !== "number" && typeof value !== "string") {
+    throw new Error("Invoice contains an invalid quantity.");
+  }
+  const raw = String(value).trim();
+  if (!raw || raw.length > 40 || !/^-?\d+(?:\.\d{1,6})?$/.test(raw)) {
+    throw new Error("Invoice contains an invalid quantity.");
+  }
+  const number = Number(raw);
+  if (!Number.isFinite(number) || number < 0 || number > 1_000_000_000) {
+    throw new Error("Invoice contains an invalid quantity.");
+  }
+  return raw;
+}
+
+/**
+ * Customer-facing invoice PDF intentionally excludes unit prices and amounts.
+ * Those fields are restricted from the customer's invoice table/API permissions.
+ */
+export async function buildCustomerInvoicePdf(
+  invoiceInput: unknown,
+  linesInput: unknown,
+  customerInput: unknown,
+  fontBytes: Uint8Array,
+  generatedAt = new Date(),
+): Promise<Uint8Array> {
+  if (!invoiceInput || typeof invoiceInput !== "object") {
+    throw new Error("Invoice record is not an object.");
+  }
+  const invoice = invoiceInput as CustomerInvoiceDocument;
+  if (
+    typeof invoice.id !== "string" ||
+    typeof invoice.invoice_number !== "string" ||
+    typeof invoice.customer_id !== "string" ||
+    typeof invoice.status !== "string" ||
+    typeof invoice.issued_at !== "string"
+  ) {
+    throw new Error("Invoice record is incomplete.");
+  }
+  normalizeCurrency(invoice.currency);
+  const lines = Array.isArray(linesInput) ? (linesInput as CustomerInvoiceLineDocument[]) : [];
+  if (lines.length > 500) throw new Error("Invoice exceeds the item-count limit.");
+  for (const line of lines) {
+    if (
+      !line ||
+      typeof line.id !== "string" ||
+      typeof line.description !== "string"
+    ) {
+      throw new Error("Invoice contains an incomplete line.");
+    }
+    normalizeQuantity(line.quantity);
+  }
+  const customer =
+    customerInput && typeof customerInput === "object"
+      ? (customerInput as CustomerInvoiceCustomerDocument)
+      : {};
+
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+  const font = await pdf.embedFont(fontBytes, { subset: false });
+  pdf.setTitle(`فاتورة ${cleanLabel(invoice.invoice_number, 40)} | متجر الأغبري`);
+  pdf.setAuthor("Aghbari Commerce");
+  pdf.setSubject("Customer invoice document");
+  pdf.setCreator("Aghbari Commerce");
+  pdf.setCreationDate(generatedAt);
+  pdf.setModificationDate(generatedAt);
+
+  const pages: PDFPage[] = [];
+  let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  pages.push(page);
+  drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية");
+  drawArabic(page, font, "رقم الفاتورة", PAGE_WIDTH - 40, PAGE_HEIGHT - 128, 8, MUTED, 90);
+  drawLtr(page, font, cleanLabel(invoice.invoice_number, 40), PAGE_WIDTH - 170, PAGE_HEIGHT - 128, 10, INK, 120);
+  drawArabic(page, font, "تاريخ الإصدار", PAGE_WIDTH - 40, PAGE_HEIGHT - 150, 8, MUTED, 90);
+  drawLtr(page, font, isoDate(invoice.issued_at), PAGE_WIDTH - 170, PAGE_HEIGHT - 150, 9, INK, 120);
+  drawArabic(page, font, "تاريخ الاستحقاق", 300, PAGE_HEIGHT - 150, 8, MUTED, 90);
+  drawLtr(page, font, isoDate(invoice.due_at), 165, PAGE_HEIGHT - 150, 9, INK, 100);
+  drawArabic(page, font, "العملة", PAGE_WIDTH - 40, PAGE_HEIGHT - 172, 8, MUTED, 60);
+  drawLtr(page, font, normalizeCurrency(invoice.currency), PAGE_WIDTH - 120, PAGE_HEIGHT - 172, 9, INK, 60);
+  drawArabic(page, font, "الحالة", 300, PAGE_HEIGHT - 172, 8, MUTED, 60);
+  drawArabic(page, font, statusLabel(invoice.status), 235, PAGE_HEIGHT - 172, 8, INK, 70);
+
+  drawRule(page, PAGE_HEIGHT - 190);
+  drawArabic(page, font, "بيانات العميل", PAGE_WIDTH - 40, PAGE_HEIGHT - 212, 10, BRAND, 120);
+  drawArabic(page, font, "اسم العميل", PAGE_WIDTH - 40, PAGE_HEIGHT - 236, 8, MUTED, 85);
+  drawArabic(
+    page,
+    font,
+    cleanLabel(customer.business_name ?? customer.contact_name ?? "—", 90),
+    PAGE_WIDTH - 145,
+    PAGE_HEIGHT - 236,
+    9,
+    INK,
+    400,
+  );
+  drawArabic(page, font, "رمز العميل", PAGE_WIDTH - 40, PAGE_HEIGHT - 258, 8, MUTED, 85);
+  drawLtr(page, font, cleanLabel(customer.customer_code, 32), PAGE_WIDTH - 145, PAGE_HEIGHT - 258, 9, INK, 120);
+
+  drawArabic(page, font, "تفاصيل الأصناف والكميات", PAGE_WIDTH - 40, PAGE_HEIGHT - 296, 10, BRAND, 180);
+  const drawItemsHeader = (targetPage: PDFPage, y: number) => {
+    targetPage.drawRectangle({
+      x: 40,
+      y: y - 7,
+      width: PAGE_WIDTH - 80,
+      height: 25,
+      color: TINT,
+    });
+    drawArabic(targetPage, font, "الصنف", PAGE_WIDTH - 47, y, 8, BRAND, 250);
+    drawArabic(targetPage, font, "رمز الصنف", 305, y, 8, BRAND, 95);
+    drawArabic(targetPage, font, "الوحدة", 205, y, 8, BRAND, 70);
+    drawArabic(targetPage, font, "الكمية", 115, y, 8, BRAND, 65);
+    drawRule(targetPage, y - 8);
+  };
+
+  drawItemsHeader(page, PAGE_HEIGHT - 320);
+  let y = PAGE_HEIGHT - 350;
+  for (const line of lines) {
+    if (y < 80) {
+      page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      pages.push(page);
+      drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية — متابعة");
+      drawItemsHeader(page, PAGE_HEIGHT - 125);
+      y = PAGE_HEIGHT - 155;
+    }
+    drawArabic(page, font, cleanLabel(line.description, 100), PAGE_WIDTH - 47, y, 8.5, INK, 245);
+    drawLtr(page, font, cleanLabel(line.item_code, 36), 235, y, 8, INK, 78);
+    drawArabic(page, font, cleanLabel(line.unit, 24), 160, y, 8, INK, 58);
+    drawLtr(page, font, normalizeQuantity(line.quantity), 72, y, 8.5, INK, 65);
+    drawRule(page, y - 7);
+    y -= 23;
+  }
+  if (!lines.length) {
+    drawArabic(page, font, "لا توجد بنود أصناف مسجلة لهذه الفاتورة.", PAGE_WIDTH - 47, y, 9, MUTED, 280);
+    y -= 24;
+  }
+  if (lines.length === 500) {
+    drawArabic(
+      page,
+      font,
+      "ملاحظة: يعرض هذا المستند أول 500 بند وفق حدود قراءة النظام.",
+      PAGE_WIDTH - 47,
+      Math.max(60, y - 4),
+      7.5,
+      MUTED,
+      300,
+    );
+  }
   pages.forEach((current, index) => appendPageNumber(current, index, pages.length, font));
   return pdf.save({ useObjectStreams: false });
 }
