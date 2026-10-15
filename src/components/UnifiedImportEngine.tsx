@@ -46,10 +46,10 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-export function UnifiedImportEngine({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: jobs, loading, error, refetch } = useFetch(fetchImportJobs);
-  const { data: profiles } = useFetch(fetchImportProfiles);
-  const { data: storedSynonyms } = useFetch(fetchCentralSynonyms);
+export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice: (message: string) => void; refreshVersion?: number }) {
+  const { data: jobs, loading, error, refetch } = useFetch(fetchImportJobs, [refreshVersion]);
+  const { data: profiles } = useFetch(fetchImportProfiles, [refreshVersion]);
+  const { data: storedSynonyms } = useFetch(fetchCentralSynonyms, [refreshVersion]);
   const [stage, setStage] = useState<Stage | null>(null);
   const [progress, setProgress] = useState(0);
   const [processed, setProcessed] = useState(0);

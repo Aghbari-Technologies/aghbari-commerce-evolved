@@ -33,37 +33,38 @@ function qualityLabel(score: number): string {
 
 export function OperationsCenter({ onNotice }: { onNotice: (message: string) => void }) {
   const [tab, setTab] = useState<OperationTab>('imports');
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const tabs: Array<{ id: OperationTab; label: string; icon: typeof Upload }> = [
     { id: 'imports', label: 'محرك الاستيراد الذكي', icon: Upload },
     { id: 'onyx', label: 'مزامنة أونكس برو', icon: Activity },
     { id: 'reconcile', label: 'مطابقة المخزون', icon: Gauge },
     { id: 'dictionary', label: 'قاموس المرادفات', icon: FileText },
   ];
-  return <AdminPage eyebrow="البيانات والذكاء" title="مركز العمليات الذكي" description="مسار موحد وآمن للاستيراد والتحليل والمطابقة دون تخزين الملفات الخام" icon={Zap} note="المصدر التشغيلي المباشر هو مصدر الحقيقة الوحيد" toolbar={<Button variant="secondary" onClick={() => onNotice('تم تحديث مركز العمليات')}><RefreshCw size={16} /> تحديث</Button>}>
+  return <AdminPage eyebrow="البيانات والذكاء" title="مركز العمليات الذكي" description="استيراد ومزامنة ومطابقة موحدة مع حفظ مصدر البيانات وأثر التغييرات" icon={Zap} note="تظهر بيانات المتجر وأونكس ضمن سياق واحد، مع حفظ المصدر ومنع التعديل دون اعتماد" toolbar={<Button variant="secondary" onClick={() => setRefreshVersion((version) => version + 1)}><RefreshCw size={16} /> تحديث البيانات</Button>}>
     <div className="operation-tabs">{tabs.map(({ id, label, icon: Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={16} />{label}</button>)}</div>
-    {tab === 'imports' && <ImportEngine onNotice={onNotice} />}
-    {tab === 'onyx' && <OnyxDashboard onNotice={onNotice} />}
-    {tab === 'reconcile' && <InventoryReconciliation onNotice={onNotice} />}
-    {tab === 'dictionary' && <SynonymDictionary />}
+    {tab === 'imports' && <ImportEngine onNotice={onNotice} refreshVersion={refreshVersion} />}
+    {tab === 'onyx' && <OnyxDashboard onNotice={onNotice} refreshVersion={refreshVersion} />}
+    {tab === 'reconcile' && <InventoryReconciliation onNotice={onNotice} refreshVersion={refreshVersion} />}
+    {tab === 'dictionary' && <SynonymDictionary refreshVersion={refreshVersion} />}
   </AdminPage>;
 }
 
-function ImportEngine({ onNotice }: { onNotice: (message: string) => void }) {
-  return <UnifiedImportEngine onNotice={onNotice} />;
+function ImportEngine({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
+  return <UnifiedImportEngine onNotice={onNotice} refreshVersion={refreshVersion} />;
 }
 
-function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: snapshots, loading, error, refetch } = useFetch(fetchOnyxSnapshots);
+function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
+  const { data: snapshots, loading, error, refetch } = useFetch(fetchOnyxSnapshots, [refreshVersion]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
   const selectedId = selectedSnapshotId || snapshots?.[0]?.id || '';
   const selected = snapshots?.find((snapshot) => snapshot.id === selectedId);
   const { data: rows, loading: rowsLoading, error: rowsError, refetch: refetchRows } = useFetch(
     () => selectedId ? fetchOnyxSnapshotRows(selectedId) : Promise.resolve([]),
-    [selectedId],
+    [selectedId, refreshVersion],
   );
   const { data: summary, loading: summaryLoading, error: summaryError, refetch: refetchSummary } = useFetch(
     () => selectedId ? fetchOnyxSnapshotAnalytics(selectedId) : Promise.resolve(null),
-    [selectedId],
+    [selectedId, refreshVersion],
   );
   const [reconciling, setReconciling] = useState(false);
   const metrics = summary?.metrics;
@@ -82,7 +83,7 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
   }
 
   return <div className="onyx-dashboard">
-    <div className="onyx-banner"><div><span>بيئة تحليلية معزولة</span><h2>أونكس برو — لقطات مستوردة مستقلة</h2><p>تعتمد التحليلات هنا على Snapshot ثابت من الاستيراد؛ لا تعدّل هذه الشاشة المنتجات أو المخزون التشغيلي.</p></div><ShieldCheck size={42} /></div>
+    <div className="onyx-banner"><div><span>بيانات أونكس ضمن المنظومة الموحدة</span><h2>أونكس برو — سجلات محاسبية مدمجة</h2><p>تُعرض سجلات أونكس في سياق الأغبري مع حفظ المصدر ووقت المزامنة والبصمة. لا تغيّر المطابقة الأرصدة مباشرة؛ أي تسوية تتطلب اعتمادًا منفصلًا.</p></div><ShieldCheck size={42} /></div>
     <section className="panel" style={{ margin: '14px 0' }}>
       <div className="panel-head"><div><h2>مصدر التحليل</h2><p>اختر لقطة معتمدة. لا تُحلّل دفعات staging أو قيد المراجعة.</p></div><Button variant="outline" onClick={() => { refetch(); refetchRows(); refetchSummary(); }}><RefreshCw size={15} /> تحديث</Button></div>
       {loading ? <Loading /> : error ? <ErrorBox message={error} /> : !snapshots?.length ? <Empty text="لا توجد لقطات Onyx معتمدة. أكمل استيرادًا بجودة مقبولة أولًا." /> :
@@ -115,9 +116,9 @@ function OnyxDashboard({ onNotice }: { onNotice: (message: string) => void }) {
   </div>;
 }
 
-function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => void }) {
-  const { data: snapshots, loading: snapshotsLoading } = useFetch(fetchOnyxSnapshots);
-  const { data: runs, loading: runsLoading, error: runsError, refetch: refetchRuns } = useFetch(fetchInventoryReconciliationRuns);
+function InventoryReconciliation({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
+  const { data: snapshots, loading: snapshotsLoading } = useFetch(fetchOnyxSnapshots, [refreshVersion]);
+  const { data: runs, loading: runsLoading, error: runsError, refetch: refetchRuns } = useFetch(fetchInventoryReconciliationRuns, [refreshVersion]);
   const [snapshotId, setSnapshotId] = useState('');
   const [runId, setRunId] = useState('');
   const [running, setRunning] = useState(false);
@@ -126,7 +127,7 @@ function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => 
   const selectedRun = runs?.find((run) => run.id === selectedRunId);
   const { data: items, loading: itemsLoading, error: itemsError, refetch: refetchItems } = useFetch(
     () => selectedRunId ? fetchInventoryReconciliationItems(selectedRunId) : Promise.resolve([]),
-    [selectedRunId],
+    [selectedRunId, refreshVersion],
   );
 
   async function runNow() {
@@ -187,9 +188,9 @@ function InventoryReconciliation({ onNotice }: { onNotice: (message: string) => 
   </div>;
 }
 
-function SynonymDictionary() {
-  const { data: stored, loading, error, refetch } = useFetch(fetchCentralSynonyms);
-  const { data: profiles } = useFetch(fetchImportProfiles);
+function SynonymDictionary({ refreshVersion }: { refreshVersion: number }) {
+  const { data: stored, loading, error, refetch } = useFetch(fetchCentralSynonyms, [refreshVersion]);
+  const { data: profiles } = useFetch(fetchImportProfiles, [refreshVersion]);
   const [sourceHeader, setSourceHeader] = useState('');
   const [canonicalField, setCanonicalField] = useState('');
   const [selectedProfile, setSelectedProfile] = useState('');
