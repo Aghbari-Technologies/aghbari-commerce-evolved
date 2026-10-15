@@ -73,7 +73,6 @@ BEGIN
 
     -- This immutable snapshot protects the order if the customer later edits or deletes the saved address.
     v_snapshot := pg_catalog.jsonb_build_object(
-      'source_address_id',v_address.id::text,
       'label',v_address.label,
       'recipient_name',v_address.recipient_name,
       'phone',v_address.phone,

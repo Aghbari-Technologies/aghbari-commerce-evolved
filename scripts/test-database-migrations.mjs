@@ -363,7 +363,7 @@ async function main() {
   assert.equal(Number(persistedOrderAmount[0].total_amount), 370000, "server order total must match tier pricing");
   const persistedDelivery = await db.unsafe("select delivery_address_id,delivery_address_snapshot,delivery_address_fingerprint from public.orders where id=$1", [order.id]);
   assert.equal(persistedDelivery[0].delivery_address_id, firstId, "the selected own address ID must be retained for dispatch linkage");
-  assert.equal(persistedDelivery[0].delivery_address_snapshot.source_address_id, firstId, "the original selected address ID must remain in the frozen snapshot");
+  assert.equal(Object.hasOwn(persistedDelivery[0].delivery_address_snapshot, "source_address_id"), false, "the customer-visible snapshot must not expose the internal address record ID");
   assert.equal(persistedDelivery[0].delivery_address_snapshot.address_line1, "Street 1", "the order must snapshot the actual selected destination");
   const createdEvents = await db.unsafe("select event_type,payload from public.outbox_events where organization_id=$1 and event_type='OrderCreated' and aggregate_id=$2", [organizationId, order.id]);
   assert.equal(createdEvents.length, 1, "order creation and its outbox event must commit exactly once");
