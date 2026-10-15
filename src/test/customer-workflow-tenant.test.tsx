@@ -924,6 +924,36 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     }
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
       .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
+
+    // A different backup would exceed the existing line's safe quantity cap.
+    // It must be rejected before confirmation and preserve the exact current draft.
+    restoreConfirm.mockClear();
+    const oversizedMergePayload = JSON.stringify({
+      schema: "aghbari.offline-cart-draft",
+      version: 2,
+      scope_marker: createStableOfflineCartMutationId("backup-scope", catalogScope),
+      lines: [{
+        product_id: "product-offline-2",
+        item_code: "000126",
+        name: "Rice",
+        unit: "carton",
+        quantity: 5000,
+      }],
+    });
+    const oversizedMergeFile = {
+      name: "oversized-merge.json",
+      size: oversizedMergePayload.length,
+      text: async () => oversizedMergePayload,
+    } as File;
+    Object.defineProperty(restoreInput, "files", { configurable: true, value: [oversizedMergeFile] });
+    await act(async () => {
+      restoreInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(host?.textContent).toContain("تجاوز حد 10,000 وحدة للصنف");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     restoreConfirm.mockRestore();
   });

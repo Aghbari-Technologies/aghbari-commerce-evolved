@@ -2241,8 +2241,8 @@ function Offline() {
       if (record.scope_marker !== expectedScopeMarker) {
         throw new Error("هذه النسخة الاحتياطية لا تنتمي إلى الحساب والمتجر الحاليين؛ لم تتغير المسودة.");
       }
-      if (record.lines.length < 1 || record.lines.length > 200) {
-        throw new Error("يجب أن تحتوي النسخة على صنف واحد إلى 200 صنف.");
+      if (record.lines.length < 1 || record.lines.length > 1000) {
+        throw new Error("يجب أن تحتوي النسخة على صنف واحد إلى 1,000 صنف.");
       }
 
       const catalog = sanitizePublicCatalogCache(
@@ -2272,10 +2272,11 @@ function Offline() {
         lines.push({ product_id: line.product_id, quantity: Number(line.quantity) });
       }
       lines.sort((left, right) => left.product_id.localeCompare(right.product_id));
-      const currentLines = initialOfflineCartLines();
+      const seedLines = initialOfflineCartLines();
+      const currentLedger = readOfflineCartLedger(localStorage, cartScopeKey, seedLines);
+      const currentLines = currentLedger.lines;
       const restoreEpoch = localStorage.getItem(getOfflineCartRestoreEpochKey(cartScopeKey)) || "initial";
       const mutationId = createStableOfflineCartMutationId("backup-restore", { epoch: restoreEpoch, lines });
-      const currentLedger = readOfflineCartLedger(localStorage, cartScopeKey, currentLines);
       if (currentLedger.applied_mutation_ids.includes(mutationId)) {
         // Same backup in the same cart generation is a replay. Let the journal verify
         // its fingerprint before skipping merge-size checks; large valid backups should
@@ -2324,7 +2325,7 @@ function Offline() {
           id: mutationId,
           kind: "merge",
           lines,
-        }, currentLines);
+        }, seedLines);
         writeLegacyCartOwner(localStorage, cartScopeKey);
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : "تعذر حفظ المسودة المستعادة محليًا.";
