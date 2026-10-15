@@ -212,20 +212,27 @@ describe("outbox worker logical RPC result handling", () => {
     expect(value).toContain("[secret redacted]");
   });
 
-  it("redacts complete authorization header values regardless of scheme", () => {
+  it("redacts complete authorization and cookie header values idempotently", () => {
     const once = sanitizeOutboxErrorMessage(
-      "Authorization: Basic opaque-basic-token\nProxy-Authorization: Digest opaque-proxy-token",
+      "Authorization: Basic opaque-basic-token\nProxy-Authorization: Digest opaque-proxy-token\nCookie: session=opaque-cookie; next=opaque-session\nSet-Cookie: refresh_token=opaque-refresh-cookie",
     );
-    expect(once).not.toContain("opaque-basic-token");
-    expect(once).not.toContain("opaque-proxy-token");
-    expect(once).toContain("Authorization=[redacted]");
-    expect(once).toContain("Proxy-Authorization=[redacted]");
+    for (const secret of [
+      "opaque-basic-token",
+      "opaque-proxy-token",
+      "opaque-cookie",
+      "opaque-session",
+      "opaque-refresh-cookie",
+    ]) {
+      expect(once).not.toContain(secret);
+    }
+    expect(once.match(/\[authorization redacted\]/g)).toHaveLength(2);
+    expect(once.match(/\[cookie redacted\]/g)).toHaveLength(2);
     expect(sanitizeOutboxErrorMessage(once)).toBe(once);
   });
 
   it("is idempotent when a transport failure message is sanitized more than once", () => {
     const once = sanitizeOutboxErrorMessage(
-      "request failed Authorization: Bearer opaque-access-token sk-12345678901234567890 AIza123456789012345678901234567890",
+      "request failed\nAuthorization: Bearer opaque-access-token\nsk-12345678901234567890\nAIza123456789012345678901234567890",
     );
     const twice = sanitizeOutboxErrorMessage(once);
     expect(twice).toBe(once);

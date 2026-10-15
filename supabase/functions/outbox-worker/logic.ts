@@ -13,8 +13,8 @@ export function sanitizeOutboxErrorMessage(value: unknown): string {
     if (typeof message === "string") raw = message;
   }
   return raw
-    .replace(/\b(authorization|proxy-authorization)\s*[:=][^\r\n]*/gi, "$1=[redacted]")
-    .replace(/\b(cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "$1=[redacted]")
+    .replace(/\b(authorization|proxy-authorization)\s*[:=][^\r\n]*/gi, "[authorization redacted]")
+    .replace(/\b(cookie|set-cookie)\s*[:=]\s*[^\r\n]+/gi, "[cookie redacted]")
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, "[token redacted]")
     .replace(/(?<!\[)\b(Bearer|service_role|anon_key|api[_-]?key|password|secret|access[_-]?token)\b[=: ]+\S+/gi, "$1=[redacted]")
     .replace(/\b(sk-[A-Za-z0-9_-]{16,}|AIza[A-Za-z0-9_-]{20,})\b/g, "[secret redacted]")
