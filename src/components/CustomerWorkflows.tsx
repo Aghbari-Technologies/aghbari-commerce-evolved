@@ -643,6 +643,11 @@ export function CustomerStatementPage() {
     </Gate>
   );
 }
+function formatAccountMoney(value: number | string, currency: string): string {
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return "غير متاح";
+  return `${new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 2 }).format(amount)} ${currency}`;
+}
 function Statement() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<(PaymentAmount & { paid_at?: string })[]>([]);
@@ -754,36 +759,44 @@ function Statement() {
               تنبيه اكتمال البيانات: يعرض هذا الملخص أحدث 200 فاتورة و500 دفعة كحد أقصى؛ قد لا تمثل الأرقام إجمالي السجل الكامل.
             </p>
           )}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))",
-              gap: 12,
-              marginBottom: 18,
-            }}
-          >
-            {(
-              [
-                ["إجمالي الفواتير", totals.invoiced],
-                ["المدفوع المسجل", totals.paid],
-                ["المتبقي المستحق", totals.outstanding],
-              ] as const
-            ).map(([label, value]) => (
-              <article key={label} style={card}>
-                <span style={quiet}>{label}</span>
-                <strong
-                  style={{
-                    display: "block",
-                    fontSize: 23,
-                    marginTop: 8,
-                    color: label === "المتبقي المستحق" ? "#9b4e22" : "#087f8d",
-                  }}
-                >
-                  {totals.valid ? formatCurrency(value) : "غير متاح"}
-                </strong>
-              </article>
-            ))}
-          </div>
+          {totals.valid ? (
+            totals.currencies.length ? (
+              <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
+                {totals.currencies.map((currencyBalance) => (
+                  <section key={currencyBalance.currency} style={card}>
+                    <h3 style={{ margin: "0 0 12px", color: "#087f8d" }}>
+                      ملخص الرصيد بعملة {currencyBalance.currency}
+                    </h3>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+                      {(
+                        [
+                          ["إجمالي الفواتير", currencyBalance.invoiced],
+                          ["المدفوع المسجل", currencyBalance.paid],
+                          ["المتبقي المستحق", currencyBalance.outstanding],
+                        ] as const
+                      ).map(([label, value]) => (
+                        <article key={label} style={{ ...card, boxShadow: "none" }}>
+                          <span style={quiet}>{label}</span>
+                          <strong
+                            style={{
+                              display: "block",
+                              fontSize: 23,
+                              marginTop: 8,
+                              color: label === "المتبقي المستحق" ? "#9b4e22" : "#087f8d",
+                            }}
+                          >
+                            {formatAccountMoney(value, currencyBalance.currency)}
+                          </strong>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <p style={{ ...quiet, marginBottom: 18 }}>لا توجد أرصدة مالية مسجلة.</p>
+            )
+          ) : null}
           <section style={{ ...card, padding: 0, overflowX: "auto" }}>
             <table style={tableStyle}>
               <thead>
@@ -805,9 +818,9 @@ function Statement() {
                       <td>
                         <strong>{i.invoice_number}</strong>
                       </td>
-                      <td>{balance.valid ? formatCurrency(balance.total) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatCurrency(balance.paid) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatCurrency(balance.outstanding) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatAccountMoney(balance.total, balance.currency) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatAccountMoney(balance.paid, balance.currency) : "غير متاح"}</td>
+                      <td>{balance.valid ? formatAccountMoney(balance.outstanding, balance.currency) : "غير متاح"}</td>
                       <td>
                         {i.status === "paid"
                           ? "مدفوعة"

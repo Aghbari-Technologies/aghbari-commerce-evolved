@@ -1,14 +1,33 @@
 import type { ProductWithInventory } from './types';
 
-export type InvoiceAmount = { id: string; total_amount: number | string; status?: string };
+export type InvoiceAmount = {
+  id: string;
+  total_amount: number | string;
+  currency: string;
+  status?: string;
+};
 export type PaymentAmount = { invoice_id: string; amount: number | string };
 
 type InvoiceBalance = {
   valid: boolean;
+  currency: string;
   total: number;
   paid: number;
   outstanding: number;
 };
+type AccountCurrencySummary = {
+  currency: string;
+  invoiced: number;
+  paid: number;
+  outstanding: number;
+};
+type AccountSummary = { valid: boolean; currencies: AccountCurrencySummary[] };
+
+/** Parse a normalized three-letter currency code; never assume mixed invoices share one currency. */
+function normalizeMoneyCurrency(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^[A-Za-z]{3}$/.test(value.trim())) return null;
+  return value.trim().toUpperCase();
+}
 
 /** Parse database money as integer minor units; never use floating-point addition for balances. */
 function moneyMinorUnits(value: unknown): bigint | null {
@@ -31,16 +50,21 @@ function moneyNumber(minorUnits: bigint): number {
 }
 
 function invalidInvoiceBalance(): InvoiceBalance {
-  return { valid: false, total: 0, paid: 0, outstanding: 0 };
+  return { valid: false, currency: '', total: 0, paid: 0, outstanding: 0 };
 }
 
-/** Return an explicit invalid state instead of disguising malformed financial values as zero. */
+function invalidAccountSummary(): AccountSummary {
+  return { valid: false, currencies: [] };
+}
+
+/** Compute one invoice balance in its own currency without crossing invoice boundaries. */
 export function summarizeInvoiceAmounts(
   invoice: InvoiceAmount,
   payments: PaymentAmount[],
 ): InvoiceBalance {
+  const currency = normalizeMoneyCurrency(invoice.currency);
   const total = moneyMinorUnits(invoice.total_amount);
-  if (total === null) return invalidInvoiceBalance();
+  if (currency === null || total === null) return invalidInvoiceBalance();
 
   let paid = 0n;
   for (const payment of payments) {
@@ -53,47 +77,60 @@ export function summarizeInvoiceAmounts(
   const outstanding = invoice.status === 'void' || total <= paid ? 0n : total - paid;
   return {
     valid: true,
+    currency,
     total: moneyNumber(total),
     paid: moneyNumber(paid),
     outstanding: moneyNumber(outstanding),
   };
 }
 
-export function summarizeAccount(invoices: InvoiceAmount[], payments: PaymentAmount[]) {
+/** Group account balances per currency and expose malformed values as invalid, never as zero. */
+export function summarizeAccount(invoices: InvoiceAmount[], payments: PaymentAmount[]): AccountSummary {
   const activeInvoices = invoices.filter((invoice) => invoice.status !== 'void');
   const activeIds = new Set(activeInvoices.map((invoice) => invoice.id));
-  const totalsByInvoice = new Map<string, bigint>();
-  const paidByInvoice = new Map<string, bigint>();
+  const invoiceAmounts = new Map<string, { currency: string; total: bigint; paid: bigint }>();
+  const totalsByCurrency = new Map<string, { invoiced: bigint; paid: bigint; outstanding: bigint }>();
 
-  let invoiced = 0n;
   for (const invoice of activeInvoices) {
-    const amount = moneyMinorUnits(invoice.total_amount);
-    if (amount === null) return { valid: false, invoiced: 0, paid: 0, outstanding: 0 };
-    totalsByInvoice.set(invoice.id, amount);
-    invoiced += amount;
+    const currency = normalizeMoneyCurrency(invoice.currency);
+    const total = moneyMinorUnits(invoice.total_amount);
+    if (currency === null || total === null) return invalidAccountSummary();
+
+    const currencyTotals = totalsByCurrency.get(currency) ?? { invoiced: 0n, paid: 0n, outstanding: 0n };
+    currencyTotals.invoiced += total;
+    totalsByCurrency.set(currency, currencyTotals);
+    invoiceAmounts.set(invoice.id, { currency, total, paid: 0n });
   }
 
-  let paid = 0n;
   for (const payment of payments) {
     // Orphaned rows and payments for void invoices must not change the visible account summary.
     if (!activeIds.has(payment.invoice_id)) continue;
     const amount = moneyMinorUnits(payment.amount);
-    if (amount === null) return { valid: false, invoiced: 0, paid: 0, outstanding: 0 };
-    paid += amount;
-    paidByInvoice.set(payment.invoice_id, (paidByInvoice.get(payment.invoice_id) ?? 0n) + amount);
+    const invoice = invoiceAmounts.get(payment.invoice_id);
+    if (amount === null || !invoice) return invalidAccountSummary();
+
+    invoice.paid += amount;
+    const currencyTotals = totalsByCurrency.get(invoice.currency);
+    if (!currencyTotals) return invalidAccountSummary();
+    currencyTotals.paid += amount;
   }
 
-  let outstanding = 0n;
-  for (const [invoiceId, total] of totalsByInvoice) {
-    const invoicePaid = paidByInvoice.get(invoiceId) ?? 0n;
-    if (total > invoicePaid) outstanding += total - invoicePaid;
+  for (const invoice of invoiceAmounts.values()) {
+    const currencyTotals = totalsByCurrency.get(invoice.currency);
+    if (!currencyTotals) return invalidAccountSummary();
+    if (invoice.total > invoice.paid) currencyTotals.outstanding += invoice.total - invoice.paid;
   }
 
   return {
     valid: true,
-    invoiced: moneyNumber(invoiced),
-    paid: moneyNumber(paid),
-    outstanding: moneyNumber(outstanding),
+    currencies: [...totalsByCurrency.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([currency, totals]) => ({
+        currency,
+        invoiced: moneyNumber(totals.invoiced),
+        paid: moneyNumber(totals.paid),
+        outstanding: moneyNumber(totals.outstanding),
+      })),
   };
 }
 
