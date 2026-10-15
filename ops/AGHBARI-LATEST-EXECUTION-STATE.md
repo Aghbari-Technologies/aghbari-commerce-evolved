@@ -1,5 +1,11 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest CI correction — root authentication wrapper in route acceptance
+
+- Follow-up SHA `94f2d8a02628443522dfe7fcad1b398bdb62d5e0` failed its unit-test gate in Actions [38695284952](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695284952): **94 tests passed, 3 failed** in the new customer workflow test. The `/quotes` page rendered the root generic error because the mocked `@/lib/auth` module omitted `AuthProvider`, which the actual root route requires.
+- Follow-up adds an `AuthProvider` pass-through to the test mock, consistent with existing route tests. This is test harness correction only; exact-SHA CI for the fix is pending. Preserve the task as OPEN.
+
+---
 ## Latest CI correction — customer workflow router context
 
 - Test attempt SHA `d02e3f5408e67729a619616fcb56c03bca702b17` failed in two component cases with `TypeError: Cannot read properties of null (reading 'isServer')` from TanStack Router `useLinkProps`: the real `QuoteWorkspacePage` was mounted without router context. Aggregate unit result: 95 passed, 2 failed; no DB/lint/build gates ran after the unit failure.

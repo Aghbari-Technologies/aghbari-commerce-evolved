@@ -34,6 +34,7 @@ vi.mock("@/lib/auth", () => ({
     loading: false,
     configurationError: null,
   }),
+  AuthProvider: ({ children }: { children: unknown }) => children,
 }));
 
 vi.mock("@/components/Login", () => ({
