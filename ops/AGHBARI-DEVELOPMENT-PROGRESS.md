@@ -35,3 +35,12 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - CI passed: unit tests; all migrations and cross-tenant workflows on isolated PostgreSQL 17; lint; production build; dev-server smoke on port 5173 covering client/admin routes and PWA files.
 - The first PR run failed at build for unresolved `ORG_ID` imports in `CustomerWorkflows.tsx` and `AdminPages.tsx`. Both consumers now resolve the organization from the authenticated tenant-context RPC; subsequent exact-head and merged-main runs passed.
 - **Not closed:** source migration has not been applied to production; configured Supabase ref `ffxxjaolfntzbapmfbuv` is inaccessible. Authenticated browser E2E, full price-tier privacy, and anonymous storefront/domain tenant routing remain open. Lovable sync remains unproven.
+
+## 2026-10-15 — Permanent session-resume protocol
+
+- **Persistent instruction entrypoints:** root `AGENTS.md` and `.github/copilot-instructions.md` are present on remote `main`; Copilot's repo-wide instruction file points to the shared canonical rules. Lovable's own auto-loading and actual sync remain unverified.
+- **Protocol implementation SHA:** `90602f6deeba79a5d80efad38d83efec64be5173`; exact-head [GitHub Actions run 38692264543](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692264543) **SUCCESS**: unit tests, isolated PostgreSQL 17 acceptance, lint, build and port 5173 smoke.
+- **Resume checkpoint follow-up SHA:** `755b0ac12668403530f6180a76468b8182a32b10`; exact-head [run 38692476144](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692476144) **SUCCESS**. The registry marks `AGH-OPS-RESUME-001` `DONE_VERIFIED` for repository persistence/CI only.
+- Canonical state/resume/registry/mandate and memory are updated; the owner-supplied `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` remains unchanged. No duplicate log was created and no Lovable points were used.
+- Production Supabase project `ffxxjaolfntzbapmfbuv` remains an external access blocker. Keep production migration and real-browser proof open.
+- **next_task_id:** `AGH-SEC-BROWSER-E2E-001`.
