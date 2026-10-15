@@ -714,6 +714,32 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     ]));
     expect(host?.textContent).toContain("لم يُرسل طلب");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
+
+    const increase = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.getAttribute("aria-label") === "زيادة كمية Rice",
+    );
+    expect(increase).toBeDefined();
+    await act(async () => {
+      increase?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual(expect.arrayContaining([
+        { product_id: "product-offline-1", quantity: 1 },
+        { product_id: "product-offline-2", quantity: 3 },
+      ]));
+
+    const removeSugar = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.getAttribute("aria-label") === "إزالة Sugar",
+    );
+    expect(removeSugar).toBeDefined();
+    await act(async () => {
+      removeSugar?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
+      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+    expect(host?.textContent).toContain("لم يُرسل طلب");
   });
 
   it("shows a storage error instead of a misleading empty-catalog state when the cart ledger is corrupt", async () => {

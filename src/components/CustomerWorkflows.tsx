@@ -1932,6 +1932,7 @@ function Offline() {
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [cached, setCached] = useState(0);
   const [catalogRows, setCatalogRows] = useState<ReturnType<typeof sanitizePublicCatalogCache>>([]);
+  const [cartLines, setCartLines] = useState<ReturnType<typeof readOfflineCartLedger>["lines"]>([]);
   const [lastCatalogSyncAt, setLastCatalogSyncAt] = useState<number | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
@@ -1985,12 +1986,14 @@ function Offline() {
       const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
       const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(ledger.lines);
       setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
       setStorageError("");
       return true;
     } catch {
       setCached(0);
       setCatalogRows([]);
+      setCartLines([]);
       setCartCount(0);
       setLastCatalogSyncAt(null);
       setStorageError("تعذر التحقق من التخزين المحلي أو سجل السلة؛ لم تُرسل أي عملية. أعد المحاولة بعد التحقق من مساحة التخزين.");
@@ -2070,6 +2073,7 @@ function Offline() {
       const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
       const compacted = compactOfflineCartLedger(localStorage, cartScopeKey, ledger.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(compacted.lines);
       setCartCount(compacted.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(
         "تم حفظ ومراجعة مسودة السلة المحلية (" +
@@ -2099,12 +2103,52 @@ function Offline() {
         delta: 1,
       }, seedExists ? [] : legacy.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(next.lines);
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(
         "تمت إضافة " + productName + " إلى مسودة السلة المحلية فقط. لم يُرسل طلب؛ السعر والمخزون يحتاجان تحقق الخادم عند عودة الاتصال.",
       );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : "تعذر إضافة الصنف إلى المسودة المحلية.");
+    }
+  }
+  function adjustLocalDraft(productId: string, delta: 1 | -1) {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
+      const initialLines = (() => {
+        const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+        if (seedExists) return [];
+        const catalog = sanitizePublicCatalogCache(JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"));
+        return readLegacyCartDraftForScope(localStorage, cartScopeKey, catalog.map((product) => product.id)).lines;
+      })();
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "adjust",
+        product_id: productId,
+        delta,
+      }, initialLines);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage(delta > 0 ? "تمت زيادة الكمية في المسودة المحلية." : "تم إنقاص الكمية في المسودة المحلية.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "تعذر تعديل مسودة السلة المحلية.");
+    }
+  }
+  function removeFromLocalDraft(productId: string, productName: string) {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "remove",
+        product_id: productId,
+      });
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage("تمت إزالة " + productName + " من المسودة المحلية فقط.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "تعذر إزالة الصنف من المسودة المحلية.");
     }
   }
   function retryLocalStorage() {
@@ -2201,6 +2245,33 @@ function Offline() {
           <p style={quiet}>يُعرض أول 100 صنف مطابق لتجنب تحميل قائمة كبيرة؛ أضف كلمات بحث لتضييق النتائج.</p>
         )}
         {catalogRows.length > 0 && matchingCatalogRows.length === 0 && <p role="status" style={quiet}>لا توجد أصناف مطابقة لبحثك.</p>}
+      </section>
+      <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-draft-heading">
+        <h2 id="offline-draft-heading" style={{ marginTop: 0, fontSize: 18 }}>مسودة السلة المحلية</h2>
+        <p style={quiet}>هذه كميات محفوظة على الجهاز فقط؛ لا تظهر أسعار ولا تُرسل طلبات من هذه الشاشة.</p>
+        {cartLines.length === 0 ? (
+          <p role="status" style={quiet}>مسودة السلة فارغة.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {cartLines.map((line) => {
+              const product = catalogRows.find((item) => item.id === line.product_id);
+              const label = product?.name || ("صنف غير موجود في النسخة المحلية (" + line.product_id + ")");
+              return (
+                <article key={line.product_id} style={{ border: "1px solid #dbe5e7", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <strong>{label}</strong>
+                    <p style={quiet}>الكمية: {formatNumber(line.quantity)} · لا يوجد سعر معتمد دون الخادم</p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={secondary} aria-label={"زيادة كمية " + label} onClick={() => adjustLocalDraft(line.product_id, 1)}>＋</button>
+                    <button style={secondary} aria-label={"إنقاص كمية " + label} onClick={() => adjustLocalDraft(line.product_id, -1)} disabled={line.quantity <= 0}>−</button>
+                    <button style={secondary} aria-label={"إزالة " + label} onClick={() => removeFromLocalDraft(line.product_id, label)}>إزالة</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
       <section style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button style={primary} onClick={() => void sync()} disabled={syncing || !online}>
