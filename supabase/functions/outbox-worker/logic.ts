@@ -7,7 +7,7 @@ export function sanitizeOutboxErrorMessage(value: unknown): string {
   return raw
     .replace(/\b(Bearer|service_role|anon_key|api[_-]?key|password|secret|access[_-]?token)\b[=: ]+\S+/gi, "$1=[redacted]")
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email redacted]")
-    .replace(/(?:\+?\d[\d\s().-]{6,}\d)/g, "[number redacted]")
+    .replace(/(?:\+?[0-9٠-٩۰-۹][0-9٠-٩۰-۹\s().-]{6,}[0-9٠-٩۰-۹])/g, "[number redacted]")
     .replace(/([?&](?:access_token|refresh_token|token|api[_-]?key|key|password|secret)=)[^&\s]+/gi, "$1[redacted]")
     .split("")
     .map((character) => {
