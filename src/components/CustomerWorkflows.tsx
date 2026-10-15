@@ -2250,6 +2250,7 @@ function Offline() {
     try {
       // Replay uncertain mutations using the same ID. Existing records are idempotent;
       // missing records are written once. Only clear the intent after reconciliation succeeds.
+      const settledIntents: string[] = [];
       for (const [intent, id] of pendingLocalMutationIds.current.entries()) {
         if (intent === "clear") {
           appendOfflineCartMutation(localStorage, cartScopeKey, {
@@ -2278,12 +2279,14 @@ function Offline() {
         } else {
           throw new Error("تعذر استعادة حركة سلة محلية غير معروفة.");
         }
-        finishLocalMutation(intent);
+        settledIntents.push(intent);
       }
       const ledger = readOfflineCartLedger(localStorage, cartScopeKey, initialOfflineCartLines());
       writeLegacyCartOwner(localStorage, cartScopeKey);
       setCartLines(ledger.lines);
       setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
+      // Drop pending IDs only after the complete recovery/readback/owner write succeeds.
+      for (const intent of settledIntents) finishLocalMutation(intent);
       setStorageError("");
       setMessage("تم التحقق من التخزين وتسوية الحركات غير المحسومة دون تكرارها.");
     } catch (cause) {
