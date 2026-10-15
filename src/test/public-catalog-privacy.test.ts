@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getStorefrontDataScope: vi.fn(),
   getCurrentTenantScope: vi.fn(),
   from: vi.fn(),
+  rpc: vi.fn(),
   responses: {} as Record<string, { data: unknown[]; error: { message: string } | null }>,
   queries: [] as Array<{
     table: string;
@@ -14,12 +15,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase", () => ({
-  supabase: { from: mocks.from },
+  supabase: { from: mocks.from, rpc: mocks.rpc },
   getStorefrontDataScope: mocks.getStorefrontDataScope,
   getCurrentTenantScope: mocks.getCurrentTenantScope,
 }));
 
-import { fetchCategories, fetchProducts } from "@/lib/api";
+import { fetchCategories, fetchProducts, fetchResolvedProductPrices } from "@/lib/api";
+import { sanitizePublicCatalogCache } from "@/lib/commerce-utils";
 
 type MockResult = { data: unknown[]; error: { message: string } | null };
 type MockQuery = PromiseLike<MockResult> & {
@@ -78,6 +80,7 @@ describe("public catalog privacy and tenant query contract", () => {
       categories: { data: [], error: null },
     };
     mocks.from.mockImplementation((table: string) => makeQuery(table));
+    mocks.rpc.mockResolvedValue({ data: [], error: null });
     mocks.getStorefrontDataScope.mockResolvedValue({
       organizationId: ORGANIZATION_ID,
       warehouseId: WAREHOUSE_ID,
@@ -90,9 +93,9 @@ describe("public catalog privacy and tenant query contract", () => {
 
     const products = queryFor("products");
     expect(products.columns).toBe(
-      "id,organization_id,category_id,name,item_code,barcode,description,unit,base_price,status,image_url,created_at",
+      "id,organization_id,category_id,name,item_code,barcode,description,unit,status,image_url,created_at",
     );
-    expect(products.columns).not.toMatch(/cost_price|retail_price|wholesale_price|purchase_cost/i);
+    expect(products.columns).not.toMatch(/base_price|cost_price|retail_price|wholesale_price|purchase_cost/i);
     expect(products.filters).toContainEqual({
       column: "organization_id",
       value: ORGANIZATION_ID,
@@ -121,6 +124,75 @@ describe("public catalog privacy and tenant query contract", () => {
       value: true,
     });
     expect(mocks.from).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses only the server-resolved customer-tier price and never returns the raw base price", async () => {
+    mocks.responses.products = {
+      data: [{
+        id: "public-product-1",
+        organization_id: ORGANIZATION_ID,
+        category_id: null,
+        name: "Public product",
+        item_code: "PUB-1",
+        barcode: null,
+        description: null,
+        unit: "unit",
+        base_price: 99000,
+        status: "active",
+        image_url: null,
+        created_at: "",
+      }],
+      error: null,
+    };
+    mocks.rpc.mockResolvedValueOnce({
+      data: [{ product_id: "public-product-1", unit_price: "37000.00" }],
+      error: null,
+    });
+
+    const rows = await fetchProducts();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].display_price).toBe(37000);
+    expect(rows[0].base_price).toBe(0);
+    expect(queryFor("products").columns).not.toMatch(/base_price/i);
+    expect(mocks.rpc).toHaveBeenCalledWith("get_storefront_product_prices", {
+      p_product_ids: ["public-product-1"],
+      p_quantity: 1,
+    });
+    const cached = sanitizePublicCatalogCache(rows);
+    expect(cached).toHaveLength(1);
+    expect(cached[0]).not.toHaveProperty("display_price");
+    expect(cached[0].base_price).toBe(0);
+  });
+
+  it("fails closed if the pricing RPC omits a product price", async () => {
+    mocks.responses.products = {
+      data: [{
+        id: "public-product-2",
+        organization_id: ORGANIZATION_ID,
+        category_id: null,
+        name: "Unpriced product",
+        item_code: "PUB-2",
+        barcode: null,
+        description: null,
+        unit: "unit",
+        status: "active",
+        image_url: null,
+        created_at: "",
+      }],
+      error: null,
+    };
+    mocks.rpc.mockResolvedValueOnce({ data: [], error: null });
+    await expect(fetchProducts()).rejects.toThrow(/لم يرجع الخادم سعرًا موثقًا/);
+  });
+
+  it("rejects invalid or incomplete server price responses", async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: [{ product_id: "p1", unit_price: "NaN" }],
+      error: null,
+    });
+    await expect(fetchResolvedProductPrices(["p1"])).rejects.toThrow(/سعرًا غير صالح/);
+    mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: "permission denied" } });
+    await expect(fetchResolvedProductPrices(["p2"])).rejects.toThrow(/تعذر تحميل أسعار فئة حسابك/);
   });
 
   it("does not issue catalog queries if the server-derived storefront scope fails", async () => {

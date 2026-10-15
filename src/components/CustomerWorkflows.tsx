@@ -35,7 +35,7 @@ import {
   type InvoiceAmount,
   type PaymentAmount,
 } from "@/lib/commerce-utils";
-import { fetchProducts } from "@/lib/api";
+import { fetchProducts, fetchResolvedProductPrices } from "@/lib/api";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
 
@@ -103,6 +103,7 @@ type ReorderTemplateLine = { product_id: string | null; quantity: number | strin
 type AssistantOrderRow = { order_number: string | number; status: string; created_at: string };
 type AssistantInvoiceStatusRow = { invoice_number: string; status: string; issued_at: string };
 type AssistantProductRow = {
+  id: string;
   name: string;
   item_code: string;
   barcode: string | null;
@@ -812,7 +813,7 @@ function Quotes() {
     const [p, q] = await Promise.all([
       supabase
         .from("products")
-        .select("id,name,item_code,barcode,unit,base_price,status")
+        .select("id,name,item_code,barcode,unit,status")
         .eq("organization_id", orgId)
         .eq("status", "active")
         .order("name")
@@ -826,7 +827,14 @@ function Quotes() {
     if (p.error || q.error)
       setError("تعذر تحميل المنتجات أو عروض الأسعار. تحقق من نشر ترحيل قاعدة البيانات.");
     else {
-      setProducts((p.data ?? []) as Product[]);
+      try {
+        const rows = (p.data ?? []) as Array<{ id: string; [key: string]: unknown }>;
+        const priceMap = await fetchResolvedProductPrices(rows.map((row) => row.id));
+        setProducts(rows.map((row) => ({ ...row, base_price: priceMap.get(row.id)! })) as Product[]);
+      } catch (priceError) {
+        setProducts([]);
+        setError(priceError instanceof Error ? priceError.message : "تعذر تحميل سعر فئة حسابك.");
+      }
       const quoteRows = (q.data ?? []) as Quote[];
       setQuotes(quoteRows);
       if (quoteRows.length) {
@@ -1103,7 +1111,7 @@ function Reorder() {
     const [p, t] = await Promise.all([
       supabase
         .from("products")
-        .select("id,name,item_code,barcode,unit,base_price,status")
+        .select("id,name,item_code,barcode,unit,status")
         .eq("organization_id", orgId)
         .eq("status", "active")
         .order("name")
@@ -1117,7 +1125,14 @@ function Reorder() {
     if (p.error || t.error)
       setError("تعذر تحميل المنتجات أو قوالب إعادة الطلب. تحقق من ترحيل قاعدة البيانات.");
     else {
-      setProducts((p.data ?? []) as Product[]);
+      try {
+        const rows = (p.data ?? []) as Array<{ id: string; [key: string]: unknown }>;
+        const priceMap = await fetchResolvedProductPrices(rows.map((row) => row.id));
+        setProducts(rows.map((row) => ({ ...row, base_price: priceMap.get(row.id)! })) as Product[]);
+      } catch (priceError) {
+        setProducts([]);
+        setError(priceError instanceof Error ? priceError.message : "تعذر تحميل سعر فئة حسابك.");
+      }
       setTemplates((t.data ?? []) as ReorderTemplate[]);
     }
   }, []);
@@ -1334,7 +1349,7 @@ function Barcode() {
       const { organizationId: orgId } = tenantScope;
       let r = await supabase
         .from("products")
-        .select("id,name,item_code,barcode,unit,base_price,status")
+        .select("id,name,item_code,barcode,unit,status")
         .eq("organization_id", orgId)
         .eq("status", "active")
         .eq("barcode", code)
@@ -1342,14 +1357,21 @@ function Barcode() {
       if (!r.data && !r.error)
         r = await supabase
           .from("products")
-          .select("id,name,item_code,barcode,unit,base_price,status")
+          .select("id,name,item_code,barcode,unit,status")
           .eq("organization_id", orgId)
           .eq("status", "active")
           .eq("item_code", code)
           .maybeSingle();
       if (r.error) setError("تعذر البحث في الكتالوج.");
       else if (!r.data) setError("لم نعثر على صنف بهذا الرمز.");
-      else setProduct(r.data as Product);
+      else {
+        try {
+          const priceMap = await fetchResolvedProductPrices([r.data.id]);
+          setProduct({ ...r.data, base_price: priceMap.get(r.data.id)! } as Product);
+        } catch (priceError) {
+          setError(priceError instanceof Error ? priceError.message : "تعذر تحميل سعر فئة حسابك.");
+        }
+      }
       setBusy(false);
     },
     [value],
@@ -1553,7 +1575,7 @@ function Assistant() {
         const { organizationId: orgId } = await getCurrentTenantScope();
         const r = await supabase
           .from("products")
-          .select("name,item_code,barcode,unit,base_price,status")
+          .select("id,name,item_code,barcode,unit,status")
           .eq("organization_id", orgId)
           .eq("status", "active")
           .order("name")
@@ -1568,15 +1590,20 @@ function Assistant() {
                 w,
               ),
           );
-        const hits = (r.data ?? [])
-          .filter((p: AssistantProductRow) =>
+        const matches = ((r.data ?? []) as Array<Omit<AssistantProductRow, "base_price">>)
+          .filter((p) =>
             tokens.some((t) =>
               (p.name + " " + p.item_code + " " + (p.barcode ?? ""))
                 .toLocaleLowerCase("ar")
                 .includes(t.toLocaleLowerCase("ar")),
             ),
           )
-          .slice(0, 8) as AssistantProductRow[];
+          .slice(0, 8);
+        const priceMap = await fetchResolvedProductPrices(matches.map((product) => product.id));
+        const hits = matches.map((product) => ({
+          ...product,
+          base_price: priceMap.get(product.id)!,
+        })) as AssistantProductRow[];
         setAnswer(
           hits.length
             ? "نتائج من الكتالوج:\n" +

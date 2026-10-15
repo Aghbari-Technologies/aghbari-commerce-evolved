@@ -233,6 +233,7 @@ export function classifyAssistantIntent(question: string): AssistantIntent {
 /**
  * Persist an explicit public catalog projection, never raw API records.
  * This strips staff costs, tier prices, reorder thresholds and reservations from browser storage.
+ * The account-specific display_price is intentionally excluded and must be refreshed online.
  */
 export function sanitizePublicCatalogCache(value: unknown): ProductWithInventory[] {
   if (!Array.isArray(value)) return [];

@@ -5,11 +5,52 @@ import type {
   ProductWithInventory, OrderWithCustomer, AdminSetting, ImportJob, ImportJobRow,
 } from './types';
 
+// Fetch unit prices using the server-derived customer/company tier. The client never
+// supplies a tier, customer id, or organization id, and must fail closed if any price is missing.
+export async function fetchResolvedProductPrices(
+  productIds: string[],
+  quantity = 1,
+): Promise<Map<string, number>> {
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10000) {
+    throw new Error("الكمية المطلوبة لاحتساب السعر غير صالحة.");
+  }
+  const uniqueIds = [...new Set(productIds)];
+  if (!uniqueIds.length) return new Map();
+  if (uniqueIds.some((id) => typeof id !== "string" || !id.length)) {
+    throw new Error("تعذر التحقق من هوية أحد الأصناف.");
+  }
+  const prices = new Map<string, number>();
+  for (let offset = 0; offset < uniqueIds.length; offset += 500) {
+    const chunk = uniqueIds.slice(offset, offset + 500);
+    const { data, error } = await supabase.rpc("get_storefront_product_prices", {
+      p_product_ids: chunk,
+      p_quantity: quantity,
+    });
+    if (error || !Array.isArray(data)) {
+      throw new Error("تعذر تحميل أسعار فئة حسابك من الخادم؛ أُخفيت الأسعار حتى اكتمال التحقق.");
+    }
+    for (const row of data as Array<{ product_id?: unknown; unit_price?: unknown }>) {
+      if (typeof row.product_id !== "string" || !chunk.includes(row.product_id) || prices.has(row.product_id)) {
+        throw new Error("أعاد الخادم نتيجة أسعار غير متطابقة؛ أُخفيت الأسعار لحماية الحساب.");
+      }
+      const price = Number(row.unit_price);
+      if (!Number.isFinite(price) || price < 0) {
+        throw new Error("أعاد الخادم سعرًا غير صالح؛ أُخفيت الأسعار لحماية الحساب.");
+      }
+      prices.set(row.product_id, price);
+    }
+    if (chunk.some((id) => !prices.has(id))) {
+      throw new Error("لم يرجع الخادم سعرًا موثقًا لكل صنف متاح؛ أُخفيت الأسعار لحماية الحساب.");
+    }
+  }
+  return prices;
+}
+
 // ─── Products ───
 export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const scope = await getStorefrontDataScope();
   const { organizationId: orgId, warehouseId, isStaff } = scope;
-  const publicProductColumns = 'id,organization_id,category_id,name,item_code,barcode,description,unit,base_price,status,image_url,created_at';
+  const publicProductColumns = 'id,organization_id,category_id,name,item_code,barcode,description,unit,status,image_url,created_at';
   let productsQuery = supabase
     .from('products')
     .select(isStaff ? '*' : publicProductColumns)
@@ -19,6 +60,10 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   if (!isStaff) productsQuery = productsQuery.eq('status', 'active');
   const { data: products, error } = await productsQuery.order('name');
   if (error) throw error;
+
+  const customerPriceMap = isStaff
+    ? null
+    : await fetchResolvedProductPrices(((products ?? []) as Array<{ id: string }>).map((product) => product.id));
 
   const inventoryResult = warehouseId
     ? await supabase
@@ -44,11 +89,20 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const catMap = new Map<string, Category>();
   categories?.forEach((cat: Category) => catMap.set(cat.id, cat));
 
-  return (products as Product[]).map((p) => ({
-    ...p,
-    inventory: invMap.get(p.id),
-    category: catMap.get(p.category_id || ''),
-  }));
+  return (products as Product[]).map((p) => {
+    const displayPrice = isStaff ? Number(p.base_price) : customerPriceMap?.get(p.id);
+    if (displayPrice === undefined || !Number.isFinite(displayPrice) || displayPrice < 0) {
+      throw new Error("تعذر التحقق من سعر فئة الحساب لهذا الصنف؛ لم يُعرض سعر بديل.");
+    }
+    return {
+      ...p,
+      // Never send the generic base price to customer sessions or persist it as a storefront price.
+      base_price: isStaff ? Number(p.base_price) : 0,
+      display_price: displayPrice,
+      inventory: invMap.get(p.id),
+      category: catMap.get(p.category_id || ''),
+    };
+  });
 }
 
 export async function createProduct(p: Partial<Product>): Promise<Product> {

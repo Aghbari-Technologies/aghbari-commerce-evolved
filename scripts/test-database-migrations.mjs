@@ -301,11 +301,38 @@ async function main() {
     [organizationId],
   );
 
+  await db.unsafe("reset role");
+  const expectedRetailPriceRows = await db.unsafe(
+    "select public.customer_product_unit_price($1::uuid,$2::uuid,'retail',1) as price",
+    [productId, organizationId],
+  );
   await db.unsafe("set role anon");
   const publicScopeRows = await db.unsafe("select public.get_public_storefront_context() as scope");
   const publicScope = publicScopeRows[0].scope;
   assert.equal(publicScope.organization_id, organizationId, "anonymous storefront scope must come from server-side publication config");
   assert.equal(publicScope.warehouse_id, "d0000000-0000-0000-0000-000000000001", "anonymous storefront must use the configured active warehouse");
+
+  const anonymousUnitPrices = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[productId], 1],
+  );
+  assert.equal(anonymousUnitPrices.length, 1, "anonymous pricing RPC must return the published active product");
+  assert.equal(anonymousUnitPrices[0].product_id, productId);
+  assert.equal(Number(anonymousUnitPrices[0].unit_price), Number(expectedRetailPriceRows[0].price),
+    "anonymous pricing must resolve retail through the authoritative server resolver");
+  assert.deepEqual(Object.keys(anonymousUnitPrices[0]).sort(), ["product_id","unit_price"],
+    "public pricing exposes only product id and unit price, never tier metadata");
+  const anonymousCrossTenantPrices = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[productId, otherProductId], 1],
+  );
+  assert.ok(anonymousCrossTenantPrices.every((row) => row.product_id !== otherProductId),
+    "anonymous pricing cannot return a foreign-tenant product price");
+  await expectFailure(
+    "anonymous pricing RPC rejects invalid quantities",
+    () => db.unsafe("select * from public.get_storefront_product_prices($1::uuid[],$2::numeric)", [[productId], 0]),
+    /quantity/i,
+  );
 
   const publicProducts = await db.unsafe("select id,organization_id,name,base_price from public.products order by id");
   assert.ok(publicProducts.some((p) => p.id === productId), "public storefront must read the canonical tenant catalog");
@@ -401,6 +428,26 @@ async function main() {
   );
   assert.equal(Number(preview20[0].result.items[0].quantity), 20);
   assert.ok(!("total_amount" in preview20[0].result));
+
+  const wholesaleResolved10 = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[productId], 10],
+  );
+  const wholesaleResolved20 = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[productId], 20],
+  );
+  assert.equal(wholesaleResolved10.length, 1);
+  assert.equal(Number(wholesaleResolved10[0].unit_price), 37000,
+    "approved wholesale customer quantity-10 catalog price must use the wholesale break");
+  assert.equal(Number(wholesaleResolved20[0].unit_price), 35000,
+    "approved wholesale customer quantity-20 catalog price must use the higher-volume break");
+  const customerCrossTenantPrices = await db.unsafe(
+    "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
+    [[otherProductId], 1],
+  );
+  assert.equal(customerCrossTenantPrices.length, 0,
+    "customer cannot resolve a product price for another organization");
 
   await expectFailure(
     "cross-tenant cart validation",

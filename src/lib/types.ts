@@ -306,6 +306,8 @@ export type ImportJobRow = {
 };
 
 export type ProductWithInventory = Product & {
+  /** Current server-resolved unit price for the active account. Never persist this field offline. */
+  display_price?: number;
   inventory?: InventoryBalance;
   category?: Category;
 };
