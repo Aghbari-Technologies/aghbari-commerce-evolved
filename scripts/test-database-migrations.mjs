@@ -1090,7 +1090,11 @@ async function main() {
     [accountantPriceProductId, organizationId],
   );
   await db.unsafe(
-    "insert into public.product_prices(product_id,tier,price,min_quantity,is_active) values($1,'retail',1234,1,true) on conflict(product_id,tier) do update set price=excluded.price,min_quantity=1,is_active=true",
+    "delete from public.product_prices where product_id=$1 and tier='retail'",
+    [accountantPriceProductId],
+  );
+  await db.unsafe(
+    "insert into public.product_prices(product_id,tier,price,min_quantity,is_active) values($1,'retail',1234,1,true)",
     [accountantPriceProductId],
   );
   const expectedAccountantRetailRows = await db.unsafe(
