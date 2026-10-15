@@ -63,11 +63,11 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 
 ## Current implementation pointer — 2026-10-15
 
-- **Verified remote baseline before this checkpoint refresh:** `90cf41ecb471b219c5f82f113d13bcc6ab76afb9`; exact-SHA CI [38754165794](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38754165794) **SUCCESS**.
-- PR #35 server-generated Arabic invoice/account-statement PDFs merged at `47d7ea6c604c2fb65e0faaeb80a2c3ba9415ee56` (exact main CI [38751531855](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38751531855) **SUCCESS**).
-- PR #36 Onyx XLSX export audit merged at `ea3b525d2d383dc7c22c70108ebaff8abd244c3d`; PR CI [38753274701](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753274701) and main CI [38753519465](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38753519465) **SUCCESS**. The RPC records a tenant/role/approval/item-count-guarded `onyx_export.prepared` event before client download; it does not assert successful download or compatibility with the owner's actual Onyx Pro version.
-- **Single live cursor:** `AGH-SEC-BROWSER-E2E-001 — OPEN` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`. Public runtime responds at `/login`, but `/invoices`, `/statement`, both PDF routes and `/manifest.webmanifest` return 404 on external readback while local CI route smoke passes. Direct Lovable editor/deployment SHA remains unverified.
-- Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied; the connected `aghbari-commerce` ref `mrcyqezbhpncuvaehwgf` is different and not a substitute. No production writes/migrations were made. Keep `AGH-EXT-SUPABASE-001` blocked until correct access is granted.
+Verified baseline before this cursor refresh: `4e4e00a48306b7f63e54f4949aee2ac58476801b`; exact-SHA CI [38754699365](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38754699365) **SUCCESS**. PR #35 provides authenticated server-generated Arabic finance PDFs; PR #36 provides the server-side, tenant/role/approved-order/item-count-guarded Onyx XLSX preparation audit, verified by exact PR and main CI. The audit does not claim browser download completion or actual Onyx Pro compatibility.
+
+**Only current task cursor:** `AGH-SEC-BROWSER-E2E-001 — OPEN` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`. Public runtime recheck shows `/login` responding but invoice/statement/PDF deep routes and `/manifest.webmanifest` returning 404 while local route smoke passes. Lovable editor/deployment SHA remains unverified.
+
+Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied; `mrcyqezbhpncuvaehwgf` is a different project, not a substitute. No production DB writes/migrations were performed.
 
 
 ## Historical source checkpoint — 2026-10-15 (the live cursor is in ops/AGHBARI-LATEST-EXECUTION-STATE.md)
