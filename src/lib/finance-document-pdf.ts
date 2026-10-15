@@ -531,6 +531,16 @@ export async function buildCustomerInvoicePdf(
     normalizeInvoiceMoney(line.unit_price);
     normalizeInvoiceMoney(line.line_total);
   }
+  const lineTotal = lines.reduce(
+    (sum, line) => sum + normalizeInvoiceMoney(line.line_total),
+    0n,
+  );
+  if (lineTotal !== subtotal) {
+    throw new Error("Invoice line totals do not equal the invoice subtotal.");
+  }
+  if (subtotal + taxAmount !== totalAmount) {
+    throw new Error("Invoice subtotal plus tax does not equal the invoice total.");
+  }
   const lineAmounts = lines.map((line) => ({
     unitPrice: minorUnitsToText(normalizeInvoiceMoney(line.unit_price)),
     lineTotal: minorUnitsToText(normalizeInvoiceMoney(line.line_total)),
