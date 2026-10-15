@@ -248,11 +248,8 @@ export function sanitizePublicCatalogCache(value: unknown): ProductWithInventory
       typeof product.unit !== 'string'
     ) return [];
 
-    const basePrice = typeof product.base_price === 'number' || typeof product.base_price === 'string'
-      ? Number(product.base_price)
-      : Number.NaN;
-    if (!Number.isFinite(basePrice) || basePrice < 0) return [];
-
+    // Prices are identity/tier-specific and must never survive a cache boundary.
+    // Keep the legacy Product shape without a usable value; online views must refresh via RPC.
     const rawInventory = product.inventory;
     let inventory: Record<string, unknown> | undefined;
     if (rawInventory && typeof rawInventory === 'object' && !Array.isArray(rawInventory)) {
@@ -292,7 +289,7 @@ export function sanitizePublicCatalogCache(value: unknown): ProductWithInventory
       barcode: typeof product.barcode === 'string' ? product.barcode : null,
       description: typeof product.description === 'string' ? product.description : null,
       unit: product.unit,
-      base_price: basePrice,
+      base_price: 0,
       status: typeof product.status === 'string' ? product.status : 'active',
       category_id: typeof product.category_id === 'string' ? product.category_id : null,
       image_url: typeof product.image_url === 'string' ? product.image_url : null,
