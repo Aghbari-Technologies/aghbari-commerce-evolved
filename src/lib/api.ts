@@ -124,22 +124,32 @@ async function fetchStaffProductById(id: string): Promise<Product> {
 export async function createProduct(p: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
   const productId = typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID();
-  const { error } = await supabase
+  // Return only the safe primary key from the write. Read protected fields through the staff RPC.
+  const { data: inserted, error } = await supabase
     .from('products')
-    .insert({ ...p, id: productId, organization_id: orgId });
+    .insert({ ...p, id: productId, organization_id: orgId })
+    .select('id')
+    .single();
   if (error) throw error;
-  return fetchStaffProductById(productId);
+  if (!inserted?.id) throw new Error('تعذر تأكيد إنشاء الصنف من قاعدة البيانات.');
+  return fetchStaffProductById(inserted.id);
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
-  const { error } = await supabase
+  // No matched row is a failed write, not a successful stale read.
+  const { data: updated, error } = await supabase
     .from('products')
     .update(updates)
     .eq('id', id)
-    .eq('organization_id', orgId);
+    .eq('organization_id', orgId)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
-  return fetchStaffProductById(id);
+  if (!updated?.id || updated.id !== id) {
+    throw new Error('لم يُحفظ تعديل الصنف؛ الصنف غير موجود في المؤسسة الحالية أو لا تملك صلاحية تعديله.');
+  }
+  return fetchStaffProductById(updated.id);
 }
 
 export async function deleteProduct(id: string): Promise<void> {
@@ -833,6 +843,8 @@ export async function fetchOnyxSnapshots() {
   return data;
 }
 
+export type OnyxNumericMetricQuality = "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
+
 export type OnyxSnapshotAnalytics = {
   snapshot: {
     id: string; version: number; file_name: string | null; file_hash: string; report_type: string;
@@ -840,12 +852,16 @@ export type OnyxSnapshotAnalytics = {
   };
   metrics: {
     row_count: number; unique_keys: number; valid_rows: number; rejected_rows: number; warning_rows: number;
-    quantity_total: number; revenue_total: number; sales_total: number; customer_count: number;
-    supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
+    quantity_total: number | null; revenue_total: number | null; sales_total: number | null;
+    quantity_valid_rows: number; quantity_missing_rows: number; quantity_invalid_rows: number;
+    revenue_valid_rows: number; revenue_missing_rows: number; revenue_invalid_rows: number;
+    sales_valid_rows: number; sales_missing_rows: number; sales_invalid_rows: number;
+    metric_quality: { quantity: OnyxNumericMetricQuality; revenue: OnyxNumericMetricQuality; sales: OnyxNumericMetricQuality };
+    customer_count: number; supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
   };
   status_distribution: Array<{ status: string; count: number }>;
-  top_items: Array<{ item_code: string; name: string | null; quantity: number; revenue: number }>;
-  top_customers: Array<{ customer_code: string; revenue: number; quantity: number }>;
+  top_items: Array<{ item_code: string; name: string | null; quantity: number | null; revenue: number | null }>;
+  top_customers: Array<{ customer_code: string; revenue: number | null; quantity: number | null }>;
   forecast_status: string;
   forecast_reason: string;
 };

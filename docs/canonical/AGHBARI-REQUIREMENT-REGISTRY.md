@@ -94,3 +94,11 @@ Protocol: `INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX 
 - **Exact-head CI status:** run [38787627108](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38787627108) passed JSX parsing but exposed a stale component-test fixture expecting invoice amounts without opt-in. The fixture now explicitly sets amounts_visible=true for the visible-case test. Await a fresh all-gates run for the new head before labeling PASS.
 - **Production status:** no production migration/deploy was performed; exact intended Supabase access and Lovable publish/readback are still external gates. Recheck PR head, CI URL, migration diff, RPC behavior and PDF/UI together after Lovable sync.
 - **Follow-on scope:** independent cart/order display policies and full-scope account statement totals remain OPEN; this invoice toggle does not close all customer financial privacy requirements.
+
+## 2026-10-15 — PR #72 consolidated source-preparation batch
+
+- Product write result checks + isolated unit suite from the former PR #48 scope are now included in the branch; successful read-after-write alone no longer masks a zero-row insert/update.
+- The Onyx `NULL`/unknown metric contract and UI disclosure from the former PR #71 scope are included. Missing/invalid values remain unavailable; one snapshot does not generate a time forecast. Isolated SQL acceptance now mutates a test snapshot to invalid/missing values and restores it.
+- Statement truncation boundaries are shared by customer UI and PDF, and threshold/invalid-count tests were added to the existing unit suite.
+- Customer invoice amounts remain `NULL` from the RPC and hidden in UI/PDF unless the organization explicitly enables `customer_invoice_amounts_visible`; cart unique-line and total-unit counts are separate.
+- **Do not mark the consolidated head PASS until its exact CI run succeeds.** No production database changes or Lovable deployment have occurred; target Supabase access remains externally blocked.
