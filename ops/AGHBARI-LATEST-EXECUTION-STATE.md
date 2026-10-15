@@ -1,5 +1,14 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active task — AGH-SEC-BROWSER-E2E-001 (source-runnable subgate)
+
+- Remote `main` baseline before this batch: `85dab55ec8e9ca903fe54b5f9845abe409037fad`, exact-SHA CI [38693335507](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38693335507) **SUCCESS**.
+- This batch adds `src/test/public-catalog-privacy.test.ts` to exercise the actual `fetchProducts()` query contract: anonymous least-privilege projections, organization/warehouse filters sourced from resolved scope, fail-closed behavior when public scope resolution fails, and staff-only broad projection under the authenticated scope.
+- This is **source-level Vitest coverage**, not authenticated browser E2E or production DB proof. Keep `AGH-SEC-BROWSER-E2E-001` **OPEN** until real customer/staff browser acceptance and all API/RPC/cache/export price-tier privacy channels are proven.
+- Expected Supabase project `ffxxjaolfntzbapmfbuv` remains the last-recorded external blocker. No production migration or data mutation is performed.
+- A mounted local checkout is unavailable in this execution host; source changes are prepared against the verified remote tree. Verify the new commit's own CI before closing this subgate.
+
+---
 ## Free Lovable persistence path verified from official documentation — 2026-10-15
 
 - **Official contract:** Lovable docs state that root-level `AGENTS.md` files are always read by the Lovable agent regardless of session length: https://docs.lovable.dev/features/knowledge. The existing root `AGENTS.md` on this repository is therefore the free persistent-instruction fallback; the separate Project Knowledge text field need not be directly edited just to make resume rules durable.
