@@ -110,7 +110,21 @@ describe('commerce completion utilities', () => {
     expect(safe?.inventory).not.toHaveProperty('internal_movement_note');
     expect(safe?.category).not.toHaveProperty('internal_note');
     expect(safe?.inventory?.quantity_available).toBe(16);
-    expect(sanitizePublicCatalogCache([{ id: 'bad', name: 'bad', item_code: 'x', unit: 'box', base_price: 'NaN' }])).toEqual([]);
+    expect(safe?.base_price).toBe(0);
+    expect(safe).not.toHaveProperty('display_price');
+    expect(sanitizePublicCatalogCache([{
+      id: 'p2', name: 'Rice', item_code: '000126', unit: 'carton',
+      base_price: 99000, display_price: 37000, retail_price: 37000,
+      wholesale_price: 35000, customer_tier: 'wholesale',
+    }])).toMatchObject([{ base_price: 0 }]);
+    expect(sanitizePublicCatalogCache([{
+      id: 'p2', name: 'Rice', item_code: '000126', unit: 'carton',
+      base_price: 99000, display_price: 37000, retail_price: 37000,
+      wholesale_price: 35000, customer_tier: 'wholesale',
+    }])[0]).not.toHaveProperty('display_price');
+    expect(sanitizePublicCatalogCache([{
+      id: 'bad', name: 'bad', item_code: 'x', unit: 'box', base_price: 'NaN',
+    }])).toMatchObject([{ base_price: 0 }]);
   });
 
   it('calculates totals only from persisted invoice and payment records', () => {
