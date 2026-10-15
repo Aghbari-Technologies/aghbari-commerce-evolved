@@ -152,7 +152,7 @@ BEGIN
       ),
       'order-created:'||v_order_id::text
     )
-    ON CONFLICT (organization_id,event_type,idempotency_key) DO NOTHING;
+    ON CONFLICT (organization_id,event_type,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING;
   END IF;
 
   RETURN pg_catalog.jsonb_build_object(
