@@ -112,7 +112,7 @@ function queryFor(table: string) {
   return query;
 }
 
-describe("customer quote workspace tenant boundary", () => {
+describe("customer workflow tenant and monetary display boundaries", () => {
   let root: Root | undefined;
   let host: HTMLDivElement | undefined;
 
@@ -177,6 +177,121 @@ describe("customer quote workspace tenant boundary", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   }
+  function configureCustomerOrderFixture(orderId: string) {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-customer@example.test",
+      name: "CI Customer",
+      roles: ["customer"],
+      isStaff: false,
+    };
+    mocks.responses = {
+      orders: [{
+        id: orderId,
+        order_number: "SO-UI-001",
+        customer_id: "44444444-4444-4444-8444-444444444444",
+        status: "pending",
+        total_items: 2,
+        notes: null,
+        created_at: "2026-10-15T09:00:00.000Z",
+        quantity_review_required: false,
+        customer_adjustment_note: null,
+        customer_payment_requested_at: null,
+        customer_confirmed_at: null,
+        payment_request_status: "none",
+        delivery_address_snapshot: null,
+      }],
+      order_items: [{
+        id: "55555555-5555-4555-8555-555555555555",
+        order_id: orderId,
+        item_code: "SKU-001",
+        product_name_snapshot: "Rice",
+        unit_snapshot: "carton",
+        quantity: 2,
+        requested_quantity: 2,
+        approved_quantity: 2,
+      }],
+      order_status_history: [],
+      customers: [{ customer_code: "C-001", business_name: "متجر الاختبار", contact_name: null }],
+    };
+  }
+
+
+  it("keeps recorded order money hidden when the server policy is off", async () => {
+    const orderId = "33333333-3333-4333-8333-333333333333";
+    configureCustomerOrderFixture(orderId);
+    mocks.rpc.mockImplementation(async (name: string) => {
+      if (name === "get_customer_order_financials") {
+        return {
+          data: {
+            amounts_visible: false,
+            currency: "YER",
+            total_amount: null,
+            items: [{
+              id: "55555555-5555-4555-8555-555555555555",
+              unit_price: null,
+              line_total: null,
+            }],
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    await mountQuoteWorkspace("/orders/" + orderId);
+
+    expect(mocks.rpc).toHaveBeenCalledWith("get_customer_order_financials", { p_order_id: orderId });
+    expect(host?.textContent).toContain("تفاصيل الكميات للمتابعة");
+    expect(host?.textContent).not.toContain("سعر الوحدة");
+    expect(host?.textContent).not.toContain("الإجمالي المسجل للطلب");
+    const itemQuery = queryFor("order_items");
+    expect(itemQuery.columns).toBe("id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity");
+    expect(itemQuery.columns).not.toMatch(/unit_price|line_total|total_amount/i);
+  });
+
+  it("shows recorded order money only when the scoped RPC explicitly authorizes it", async () => {
+    const orderId = "33333333-3333-4333-8333-333333333333";
+    configureCustomerOrderFixture(orderId);
+    mocks.rpc.mockImplementation(async (name: string) => {
+      if (name === "get_customer_order_financials") {
+        return {
+          data: {
+            amounts_visible: true,
+            currency: "YER",
+            total_amount: 40,
+            items: [{
+              id: "55555555-5555-4555-8555-555555555555",
+              unit_price: 20,
+              line_total: 40,
+            }],
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    await mountQuoteWorkspace("/orders/" + orderId);
+
+    expect(host?.textContent).toContain("سعر الوحدة");
+    expect(host?.textContent).toContain("الإجمالي");
+    expect(host?.textContent).toContain("الإجمالي المسجل للطلب");
+    expect(host?.textContent).toContain("ر.ي");
+  });
+
+  it("fails closed on recorded order amounts when the policy RPC fails", async () => {
+    const orderId = "33333333-3333-4333-8333-333333333333";
+    configureCustomerOrderFixture(orderId);
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "RPC unavailable" } });
+
+    await mountQuoteWorkspace("/orders/" + orderId);
+
+    expect(host?.textContent).toContain("المبالغ غير معروضة");
+    expect(host?.textContent).not.toContain("سعر الوحدة");
+    expect(host?.textContent).not.toContain("الإجمالي المسجل للطلب");
+  });
 
   it("requires an authenticated user before loading customer quote or catalog data", async () => {
     await mountQuoteWorkspace();
