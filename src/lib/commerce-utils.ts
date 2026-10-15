@@ -17,7 +17,7 @@ function moneyMinorUnits(value: unknown): bigint | null {
     : typeof value === 'string'
       ? value.trim()
       : '';
-  if (!raw || raw.length > 40 || !/^\\d+(?:\\.\\d{1,2})?$/.test(raw)) return null;
+  if (!raw || raw.length > 40 || !/^\d+(?:\.\d{1,2})?$/.test(raw)) return null;
   const [whole = '0', fraction = ''] = raw.split('.');
   try {
     return BigInt(whole) * 100n + BigInt((fraction + '00').slice(0, 2));
