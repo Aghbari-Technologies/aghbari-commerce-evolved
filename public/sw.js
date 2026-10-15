@@ -38,18 +38,15 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).then((response) => {
-        if (response.ok) {
-          const routeResponse = response.clone();
+        // Only persist the public application shell. Never cache successful deep
+        // navigations such as account, invoice or admin routes: those may contain
+        // identity-bound data in future SSR changes.
+        if (response.ok && url.pathname === '/') {
           const homeResponse = response.clone();
-          void caches.open(CACHE_NAME).then(async (cache) => {
-            await cache.put(request, routeResponse);
-            if (new URL(request.url).pathname === '/') {
-              await cache.put('/', homeResponse);
-            }
-          });
+          void caches.open(CACHE_NAME).then((cache) => cache.put('/', homeResponse));
         }
         return response;
-      }).catch(async () => (await caches.match(request)) || (await caches.match('/')) || Response.error()),
+      }).catch(async () => (await caches.match('/')) || Response.error()),
     );
     return;
   }
