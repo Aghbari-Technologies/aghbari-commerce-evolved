@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }));
 
@@ -52,8 +53,48 @@ const FINANCE_DATA = {
   ],
 };
 
+let container: HTMLDivElement;
+let root: Root;
+
+function setNativeValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
+  const prototype = element instanceof HTMLSelectElement
+    ? HTMLSelectElement.prototype
+    : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (!setter) throw new Error("Native form value setter is unavailable");
+  setter.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+async function renderFinancePage() {
+  await act(async () => {
+    root.render(<StaffFinancePage />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function submitPayment(amount: string) {
+  const selects = container.querySelectorAll("select");
+  const amountInput = container.querySelector<HTMLInputElement>('input[type="number"]');
+  const form = container.querySelector("form");
+  if (!selects.length || !amountInput || !form) {
+    throw new Error("Finance payment form did not render");
+  }
+
+  await act(async () => {
+    setNativeValue(selects[0], INVOICE_ID);
+    setNativeValue(amountInput, amount);
+    form.requestSubmit();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("StaffFinancePage payment amount guard", () => {
   beforeEach(() => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
     rpcMock.mockReset();
     rpcMock.mockImplementation(async (name: string) => {
       if (name === "fetch_staff_finance_data") {
@@ -64,44 +105,34 @@ describe("StaffFinancePage payment amount guard", () => {
       }
       return { data: null, error: { message: "Unexpected RPC in test" } };
     });
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
   });
 
   it("does not call the payment RPC when a payment exceeds the remaining balance", async () => {
-    render(<StaffFinancePage />);
+    await renderFinancePage();
+    await submitPayment("75.01");
 
-    await screen.findByRole("option", { name: /INV-2026-001/ });
-    fireEvent.change(screen.getByLabelText("الفاتورة"), {
-      target: { value: INVOICE_ID },
-    });
-    fireEvent.change(screen.getByLabelText("المبلغ"), {
-      target: { value: "75.01" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "تسجيل الدفعة" }));
-
+    expect(container.textContent).toContain("المبلغ يتجاوز المتبقي على الفاتورة.");
     expect(
-      await screen.findByText("المبلغ يتجاوز المتبقي على الفاتورة."),
-    ).toBeInTheDocument();
-    expect(rpcMock).not.toHaveBeenCalledWith(
-      "record_customer_payment",
-      expect.anything(),
-    );
+      rpcMock.mock.calls.some(([name]) => name === "record_customer_payment"),
+    ).toBe(false);
   });
 
   it("submits an amount equal to the remaining balance", async () => {
-    render(<StaffFinancePage />);
+    await renderFinancePage();
+    await submitPayment("75.00");
 
-    await screen.findByRole("option", { name: /INV-2026-001/ });
-    fireEvent.change(screen.getByLabelText("الفاتورة"), {
-      target: { value: INVOICE_ID },
-    });
-    fireEvent.change(screen.getByLabelText("المبلغ"), {
-      target: { value: "75.00" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "تسجيل الدفعة" }));
-
-    expect(
-      await screen.findByText("تم تسجيل الدفعة وتحديث حالة الفاتورة."),
-    ).toBeInTheDocument();
+    expect(container.textContent).toContain("تم تسجيل الدفعة وتحديث حالة الفاتورة.");
     expect(rpcMock).toHaveBeenCalledWith("record_customer_payment", {
       p_invoice_id: INVOICE_ID,
       p_amount: 75,
