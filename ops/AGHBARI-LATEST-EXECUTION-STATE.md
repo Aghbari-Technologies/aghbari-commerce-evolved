@@ -1,3 +1,16 @@
+# Latest live checkpoint before this protocol update — 2026-10-15
+
+- **Remote `main` HEAD:** `943c8cc0279318da751634101a6114c2d90566fc` (commit dated 2026-10-15T06:21:28Z): https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/943c8cc0279318da751634101a6114c2d90566fc.
+- **Exact-SHA CI:** [run 38691930376](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38691930376) completed **SUCCESS** for exactly `943c8cc0279318da751634101a6114c2d90566fc`. This baseline PASS does not apply to any later commit.
+- **Ref safety:** GitHub reports `main` is not branch-protected. Use a non-forced expected-SHA lease for any remote ref update; abort and re-inspect if the expected SHA no longer matches.
+- **Local checkout limitation:** no checkout is mounted in this execution host. The remote branch/commit/Actions were checked through GitHub API. Local `git fetch origin`, `git status --short --branch`, current local branch, and local `HEAD` have **not** been run here; working-tree state is **UNKNOWN**.
+- **Permanent instruction anchors verified present:** root `AGENTS.md` and `.github/copilot-instructions.md`. The Copilot entry-point file is committed on `main`; actual loading of instructions by Lovable/other hosts and sync to the editor are not proven by repository text or push.
+- **Protocol batch scope:** maintain and tighten existing canonical resume controls only; no new parallel registry/progress file, no broad source discovery, no Lovable point spent. Relevant files: `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, this file, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. The full master specification is deliberately untouched.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Continue with source-runnable authenticated customer/staff browser acceptance and tenant/pricing privacy checks using non-production fixtures.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001` — last recorded external blocker.** Intended project ref is `ffxxjaolfntzbapmfbuv`; verify current authorized access before production use. Do not apply migrations to another project.
+- After this protocol batch is committed, independently read the new remote `main` SHA and its own Actions result before treating the batch as verified. Do not inherit the baseline SHA's CI result.
+
+---
 # Aghbari Commerce — Latest Execution State
 
 ## Active resume checkpoint — 2026-10-15

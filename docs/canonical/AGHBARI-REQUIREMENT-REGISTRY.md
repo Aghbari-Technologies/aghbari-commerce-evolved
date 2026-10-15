@@ -3,7 +3,7 @@
 **Product:** متجر الأغبري | Aghbari Commerce  
 **Repository:** `Aghbari-Technologies/aghbari-commerce-evolved`  
 **Branch:** `main`  
-**Source baseline verified immediately before this protocol batch:** `8324f22419a967fc86f20dddc3b8650a6fd89390`; exact-head CI [38690894558](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38690894558) **SUCCESS**. Re-read live `origin/main` after any push.  
+**Remote source baseline verified before this protocol update:** `943c8cc0279318da751634101a6114c2d90566fc`; exact-head CI [38691930376](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38691930376) **SUCCESS**. This is baseline evidence only; inspect the new HEAD and its own CI after every push.  
 **Canonical specification:** [AGHBARI-MASTER-PROJECT-SPECIFICATION.md](./AGHBARI-MASTER-PROJECT-SPECIFICATION.md)  
 **Technical supplement:** [Platform Intelligence requirements](../specs/PLATFORM-INTELLIGENCE-PRODUCTION-REQUIREMENTS-2026-10-09.md)
 
@@ -37,7 +37,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 | AGH-WHATSAPP-001 | WhatsApp | **PARTIAL / external dependency** | Internal notifications exist. No official provider/credentials confirmed; never claim Sent without provider message ID/status. |
 | AGH-OFFLINE-PWA-001 | Offline/PWA | **PARTIAL** | Local catalog and cart draft exist; online server validation remains required before order creation. Conflict-safe mutation queue is unproven. |
 | AGH-OPS-DR-001 | Monitoring / DR / performance | **NOT PROVEN** | No production P95, 100k-row memory profile, backup restore, failover or DR drill evidence. |
-| AGH-OPS-RESUME-001 | Persistent memory | **PERSISTED / MAINTAINED** | `PROJECT_MEMORY.md`, this registry, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and progress ledger are committed on main. |
+| AGH-OPS-RESUME-001 | Persistent session-resume protocol | **IN PROGRESS — POST-PUSH VERIFICATION REQUIRED** | Stable ID for the existing canonical protocol. `AGENTS.md` and `.github/copilot-instructions.md` are present; memory, resume, state, registry and mandate remain the single source of truth. This protocol update must be checked at its own remote SHA/CI before marking `DONE_VERIFIED`. Lovable host auto-loading/sync is separate and remains unverified. |
 
 ## Mandatory invariants
 1. Product identity is **متجر الأغبري | Aghbari Commerce** only.
