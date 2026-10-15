@@ -1,5 +1,18 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active batch — AGH-FINANCE-DOCS-001: payment over-limit UI regression coverage (PR #34; verification pending)
+
+- **Starting main SHA:** `aa71dc4ee9f17fcbae2197f6f9c29b3f3fd123e8` (PR #34 base SHA).
+- **Implementation/test SHA:** `0376356722511f6da38a29e29f1684ea43978575`; PR [#34](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/34) is open and not merged.
+- **Changed path:** `src/components/CustomerWorkflows.finance.test.tsx`.
+- **Assertions added:** an entered payment of 75.01 is rejected when the remaining invoice balance is 75.00 and `record_customer_payment` must not be called; a payment equal to 75.00 is allowed to reach that RPC.
+- **Verification status:** the GitHub connector returned no combined-status entries and no PR-triggered workflow runs for `0376356722511f6da38a29e29f1684ea43978575` at checkpoint time. Therefore the new test, lint and build are **PENDING**, not PASS. Do not merge this branch or transfer earlier SHA evidence to it until Actions for this exact SHA is visible and successful.
+- **Important distinction:** existing isolated PostgreSQL acceptance already contains server-side overpayment rejection assertions in `scripts/test-database-migrations.mjs`; the new test is a jsdom component regression test, not real authenticated-browser or production evidence.
+- **Still open in AGH-FINANCE-DOCS-001:** exact-SHA CI, server-generated Arabic invoice PDF, authorized real-browser test and production Supabase verification. Current UI `window.print()` is not server-generated PDF. No production database was changed and Lovable sync is not proven.
+- **next_task_id = AGH-FINANCE-DOCS-001 — PARTIAL**. Keep this task open and continue its uncompleted PDF/browser gates; do not open a duplicate ledger.
+
+---
+
 ## Verified merged batch — AGH-CUSTOMER-360-001: company-member invitations and identity scope
 
 - **Current main SHA:** 68365d5dd87e9f00eff6bd68c6ad7d517e9cb567; PR [#33](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/33) merged successfully from tested PR SHA ecf6412a93d8350eb40de97b995e43f1e84b309e.
