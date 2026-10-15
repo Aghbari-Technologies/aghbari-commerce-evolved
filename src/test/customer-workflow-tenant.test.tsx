@@ -607,7 +607,13 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       roles: ["staff"],
       isStaff: true,
     };
-    // Simulate a legacy cache written by a staff session before the allowlist was wired in.
+    const catalogScopeBeforeMount = createOfflineCartScopeKey(PROFILE_ID, window.location.origin);
+    // Existing same-account cart contents must survive first seed creation before the catalog cache exists.
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([
+      { product_id: "product-offline-2", quantity: 2 },
+    ]));
+    window.localStorage.setItem("aghbari:cart-owner:v1", catalogScopeBeforeMount);
+    // Simulate a legacy catalog written by a staff session before the allowlist was wired in.
     window.localStorage.setItem("aghbari:catalog:v1", JSON.stringify([unsafeRow]));
     mocks.fetchProducts.mockResolvedValueOnce([
       unsafeRow,
@@ -700,8 +706,12 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-1", quantity: 1 }]);
+    const resultingDraft = readOfflineCartLedger(window.localStorage, catalogScope).lines;
+    expect(resultingDraft).toHaveLength(2);
+    expect(resultingDraft).toEqual(expect.arrayContaining([
+      { product_id: "product-offline-1", quantity: 1 },
+      { product_id: "product-offline-2", quantity: 2 },
+    ]));
     expect(host?.textContent).toContain("لم يُرسل طلب");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
   });

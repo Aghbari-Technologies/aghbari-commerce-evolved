@@ -2083,12 +2083,21 @@ function Offline() {
   function addToLocalDraft(productId: string, productName: string) {
     try {
       if (!user?.profileId) throw new Error("سجّل الدخول قبل حفظ مسودة سلة مرتبطة بحسابك.");
+      const catalog = sanitizePublicCatalogCache(
+        JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+      );
+      const legacy = readLegacyCartDraftForScope(
+        localStorage,
+        cartScopeKey,
+        catalog.map((product) => product.id),
+      );
+      const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
       const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
         id: createOfflineCartMutationId(),
         kind: "adjust",
         product_id: productId,
         delta: 1,
-      }, []);
+      }, seedExists ? [] : legacy.lines);
       writeLegacyCartOwner(localStorage, cartScopeKey);
       setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
       setMessage(
