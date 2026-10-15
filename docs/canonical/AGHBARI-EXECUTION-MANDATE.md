@@ -2,6 +2,14 @@
 
 هذه الوثيقة تحفظ تعليمات المالك التنفيذية حتى بعد انقطاع الاتصال أو انتهاء الجلسة. الوثيقة الهندسية الكاملة المرجعية هي `AGHBARI-MASTER-PROJECT-SPECIFICATION.md` وتظل المصدر الحاكم للتفاصيل الفنية، كما أن `AGHBARI-REQUIREMENT-REGISTRY.md` هو سجل الفجوات الوحيد الذي يجب تحديثه بدل إعادة الاستكشاف.
 
+## Current remote reconciliation — 2026-10-15
+
+- Remote `main` observed at `39d2dec8752e973e9661c5564d85309f6df6f73a` before this state refresh (merge PR #43). PR #41 source `81ef31247c434ba2381180e81924e7e8d135d14e` passed exact CI [38761146295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38761146295); PR #42 source `328c367e3947992b93d1bacc0664f4567844d67f` passed [38761721452](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38761721452); PR #43 worker-identity fix `a21d138f648c3a50b2bb84e10559bb105c5a162b` passed [38763521249](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38763521249). All three runs report **SUCCESS on their exact tested PR SHA**.
+- The connected GitHub API exposed no combined status/check run for merge SHA `39d2dec...`; treat this merged SHA's own CI as **UNVERIFIED** until a run tied to that exact SHA is directly returned. No PASS transfers from a PR head to its merge commit.
+- Persistent loader setup is already committed: root `AGENTS.md` for Lovable (official docs explicitly say it is always read) and `.github/copilot-instructions.md` for GitHub Copilot. Project Knowledge/editor synchronization is a separate, currently unverified event; do not spend Lovable credits just to restate saved instructions.
+- **Current next task:** `AGH-PRICE-PRIVACY-001` remains **PARTIAL**. Continue source-level API/RPC/export-channel review after the route and offline-cache subgates landed, then handle authenticated browser/published SHA verification. `AGH-EXT-SUPABASE-001` is still the last-known external blocker for the intended ref `ffxxjaolfntzbapmfbuv`; never mutate a similarly named alternate project.
+- This host has no checkout. Remote GitHub APIs are the evidence source for this run; local Git status/fetch/HEAD have not been executed.
+
 ## بروتوكول الاستئناف الدائم — إلزامي قبل التنفيذ
 
 - نقطة الدخول ليست إعادة التخطيط: افحص الحالة الحية، ثم خذ `next_task_id` من `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، وطابقه مع سجل المتطلبات الوحيد.

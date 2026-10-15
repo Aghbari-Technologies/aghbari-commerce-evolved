@@ -2,6 +2,17 @@
 
 Rule: tests and evidence apply only to the exact SHA recorded with them. The push and Lovable sync are separate acceptance events. The master spec, mandate, registry, project memory and resume prompt are now persisted on main.
 
+## 2026-10-15 — Remote checkpoint reconciliation after PRs #41–#43
+
+- **Remote `main` before this documentation-only refresh:** `39d2dec8752e973e9661c5564d85309f6df6f73a` (merge PR #43). This metadata commit updates stale checkpoint pointers; fetch live `main` again in the next session.
+- **PR #41 — pricing route coverage:** tested SHA `81ef31247c434ba2381180e81924e7e8d135d14e`, [exact run 38761146295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38761146295) **SUCCESS**.
+- **PR #42 — account price removal from persisted catalog cache:** tested SHA `328c367e3947992b93d1bacc0664f4567844d67f`, [exact run 38761721452](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38761721452) **SUCCESS**.
+- **PR #43 — outbox worker:** trusted-worker identity fix SHA `a21d138f648c3a50b2bb84e10559bb105c5a162b`, [exact run 38763521249](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38763521249) **SUCCESS**; preceding sanitizer fix SHA `ce675638e3e7c367d29a8def0b1e73d4cf04b2b4`, [run 38763315363](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38763315363) **SUCCESS**.
+- **Evidence boundary:** the latest merged main SHA `39d2dec...` returns no exact-SHA status/run via the connected GitHub APIs. PR-head CI evidence does not imply this merge SHA passed. Root `AGENTS.md` and `.github/copilot-instructions.md` are present; Lovable docs confirm the root AGENTS loader, but live editor/deployment sync remains **UNVERIFIED**.
+- **Next:** `AGH-PRICE-PRIVACY-001 — PARTIAL`; review remaining API/RPC/export fields and cross-tier leakage, then run live authenticated browser and publication SHA checks under `AGH-SEC-BROWSER-E2E-001`. Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains last-known inaccessible; no production mutation was attempted. No local checkout is mounted, so local Git commands were not run.
+
+
+
 | Item | Current status | Evidence | Next closure |
 |---|---|---|---|
 | CI at `f75dcb7fd3f4a598b2acf6db6d649e0f54c92fac` | PASS | [Run 38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037) unit/PostgreSQL/lint/build/5173 smoke all successful | The later `main` SHA has a separate CI run; do not transfer this PASS |
