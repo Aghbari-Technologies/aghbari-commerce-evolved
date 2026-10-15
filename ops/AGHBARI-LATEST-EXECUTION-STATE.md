@@ -1,5 +1,13 @@
 # Aghbari Commerce — Latest Execution State
 
+## Latest verified subgate — customer quote workflow route acceptance
+
+- **Current source SHA:** `6a4b68acc8a9295f508d4301cce754cf826e7f3d`.
+- **Exact-SHA CI:** [run 38695532757](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695532757) **SUCCESS**; unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build, and port-5173 dev-server smoke all passed.
+- `src/test/customer-workflow-tenant.test.tsx` mounts the actual `/quotes` route through the generated route tree and checks unauthenticated login gating/no data reads; authenticated customer scope resolution and organization-filtered least-privilege catalog query; and fail-closed behavior when the authenticated scope RPC fails. The test also supplies the root `AuthProvider` context needed by the actual route tree.
+- This is jsdom route/component evidence with mocked auth/data calls; it is **not** a live authenticated browser session, production database, or proof for every pricing channel. `AGH-SEC-BROWSER-E2E-001` remains **OPEN**.
+
+---
 ## Latest CI correction — root authentication wrapper in route acceptance
 
 - Follow-up SHA `94f2d8a02628443522dfe7fcad1b398bdb62d5e0` failed its unit-test gate in Actions [38695284952](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695284952): **94 tests passed, 3 failed** in the new customer workflow test. The `/quotes` page rendered the root generic error because the mocked `@/lib/auth` module omitted `AuthProvider`, which the actual root route requires.
