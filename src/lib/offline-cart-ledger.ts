@@ -358,6 +358,18 @@ export function createOfflineCartMutationId(): string {
   return "cart_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 16);
 }
 
+/** Stable, non-secret identity for one legacy draft payload being migrated across reloads. */
+export function createStableOfflineCartMutationId(namespace: string, payload: unknown): string {
+  const normalizedNamespace = namespace.trim().replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32) || "legacy";
+  const serialized = JSON.stringify(payload);
+  let hash = 2166136261;
+  for (let index = 0; index < serialized.length; index++) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return normalizedNamespace + "-" + (hash >>> 0).toString(16).padStart(8, "0") + "-" + serialized.length.toString(36);
+}
+
 export function appendOfflineCartMutation(
   storage: LocalStorageLike,
   scopeKey: string,

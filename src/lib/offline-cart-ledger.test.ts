@@ -3,6 +3,7 @@ import {
   appendOfflineCartMutation,
   compactOfflineCartLedger,
   createOfflineCartScopeKey,
+  createStableOfflineCartMutationId,
   readLegacyCartDraftForScope,
   readOfflineCartLedger,
   type LocalStorageLike,
@@ -24,6 +25,14 @@ function mutation(input: Omit<OfflineCartMutationInput, "id"> & { id?: string })
 }
 
 describe("scoped durable offline cart mutation journal", () => {
+  it("uses a stable operation ID for the same legacy restore payload", () => {
+    const payload = [{ product_id: "p1", quantity: 2 }];
+    expect(createStableOfflineCartMutationId("legacy-restore", payload))
+      .toBe(createStableOfflineCartMutationId("legacy-restore", payload));
+    expect(createStableOfflineCartMutationId("legacy-restore", payload))
+      .not.toBe(createStableOfflineCartMutationId("legacy-restore", [{ product_id: "p1", quantity: 3 }]));
+  });
+
   it("applies increments exactly once and survives replay after reload", () => {
     const storage = new MemoryStorage();
     const scope = createOfflineCartScopeKey("profile-a", "https://store.example");

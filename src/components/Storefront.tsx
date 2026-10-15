@@ -8,6 +8,19 @@ import { fetchProducts, fetchCategories, fetchPromotions, fetchSettingsMap } fro
 import { useFetch } from '@/lib/useFetch';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { parseCustomerCheckoutPreview, type CustomerCheckoutPreview } from '@/lib/customer-money-policy';
+import {
+  appendOfflineCartMutation,
+  createOfflineCartMutationId,
+  createOfflineCartScopeKey,
+  createStableOfflineCartMutationId,
+  getOfflineCartLedgerPrefix,
+  getOfflineCatalogCacheKey,
+  readLegacyCartDraftForScope,
+  readOfflineCartLedger,
+  subscribeToOfflineCartLedger,
+  writeLegacyCartOwner,
+  type OfflineCartMutationInput,
+} from '@/lib/offline-cart-ledger';
 import { matchesArabicCatalogSearch, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeCartCounts, validateQuickOrderLines } from '@/lib/commerce-utils';
 import type { ProductWithInventory, Category, Promotion } from '@/lib/types';
 import { useAuth } from '@/lib/auth';
@@ -36,24 +49,35 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
 }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === 'undefined' ? 'server-render' : window.location.origin,
+  );
   const { data: liveProducts, loading: productsLoading, error: productsError, refetch: refetchProducts } = useFetch(fetchProducts);
-  const [cachedProducts, setCachedProducts] = useState<ProductWithInventory[]>(() => {
-    if (typeof window === 'undefined') return [];
+  const [cachedCatalog, setCachedCatalog] = useState<{ scopeKey: string; products: ProductWithInventory[] }>(() => {
+    if (typeof window === 'undefined') return { scopeKey: cartScopeKey, products: [] };
     try {
-      const value = JSON.parse(window.localStorage.getItem('aghbari:catalog:v1') || '[]') as unknown;
-      const safe = sanitizePublicCatalogCache(value);
-      // Rewrite legacy v1 cache immediately so staff-only fields from earlier builds are purged.
-      window.localStorage.setItem('aghbari:catalog:v1', JSON.stringify(safe));
-      return safe;
-    } catch { return []; }
+      const value = JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || '[]') as unknown;
+      return { scopeKey: cartScopeKey, products: sanitizePublicCatalogCache(value) };
+    } catch { return { scopeKey: cartScopeKey, products: [] }; }
   });
+  const cachedProducts = cachedCatalog.scopeKey === cartScopeKey
+    ? cachedCatalog.products
+    : (() => {
+        try {
+          return sanitizePublicCatalogCache(JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || '[]') as unknown);
+        } catch { return []; }
+      })();
   const products = liveProducts ?? cachedProducts;
   const { data: categories, error: categoriesError } = useFetch(fetchCategories);
   const { data: promotions } = useFetch(fetchPromotions);
   const { data: settings } = useFetch(fetchSettingsMap);
   const [view, setView] = useState<StoreView>(initialView);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [cartRestored, setCartRestored] = useState(false);
+  const [cartDraftLines, setCartDraftLines] = useState<Array<{ product_id: string; quantity: number }>>([]);
+  const [cartRestoredScope, setCartRestoredScope] = useState<string | null>(null);
+  const [cartRestoreError, setCartRestoreError] = useState('');
+  const [cartHydrationRetry, setCartHydrationRetry] = useState(0);
+  const cartRestored = cartRestoredScope === cartScopeKey;
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState<string>('');
   const [matrixQuantities, setMatrixQuantities] = useState<Record<string, string>>({});
@@ -81,9 +105,9 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
   useEffect(() => {
     if (!liveProducts) return;
     const safeCatalog = sanitizePublicCatalogCache(liveProducts);
-    setCachedProducts(safeCatalog);
-    try { window.localStorage.setItem('aghbari:catalog:v1', JSON.stringify(safeCatalog)); } catch { /* storage is optional */ }
-  }, [liveProducts]);
+    setCachedCatalog({ scopeKey: cartScopeKey, products: safeCatalog });
+    try { window.localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog)); } catch { /* cache is optional */ }
+  }, [liveProducts, cartScopeKey]);
 
   useEffect(() => {
     try { window.localStorage.setItem('aghbari:wishlist:v1', JSON.stringify(wishlist)); } catch { /* saved preferences are optional */ }
@@ -99,38 +123,117 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
   }, [initialView, initialProductId, products]);
 
   useEffect(() => {
-    if (cartRestored || typeof window === 'undefined') return;
-    if (!products.length && (productsLoading || productsError)) return;
+    if (cachedCatalog.scopeKey === cartScopeKey || typeof window === 'undefined') return;
     try {
-      const normal = (value: string | null) => normalizeCartDraft(value ? JSON.parse(value) as unknown : []);
-      const base = normal(window.localStorage.getItem('aghbari:cart:v1'));
-      const restore = normal(window.localStorage.getItem('aghbari:cart-restore:v1'));
-      const merged = new Map<string, number>();
-      for (const line of [...base, ...restore]) merged.set(line.product_id, Math.min(10000, (merged.get(line.product_id) ?? 0) + line.quantity));
-      setCart([...merged.entries()].map(([product_id, quantity]) => ({ product: products.find(p => p.id === product_id), quantity })).filter((line): line is CartItem => Boolean(line.product)));
-      window.localStorage.removeItem('aghbari:cart-restore:v1');
-    } catch { /* ignore malformed local drafts; never block online checkout */ }
-    setCartRestored(true);
-  }, [products, cartRestored, productsLoading, productsError]);
+      const cached = sanitizePublicCatalogCache(JSON.parse(window.localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || '[]') as unknown);
+      setCachedCatalog({ scopeKey: cartScopeKey, products: cached });
+    } catch {
+      setCachedCatalog({ scopeKey: cartScopeKey, products: [] });
+    }
+  }, [cartScopeKey, cachedCatalog.scopeKey]);
+
+  // Restore a scoped append-only journal. Unknown product IDs stay in the draft and block checkout.
+  useEffect(() => {
+    let active = true;
+    if (cartRestoredScope === cartScopeKey) return () => { active = false; };
+    if (!products.length && productsLoading) return () => { active = false; };
+
+    setCartRestoreError('');
+    try {
+      const availableProductIds = products.map((product) => product.id);
+      const legacy = readLegacyCartDraftForScope(window.localStorage, cartScopeKey, availableProductIds);
+      const seedExists = window.localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + 'seed') !== null;
+      if (!seedExists && user?.profileId && legacy.ignoredLines > 0 && availableProductIds.length === 0 && productsError) {
+        throw new Error('توجد مسودة قديمة لا يمكن ربط أصنافها بحسابك بأمان دون كتالوج موثوق. اتصل بالإنترنت ثم أعد المحاولة؛ لم تُحذف المسودة القديمة.');
+      }
+
+      let ledger = readOfflineCartLedger(window.localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
+      const oldRestoreRaw = window.localStorage.getItem('aghbari:cart-restore:v1');
+      if (oldRestoreRaw) {
+        let restoreLines: Array<{ product_id: string; quantity: number }> = [];
+        try {
+          restoreLines = normalizeCartDraft(JSON.parse(oldRestoreRaw) as unknown);
+        } catch {
+          restoreLines = [];
+        }
+        if (restoreLines.length) {
+          ledger = appendOfflineCartMutation(window.localStorage, cartScopeKey, {
+            id: createStableOfflineCartMutationId('legacy-restore', restoreLines),
+            kind: 'merge',
+            lines: restoreLines,
+          }, ledger.lines);
+        }
+        window.localStorage.removeItem('aghbari:cart-restore:v1');
+      }
+
+      writeLegacyCartOwner(window.localStorage, cartScopeKey);
+      if (active) {
+        setCartDraftLines(ledger.lines);
+        setCartRestoredScope(cartScopeKey);
+        if (legacy.ignoredLines > 0) {
+          setSavedListNotice('استُعيدت المسودة الآمنة. تعذر ربط ' + formatNumber(legacy.ignoredLines) + ' صنف قديم بكتالوج موثوق؛ لم يُحذف مصدر المسودة، ولن يُرسل الطلب الجزئي.');
+        }
+      }
+    } catch (cause) {
+      if (active) setCartRestoreError(cause instanceof Error ? cause.message : 'تعذر استعادة سجل السلة المحلي بأمان.');
+    }
+    return () => { active = false; };
+  }, [cartScopeKey, cartRestoredScope, products, productsLoading, productsError, cartHydrationRetry, user?.profileId]);
 
   useEffect(() => {
     if (!cartRestored) return;
-    try { window.localStorage.setItem('aghbari:cart:v1', JSON.stringify(cart.map(item => ({ product_id: item.product.id, quantity: item.quantity })))); } catch { /* the online shop still works without storage */ }
-  }, [cart, cartRestored]);
+    return subscribeToOfflineCartLedger(cartScopeKey, () => {
+      try {
+        setCartDraftLines(readOfflineCartLedger(window.localStorage, cartScopeKey).lines);
+      } catch {
+        setCartRestoreError('تعذر التحقق من تغييرات السلة في علامة تبويب أخرى؛ لن يُرسل الطلب حتى تُستعاد المسودة.');
+      }
+    });
+  }, [cartScopeKey, cartRestored]);
 
-  const { uniqueItems: cartCount, totalUnits: cartUnitCount } = summarizeCartCounts(cart);
+  const productsById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+  const cart = useMemo(
+    () => cartDraftLines.flatMap((line) => {
+      const product = productsById.get(line.product_id);
+      return product ? [{ product, quantity: line.quantity }] : [];
+    }),
+    [cartDraftLines, productsById],
+  );
+  const unresolvedCartLines = useMemo(
+    () => cartDraftLines.filter((line) => !productsById.has(line.product_id)),
+    [cartDraftLines, productsById],
+  );
+
+  function commitCartMutation(mutation: OfflineCartMutationInput): boolean {
+    if (!cartRestored) {
+      setSavedListNotice('جار استعادة مسودة السلة؛ لم يُسجل أي تغيير بعد.');
+      return false;
+    }
+    try {
+      const ledger = appendOfflineCartMutation(window.localStorage, cartScopeKey, mutation, cartDraftLines);
+      writeLegacyCartOwner(window.localStorage, cartScopeKey);
+      setCartDraftLines(ledger.lines);
+      setCartRestoreError('');
+      setSavedListNotice('');
+      return true;
+    } catch (cause) {
+      setSavedListNotice(cause instanceof Error ? cause.message : 'تعذر حفظ تغيير السلة. لا تعاود إرسال الطلب قبل مراجعة السلة.');
+      return false;
+    }
+  }
+
+  const { uniqueItems: cartCount, totalUnits: cartUnitCount } = summarizeCartCounts(cartDraftLines);
+
 
   function addToCart(product: ProductWithInventory) {
-    setCart((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id);
-      if (existing) return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { product, quantity: 1 }];
-    });
+    commitCartMutation({ id: createOfflineCartMutationId(), kind: 'adjust', product_id: product.id, delta: 1 });
   }
   function updateQty(productId: string, delta: number) {
-    setCart((prev) => prev.map((i) => i.product.id === productId ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i).filter((i) => i.quantity > 0));
+    commitCartMutation({ id: createOfflineCartMutationId(), kind: 'adjust', product_id: productId, delta });
   }
-  function removeFromCart(productId: string) { setCart((prev) => prev.filter((i) => i.product.id !== productId)); }
+  function removeFromCart(productId: string) {
+    commitCartMutation({ id: createOfflineCartMutationId(), kind: 'remove', product_id: productId });
+  }
   function addMatrixSelection() {
     const selected = filtered.flatMap((product) => {
       const raw = matrixQuantities[product.id] ?? '';
@@ -153,16 +256,17 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
       setMatrixFeedback({ kind: 'error', message });
       return;
     }
-    setCart((previous) => {
-      const next = new Map(previous.map((item) => [item.product.id, { ...item }]));
-      for (const line of selected) {
-        const existing = next.get(line.product.id);
-        next.set(line.product.id, { product: line.product, quantity: (existing?.quantity ?? 0) + line.quantity });
-      }
-      return [...next.values()];
+    const saved = commitCartMutation({
+      id: createOfflineCartMutationId(),
+      kind: 'merge',
+      lines: selected.map(({ product, quantity }) => ({ product_id: product.id, quantity })),
     });
+    if (!saved) {
+      setMatrixFeedback({ kind: 'error', message: 'تعذر حفظ أصناف الطلب السريع محليًا؛ لم تتغير السلة.' });
+      return;
+    }
     setMatrixQuantities((previous) => ({ ...previous, ...Object.fromEntries(selected.map(({ product }) => [product.id, ''])) }));
-    setMatrixFeedback({ kind: 'success', message: `تمت إضافة ${selected.length} أصناف إلى السلة. سيُعاد احتساب الأسعار والمخزون من الخادم قبل اعتماد الطلب.` });
+    setMatrixFeedback({ kind: 'success', message: `تم حفظ ${selected.length} أصناف في سجل السلة. سيُعاد احتساب الأسعار والمخزون من الخادم قبل اعتماد الطلب.` });
   }
   function toggleWishlist(productId: string) {
     setWishlist((prev) => normalizeSavedProductIds(prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId], 500));
@@ -264,6 +368,7 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
           </>
         )}
 
+        {cartRestoreError && <div role="alert" className="sf-form-error" style={{ marginBottom: 12 }}>{cartRestoreError} <button type="button" className="sf-link" onClick={() => setCartHydrationRetry((value) => value + 1)}>إعادة محاولة استعادة المسودة</button></div>}
         {savedListNotice && <div role="status" className="sf-form-error" style={{ marginBottom: 12 }}>{savedListNotice}</div>}
         {view === 'product' && (selectedProduct
           ? <ProductDetail product={selectedProduct} inWishlist={wishlist.includes(selectedProduct.id)} inCompare={compare.includes(selectedProduct.id)} onBack={() => void navigate({ to: '/' })} onAdd={() => addToCart(selectedProduct)} onWishlist={() => toggleWishlist(selectedProduct.id)} onCompare={() => toggleCompare(selectedProduct.id)} />
@@ -285,7 +390,7 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
         ) : (
           <section className="sf-cart-page">
             <h2>سلة المشتريات</h2>
-            {!cart.length ? <div className="sf-empty"><ShoppingCart size={30} /><span>سلتك فارغة</span><button className="sf-link" onClick={() => void navigate({ to: '/' })}>تصفح المنتجات</button></div> :
+            {!cartDraftLines.length ? <div className="sf-empty"><ShoppingCart size={30} /><span>سلتك فارغة</span><button className="sf-link" onClick={() => void navigate({ to: '/' })}>تصفح المنتجات</button></div> :
             <>
               <div className="sf-cart-list">
                 {cart.map((item) => (
@@ -295,10 +400,17 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
                     <button className="sf-cart-remove" aria-label={`حذف ${item.product.name} من السلة`} onClick={() => removeFromCart(item.product.id)}><Trash2 size={16} /></button>
                   </div>
                 ))}
+                {unresolvedCartLines.map((line) => (
+                  <div className="sf-cart-row" key={line.product_id} role="alert">
+                    <div className="sf-cart-info"><div className="sf-cart-img"><Package size={20} /></div><div><strong>صنف محفوظ غير متاح</strong><span>معرّف الصنف: {line.product_id} · الكمية: {formatNumber(line.quantity)}</span><small>أُبقيت المسودة كما هي؛ يلزم تحديث الكتالوج أو إزالة هذا الصنف قبل الإرسال.</small></div></div>
+                    <button className="sf-cart-remove" aria-label={`حذف الصنف غير المتاح ${line.product_id}`} onClick={() => removeFromCart(line.product_id)}>حذف</button>
+                  </div>
+                ))}
               </div>
-              <CartFinancialPreview cart={cart} profileId={user?.roles.includes('customer') ? user.profileId : undefined} />
+              {unresolvedCartLines.length > 0 && <p role="alert" style={{ marginTop: 12, padding: 12, borderRadius: 10, background: '#fff4df', color: '#7c4a05' }}>تحتوي المسودة على {formatNumber(unresolvedCartLines.length)} أصناف لا تظهر في الكتالوج الحالي. لن يُرسل طلب جزئي؛ حدّث الكتالوج أو احذف الأصناف غير المتاحة بعد مراجعتها.</p>}
+              {unresolvedCartLines.length === 0 && <CartFinancialPreview cart={cart} profileId={user?.roles.includes('customer') ? user.profileId : undefined} />}
               <div role="note" style={{ marginTop: 12, padding: 12, borderRadius: 10, background: '#f2f7f8', color: '#536b70' }}>سيُراجع الطلب ويُعتمد من جهة الإدارة. لا تظهر المبالغ هنا إلا إذا فعّلت الإدارة سياسة العرض؛ ويعيد الخادم احتساب أسعار الطلب عند إرساله.</div>
-              <div className="sf-cart-actions"><button className="sf-btn-secondary" onClick={() => void navigate({ to: '/' })}>متابعة التسوق</button><button className="sf-btn-primary" onClick={() => void navigate({ to: '/checkout' })}>إتمام الطلب <ChevronLeft size={16} /></button></div>
+              <div className="sf-cart-actions"><button className="sf-btn-secondary" onClick={() => void navigate({ to: '/' })}>متابعة التسوق</button><button className="sf-btn-primary" disabled={unresolvedCartLines.length > 0 || Boolean(cartRestoreError)} onClick={() => void navigate({ to: '/checkout' })}>{unresolvedCartLines.length > 0 ? 'راجع الأصناف غير المتاحة' : 'إتمام الطلب'} <ChevronLeft size={16} /></button></div>
             </>
             }
           </section>
@@ -306,9 +418,18 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
 
         {view === 'checkout' && (!cartRestored ? (
           <section className="sf-checkout"><div className="sf-empty" role={productsError ? 'alert' : 'status'}><span>{productsLoading ? 'جار استعادة سلة الطلب...' : productsError ? 'تعذر استعادة السلة.' : 'جار استعادة سلة الطلب...'}</span>{productsError && <><small>{productsError}</small><button type="button" onClick={() => void refetchProducts()}>إعادة المحاولة</button></>}</div></section>
+        ) : unresolvedCartLines.length > 0 ? (
+          <section className="sf-checkout"><h2>تحتاج المسودة إلى مراجعة</h2><p role="alert">يوجد {formatNumber(unresolvedCartLines.length)} أصناف محفوظة لا تظهر في الكتالوج الحالي. لن نرسل طلبًا جزئيًا أو نخمّن بيانات هذه الأصناف.</p><button className="sf-btn-primary" onClick={() => void navigate({ to: '/cart' })}>مراجعة السلة</button><button className="sf-btn-secondary" onClick={() => void refetchProducts()} disabled={productsLoading}>تحديث الكتالوج</button></section>
         ) : !cart.length ? (
           <section className="sf-checkout"><h2>لا توجد أصناف لإتمام الطلب</h2><p>أضف الأصناف إلى السلة أولاً. لن يتم إنشاء طلب فارغ.</p><button className="sf-btn-primary" onClick={() => void navigate({ to: '/' })}>العودة إلى المتجر</button></section>
-        ) : <Checkout cart={cart} onBack={() => void navigate({ to: '/cart' })} onComplete={(order) => { setLastOrderNo(order.order_number); setLastOrderId(order.id); setView('confirm'); setCart([]); }} />)}
+        ) : <Checkout cart={cart} onBack={() => void navigate({ to: '/cart' })} onComplete={async (order) => {
+          setLastOrderNo(order.order_number);
+          setLastOrderId(order.id);
+          const cleared = commitCartMutation({ id: createOfflineCartMutationId(), kind: 'clear' });
+          setView('confirm');
+          if (!cleared) setSavedListNotice('تم إنشاء الطلب من الخادم، لكن تعذر إفراغ المسودة المحلية. لا تعاود إرسالها؛ راجع طلباتي ثم أعد محاولة تنظيف المسودة.');
+          return cleared;
+        }} />)}
         {view === 'confirm' && <OrderConfirm orderNo={lastOrderNo} orderId={lastOrderId} onContinue={() => void navigate({ to: '/' })} />}
       </main>
 
@@ -412,7 +533,7 @@ function CartFinancialPreview({ cart, profileId }: { cart: CartItem[]; profileId
   );
 }
 
-function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => void }) {
+function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () => void; onComplete: (order: { id: string; order_number: string }) => boolean | Promise<boolean> }) {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState('');
@@ -531,13 +652,17 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
         'total_amount' in result || 'unit_price' in result || 'line_total' in result) {
         throw new Error('استجابة الخادم غير مكتملة أو تحتوي بيانات مالية غير مسموحة؛ راجع طلباتي قبل إعادة الإرسال.');
       }
-      try {
-        const storageKey = 'aghbari:checkout-attempt:v1';
-        const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null') as { key?: unknown } | null;
-        if (saved?.key === requestKey) window.sessionStorage.removeItem(storageKey);
-      } catch { /* request is already confirmed; cleanup is best-effort */ }
-      idempotencyRef.current = null;
-      onComplete({ id: result.id, order_number: result.order_number });
+      const localCartCleared = await onComplete({ id: result.id, order_number: result.order_number });
+      if (localCartCleared) {
+        try {
+          const storageKey = 'aghbari:checkout-attempt:v1';
+          const saved = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null') as { key?: unknown } | null;
+          if (saved?.key === requestKey) window.sessionStorage.removeItem(storageKey);
+        } catch { /* server accepted the order; cleanup is best-effort */ }
+        idempotencyRef.current = null;
+      }
+      // If the local journal could not be cleared, preserve the idempotency key so a
+      // retry replays the same server order instead of creating a duplicate order.
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذر إرسال الطلب');
     } finally { setSubmitting(false); }
