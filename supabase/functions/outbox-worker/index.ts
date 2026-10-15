@@ -9,7 +9,6 @@ type WorkerRuntime = {
   env: { get(name: string): string | undefined };
   serve(handler: (request: Request) => Response | Promise<Response>): void;
 };
-type OutboxEvent = { id: string; event_type: string; attempts: number };
 type RpcResult = { status?: string; notifications_created?: number; event_id?: string };
 
 const runtime = (globalThis as unknown as { Deno?: WorkerRuntime }).Deno;
@@ -82,7 +81,12 @@ if (runtime) {
       return json({ error: "claim_failed" }, 500);
     }
 
-    const claimed = (claimedRows ?? []) as OutboxEvent[];
+    const claimResult = parseClaimedOutboxEvents(claimedRows);
+    if (!claimResult.ok) {
+      console.error("outbox claim returned an invalid event batch", { reason: claimResult.reason });
+      return json({ error: "claim_result_invalid" }, 502);
+    }
+    const claimed = claimResult.events;
     let processed = 0;
     let retryScheduled = 0;
     let deadLettered = 0;

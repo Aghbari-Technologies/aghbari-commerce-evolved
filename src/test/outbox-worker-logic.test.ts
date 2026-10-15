@@ -3,11 +3,41 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   classifyOutboxProcessResult,
+  parseClaimedOutboxEvents,
   readBoundedRequestBody,
   sanitizeOutboxErrorMessage,
 } from "../../supabase/functions/outbox-worker/logic";
 
 describe("outbox worker logical RPC result handling", () => {
+  it("accepts only a complete, unique and bounded outbox claim batch", () => {
+    expect(parseClaimedOutboxEvents([])).toEqual({ ok: true, events: [] });
+    expect(parseClaimedOutboxEvents([{
+      id: "11111111-1111-4111-8111-111111111111",
+      event_type: "OrderCreated",
+      attempts: 1,
+    }])).toEqual({
+      ok: true,
+      events: [{
+        id: "11111111-1111-4111-8111-111111111111",
+        event_type: "OrderCreated",
+        attempts: 1,
+      }],
+    });
+    expect(parseClaimedOutboxEvents(null)).toEqual({ ok: false, reason: "invalid_batch" });
+    expect(parseClaimedOutboxEvents({ rows: [] })).toEqual({ ok: false, reason: "invalid_batch" });
+    expect(parseClaimedOutboxEvents([{
+      id: "not-a-uuid", event_type: "OrderCreated", attempts: 1,
+    }])).toEqual({ ok: false, reason: "invalid_event" });
+    expect(parseClaimedOutboxEvents([{
+      id: "11111111-1111-4111-8111-111111111111", event_type: "OrderCreated", attempts: 9,
+    }])).toEqual({ ok: false, reason: "invalid_event" });
+    expect(parseClaimedOutboxEvents([
+      { id: "11111111-1111-4111-8111-111111111111", event_type: "OrderCreated", attempts: 1 },
+      { id: "11111111-1111-4111-8111-111111111111", event_type: "OrderCreated", attempts: 2 },
+    ])).toEqual({ ok: false, reason: "invalid_event" });
+  });
+
+
   it("bounds worker request reads before buffering an oversized body", async () => {
     const oversized = new Request("https://worker.example", {
       method: "POST",

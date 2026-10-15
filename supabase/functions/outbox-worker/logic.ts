@@ -83,6 +83,40 @@ export async function readBoundedRequestBody(
   }
 }
 
+export type ClaimedOutboxEvent = { id: string; event_type: string; attempts: number };
+
+export type ClaimedOutboxEventsResult =
+  | { ok: true; events: ClaimedOutboxEvent[] }
+  | { ok: false; reason: "invalid_batch" | "invalid_event" };
+
+/** Validate the entire claim response before dispatching any item. */
+export function parseClaimedOutboxEvents(value: unknown): ClaimedOutboxEventsResult {
+  if (!Array.isArray(value)) return { ok: false, reason: "invalid_batch" };
+  const events: ClaimedOutboxEvent[] = [];
+  const ids = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { ok: false, reason: "invalid_event" };
+    }
+    const row = item as Record<string, unknown>;
+    if (
+      typeof row.id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.id) ||
+      typeof row.event_type !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9_.-]{0,99}$/.test(row.event_type) ||
+      !Number.isSafeInteger(row.attempts) ||
+      Number(row.attempts) < 1 ||
+      Number(row.attempts) > 8 ||
+      ids.has(row.id.toLowerCase())
+    ) {
+      return { ok: false, reason: "invalid_event" };
+    }
+    ids.add(row.id.toLowerCase());
+    events.push({ id: row.id, event_type: row.event_type, attempts: Number(row.attempts) });
+  }
+  return { ok: true, events };
+}
+
 export type OutboxProcessOutcome = "processed" | "retry" | "dead_letter" | "unexpected";
 
 /**
