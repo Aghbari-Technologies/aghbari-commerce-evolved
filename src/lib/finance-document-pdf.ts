@@ -517,6 +517,9 @@ export async function buildCustomerInvoicePdf(
   const subtotal = normalizeInvoiceMoney(invoice.subtotal);
   const taxAmount = normalizeInvoiceMoney(invoice.tax_amount);
   const totalAmount = normalizeInvoiceMoney(invoice.total_amount);
+  if (subtotal + taxAmount !== totalAmount) {
+    throw new Error("Invoice subtotal plus tax does not equal the invoice total.");
+  }
   const lines = Array.isArray(linesInput) ? (linesInput as CustomerInvoiceLineDocument[]) : [];
   if (lines.length > 500) throw new Error("Invoice exceeds the item-count limit.");
   for (const line of lines) {
