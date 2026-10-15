@@ -117,9 +117,14 @@ describe('Onyx order workbook draft', () => {
       items: [{ ...order.items[0], approved_unit_price: '' as unknown as number }],
     })).toThrow('قيمة سعر الوحدة غير صالحة');
 
-    expect(() => buildOnyxDetailRows({
+    expect(buildOnyxDetailRows({
       ...order,
       items: [{ ...order.items[0], approved_unit_price: null }],
+    })[1][6]).toBe(10);
+
+    expect(() => buildOnyxDetailRows({
+      ...order,
+      items: [{ ...order.items[0], approved_unit_price: null, unit_price_snapshot: null as unknown as number }],
     })).toThrow('قيمة سعر الوحدة غير صالحة');
 
     expect(buildOnyxDetailRows({
