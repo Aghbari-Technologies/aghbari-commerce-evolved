@@ -89,7 +89,7 @@ jobs:
           trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
           ready=0
           for attempt in $(seq 1 45); do
-            status=$(curl --silent --output /tmp/aghbari-preview-home.html --write-out "%{http_code}" http://127.0.0.1:4173/ || true)
+            status=$(curl --silent --connect-timeout 2 --max-time 5 --output /tmp/aghbari-preview-home.html --write-out "%{http_code}" http://127.0.0.1:4173/ || true)
             if [ "$status" = "200" ] && grep -q "الأغبري" /tmp/aghbari-preview-home.html; then
               ready=1
               break
@@ -108,7 +108,7 @@ jobs:
           for route in \\
             /login /cart /checkout /orders /invoices /statement /quotes /assistant \\
             /admin /admin/orders /admin/products /admin/finance /manifest.webmanifest /sw.js; do
-            status=$(curl --silent --output /tmp/aghbari-preview-route.html --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
+            status=$(curl --silent --connect-timeout 2 --max-time 5 --output /tmp/aghbari-preview-route.html --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
             if [ "$status" != "200" ]; then
               echo "Production preview expected HTTP 200 from $route, received $status"
               cat /tmp/aghbari-preview.log
@@ -118,7 +118,7 @@ jobs:
           for route in \\
             /api/statement-pdf \\
             /api/invoice-pdf/11111111-1111-4111-8111-111111111111; do
-            status=$(curl --silent --output /tmp/aghbari-preview-pdf-auth.json --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
+            status=$(curl --silent --connect-timeout 2 --max-time 5 --output /tmp/aghbari-preview-pdf-auth.json --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
             if [ "$status" != "401" ]; then
               echo "Production preview expected unauthenticated PDF route $route to return 401, received $status"
               cat /tmp/aghbari-preview-pdf-auth.json
@@ -126,7 +126,7 @@ jobs:
               exit 1
             fi
           done
-          curl --fail --silent --show-error http://127.0.0.1:4173/manifest.webmanifest -o /tmp/aghbari-preview-manifest.json
+          curl --connect-timeout 2 --max-time 5 --fail --silent --show-error http://127.0.0.1:4173/manifest.webmanifest -o /tmp/aghbari-preview-manifest.json
           grep -q "Aghbari Commerce" /tmp/aghbari-preview-manifest.json || {
             echo "Production preview PWA manifest is missing the canonical product identity."
             cat /tmp/aghbari-preview-manifest.json
