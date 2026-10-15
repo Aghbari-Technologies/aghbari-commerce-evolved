@@ -60,6 +60,12 @@ function columnName(index: number): string {
 }
 
 function finiteNonNegative(value: unknown, fieldLabel: string): number {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
+    throw new Error('لا يمكن تصدير أونكس: قيمة ' + fieldLabel + ' غير صالحة.');
+  }
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error('لا يمكن تصدير أونكس: قيمة ' + fieldLabel + ' غير صالحة.');
