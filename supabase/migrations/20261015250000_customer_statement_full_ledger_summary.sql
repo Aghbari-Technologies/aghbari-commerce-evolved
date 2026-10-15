@@ -1,3 +1,11 @@
+-- Support tenant/customer-scoped counts, recent bounded detail reads, and invoice payment sums.
+CREATE INDEX IF NOT EXISTS customer_invoices_statement_scope_idx
+  ON public.customer_invoices (organization_id, customer_id, issued_at DESC, id);
+CREATE INDEX IF NOT EXISTS customer_payments_statement_scope_idx
+  ON public.customer_payments (organization_id, customer_id, paid_at DESC, id);
+CREATE INDEX IF NOT EXISTS customer_payments_invoice_ledger_idx
+  ON public.customer_payments (organization_id, customer_id, invoice_id) INCLUDE (amount);
+
 -- Keep bounded detail payloads for predictable client/PDF cost, while calculating
 -- account totals and each displayed invoice balance over the complete tenant-bound ledger.
 CREATE OR REPLACE FUNCTION public.get_customer_account_statement()
