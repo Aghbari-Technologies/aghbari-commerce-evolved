@@ -1646,7 +1646,89 @@ async function main() {
   assert.equal((await db.unsafe("select id from public.orders where id=$1",[memberOrderId])).length,0,"revoked member loses order visibility");
   process.stdout.write("PASS company membership: hash-only invitations, email-bound single-use acceptance, tenant isolation, buyer/finance capabilities, checkout linkage and revocation\n");
 
-  process.stdout.write("PASS: migrations applied, tier price breaks, checkout idempotency, tenant isolation, quotations, reorder, invoice/payment, and stock lifecycle and pricing-rule CRUD semantics.\n");
+  // AGH-AI-GATEWAY-001: configuration authorization, atomic budget reservation and usage audit.
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const aiSettings = {
+    ai_enabled: true, fallback_enabled: true,
+    primary_provider: "openai_compatible", primary_model: "gpt-4o-mini", primary_base_url: "https://api.openai.com/v1",
+    fallback_provider: "gemini", fallback_model: "gemini-2.0-flash", fallback_base_url: "https://generativelanguage.googleapis.com/v1beta",
+    daily_cost_limit: 0.05, monthly_cost_limit: 0.06, daily_token_limit: 1000, monthly_token_limit: 2000, per_request_cost_limit: 0.04,
+  };
+  const savedAiBudget = await db.unsafe("select public.configure_ai_usage_budget($1::jsonb) as result", [db.json(aiSettings)]);
+  assert.equal(savedAiBudget[0].result.ai_enabled, true);
+  assert.equal(savedAiBudget[0].result.keys_stored_in_database, false);
+  assert.equal(savedAiBudget[0].result.organization_id, organizationId);
+  await expectFailure(
+    "AI gateway refuses plaintext provider endpoints",
+    () => db.unsafe("select public.configure_ai_usage_budget($1::jsonb)", [db.json({ ...aiSettings, primary_base_url: "http://localhost:8000/v1" })]),
+    /endpoint configuration is invalid/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure("customers cannot access AI gateway administration",
+    () => db.unsafe("select public.get_ai_gateway_budget()"), /administrator or manager/i);
+  await expectFailure("authenticated users cannot read AI reservation rows directly",
+    () => db.unsafe("select * from public.ai_usage_reservations"), /permission denied/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  const runtimeConfig = await db.unsafe("select public.get_ai_gateway_runtime_config($1::uuid) as result", [staffAuthUserId]);
+  assert.equal(runtimeConfig[0].result.status, "enabled");
+  assert.equal(runtimeConfig[0].result.organization_id, organizationId);
+  assert.equal(runtimeConfig[0].result.primary_model, "gpt-4o-mini");
+  assert.ok(!("api_key" in runtimeConfig[0].result) && !("secret" in runtimeConfig[0].result));
+
+  const firstReservation = await db.unsafe(
+    "select public.reserve_ai_gateway_usage($1::uuid,$2::text,$3::bigint,$4::bigint,$5::numeric) as result",
+    [staffAuthUserId,"ci-ai-request-000001",10,20,0.02],
+  );
+  assert.equal(firstReservation[0].result.status, "reserved");
+  const reservationId = firstReservation[0].result.reservation_id;
+  const completedUsage = await db.unsafe(
+    "select public.complete_ai_gateway_usage($1::uuid,$2::bigint,$3::bigint,$4::numeric,$5::bigint,$6::text,$7::text,$8::text,$9::boolean) as result",
+    [reservationId,10,20,0.02,45,"openai_compatible","gpt-4o-mini","completed",false],
+  );
+  assert.equal(completedUsage[0].result.status, "completed");
+  const aiLedger = await db.unsafe(
+    "select request_id,model_name,input_tokens,output_tokens,estimated_cost,result_status from public.ai_usage_ledger where organization_id=$1 and request_id=$2",
+    [organizationId,"ci-ai-request-000001"],
+  );
+  assert.equal(aiLedger.length,1);
+  assert.equal(aiLedger[0].model_name,"openai_compatible/gpt-4o-mini");
+  assert.equal(Number(aiLedger[0].estimated_cost),0.02);
+  assert.equal(aiLedger[0].result_status,"completed");
+  const replayUsage = await db.unsafe(
+    "select public.complete_ai_gateway_usage($1::uuid,$2::bigint,$3::bigint,$4::numeric,$5::bigint,$6::text,$7::text,$8::text,$9::boolean) as result",
+    [reservationId,10,20,0.02,45,"openai_compatible","gpt-4o-mini","completed",false],
+  );
+  assert.equal(replayUsage[0].result.status,"already_completed","usage retries do not duplicate ledger rows");
+  const rejectedReservation = await db.unsafe(
+    "select public.reserve_ai_gateway_usage($1::uuid,$2::text,$3::bigint,$4::bigint,$5::numeric) as result",
+    [staffAuthUserId,"ci-ai-request-000002",10,20,0.04],
+  );
+  assert.equal(rejectedReservation[0].result.status,"quota_exceeded","usage reservation respects the daily cost cap");
+  const rejectedLedger = await db.unsafe(
+    "select result_status,estimated_cost from public.ai_usage_ledger where organization_id=$1 and request_id=$2",
+    [organizationId,"ci-ai-request-000002"],
+  );
+  assert.equal(rejectedLedger[0].result_status,"rejected_quota");
+  assert.equal(Number(rejectedLedger[0].estimated_cost),0);
+
+  await db.unsafe("set role authenticated");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await expectFailure("customers cannot configure AI budgets",
+    () => db.unsafe("select public.configure_ai_usage_budget($1::jsonb)",[db.json(aiSettings)]),
+    /administrator or manager/i);
+  await expectFailure("customers cannot reserve AI usage directly",
+    () => db.unsafe("select public.reserve_ai_gateway_usage($1::uuid,$2::text,$3::bigint,$4::bigint,$5::numeric)",[authUserId,"customer-spoof",1,1,0.001]),
+    /permission denied/i);
+  await db.unsafe("reset role");
+  process.stdout.write("PASS AI gateway: admin-owned settings, HTTPS validation, atomic budget caps, usage ledger replay, service-only RPCs and customer denial\n");
+
+  process.stdout.write("PASS: migrations applied, tier pricing, checkout idempotency, tenant isolation, quotations, reorder, invoices/payments, stock/pricing rules, outbox and AI gateway semantics.\n");
 }
 
 try {
