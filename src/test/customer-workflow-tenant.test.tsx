@@ -738,7 +738,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
     expect(host?.textContent).toContain("تمت إزالة Sugar من المسودة المحلية فقط.");
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
 
@@ -781,7 +781,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
         item_code: "000126",
         name: "Rice",
         unit: "carton",
-        quantity: 3,
+        quantity: 6001,
       }]);
       expect(backup.disclaimer).toContain("Not an order");
       expect(backupText).not.toMatch(/base_price|cost_price|retail_price|wholesale_price|purchase_cost|quantity_on_hand|quantity_reserved|quantity_available|internal_notes/i);
@@ -804,7 +804,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
     expect(host?.textContent).toContain("أُلغي تفريغ المسودة");
     confirmSpy.mockReturnValue(true);
     await act(async () => {
@@ -872,7 +872,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       });
     }
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
     expect(host?.textContent).toContain("تم دمج النسخة الاحتياطية في المسودة المحلية");
     const storedLedgerRows = Array.from({ length: window.localStorage.length }, (_, index) => {
       const key = window.localStorage.key(index);
@@ -899,7 +899,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       });
     }
     expect(readOfflineCartLedger(window.localStorage, catalogScope).lines)
-      .toEqual([{ product_id: "product-offline-2", quantity: 3 }]);
+      .toEqual([{ product_id: "product-offline-2", quantity: 6001 }]);
     expect(mocks.rpc).not.toHaveBeenCalledWith("place_order", expect.anything());
     restoreConfirm.mockRestore();
   });

@@ -2268,6 +2268,30 @@ function Offline() {
       }
       lines.sort((left, right) => left.product_id.localeCompare(right.product_id));
       const currentLines = initialOfflineCartLines();
+      const restoreEpoch = localStorage.getItem(getOfflineCartRestoreEpochKey(cartScopeKey)) || "initial";
+      const mutationId = createStableOfflineCartMutationId("backup-restore", { epoch: restoreEpoch, lines });
+      const currentLedger = readOfflineCartLedger(localStorage, cartScopeKey, currentLines);
+      if (currentLedger.applied_mutation_ids.includes(mutationId)) {
+        // Same backup in the same cart generation is a replay. Let the journal verify
+        // its fingerprint before skipping merge-size checks; large valid backups should
+        // stay idempotent even when merging them twice would exceed a quantity cap.
+        try {
+          const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id: mutationId,
+            kind: "merge",
+            lines,
+          }, currentLines);
+          writeLegacyCartOwner(localStorage, cartScopeKey);
+          setCartLines(next.lines);
+          setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+          setMessage("سبق دمج هذه النسخة في جيل المسودة الحالي؛ لم تُضاعف الكميات.");
+        } catch (cause) {
+          const detail = cause instanceof Error ? cause.message : "تعذر التحقق من نسخة مستعادة سابقًا.";
+          setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+          setMessage(detail);
+        }
+        return;
+      }
       const resultingCart = new Map(currentLines.map((line) => [line.product_id, line.quantity]));
       for (const line of lines) {
         const combinedQuantity = (resultingCart.get(line.product_id) ?? 0) + line.quantity;
@@ -2289,8 +2313,6 @@ function Offline() {
         return;
       }
 
-      const restoreEpoch = localStorage.getItem(getOfflineCartRestoreEpochKey(cartScopeKey)) || "initial";
-      const mutationId = createStableOfflineCartMutationId("backup-restore", { epoch: restoreEpoch, lines });
       let next: ReturnType<typeof readOfflineCartLedger>;
       try {
         next = appendOfflineCartMutation(localStorage, cartScopeKey, {
