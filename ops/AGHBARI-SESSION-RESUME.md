@@ -1,6 +1,17 @@
 # AGHBARI SESSION RESUME — اقرأ هذا أولًا بعد أي انقطاع
 
-انسخ النص الموجود في القسم “رسالة الإقلاع الجاهزة” وأرسله في أول رسالة بأي جلسة جديدة.
+هذا ملف الاستئناف التشغيلي المرجعي. عندما يكون وكيل التنفيذ متصلًا بالمستودع، يقرأه ويطبقه مباشرة؛ لا يطلب من المالك نسخه أو إعادة إرسال المواصفات. رسالة الإقلاع المختصرة أدناه هي بديل فقط عندما لا تستطيع المنصة الوصول إلى تعليمات المستودع.
+
+## بروتوكول الاستئناف الإلزامي
+
+1. في بداية الجلسة نفّذ `git fetch origin`، ثم افحص `git status --short --branch` والفرع و`HEAD` المحلي و`origin/main` وآخر commit ونتيجة GitHub Actions المطابقة لـ SHA الحالي.
+2. اقرأ هذه الحالة ثم خذ `next_task_id` من `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، وافتح صف المتطلب ذي المعرّف نفسه في سجل المتطلبات. لا تعتمد SHA قديمًا كرأس حالي.
+3. لا تكرر الاستكشاف الشامل، ولا تعِد سرد المواصفة، ولا تطلب ملفًا/تعليمات محفوظة. لا تفتح `DONE_VERIFIED` إلا بسبب اختلاف SHA مؤثر، أو تغيّر اعتماد/مدخل، أو regression/ثغرة، أو فشل دليل ذي صلة.
+4. نفّذ أصغر دفعة مترابطة، اختبرها فعليًا، أصلح الفشل، ثم حدّث ملفات الحالة وسجل المتطلبات الموجودة نفسها: الملفات المتغيرة، أوامر الاختبار ونتائجها، SHA المختبر، المهمة التالية والعائق بدليله.
+5. ادفع بأمان إلى `origin/main` بعد نجاح التحقق، ثم اقرأ HEAD البعيد وCI لذلك الـ SHA نفسه. لا تنقل PASS بين SHAs. افحص مزامنة Lovable منفصلًا؛ لا يكفي push ولا وجود `AGENTS.md` لإثبات أن المضيف حمّل التعليمات.
+6. إذا تعذر الـ checkout المحلي، لا تدّعِ أن `git status` أو `git fetch` نجحا؛ استخدم بيانات GitHub المتاحة، وسجّل صراحة ما لم يمكن فحصه ثم تابع بأمان.
+
+المراجع المعتمدة: `PROJECT_MEMORY.md`، هذا الملف، `ops/AGHBARI-LATEST-EXECUTION-STATE.md`، `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`، `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`، و`docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 
 ## الحالة المرجعية المحفوظة
 - المشروع الوحيد: متجر الأغبري | Aghbari Commerce.
@@ -16,7 +27,7 @@
 
 ## رسالة الإقلاع الجاهزة
 
-أنت وكيل التنفيذ البرمجي لمتجر الأغبري | Aghbari Commerce. ابدأ من الحالة المحفوظة داخل المستودع، لا من الصفر ولا من الذاكرة العامة. افتح أولًا `PROJECT_MEMORY.md` ثم `ops/AGHBARI-SESSION-RESUME.md` و`ops/AGHBARI-LATEST-EXECUTION-STATE.md` و`docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md` و`docs/canonical/AGHBARI-EXECUTION-MANDATE.md`؛ المواصفة الكاملة في `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` هي مرجع المالك. استخدم آخر `main` SHA الفعلي، لا تفترض أن SHA المسجل سابقًا ما زال HEAD؛ افحص `git status`/آخر commits/CI مرة واحدة وحدّث السجل إن تغيرت الحالة. تابع مباشرة من أول قبول غير مغلق في سجل المتطلبات، ولا تعِد استكشاف الملفات نفسها ولا تطلب مني إعادة إرسال معلومات سبق حفظها. نفّذ: INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX → VERIFY → COMMIT → PUSH MAIN → SYNC LOVABLE. حافظ على كل عمل صحيح، لا تنشئ بدائل مكررة ولا بيانات/نجاحات وهمية. لا تستخدم نقاط Lovable الخمس إلا بعد اكتمال الكود في Git والاختبارات والدفع، ولحل عائق فعلي فقط. بعد كل دفعة: اختبر SHA المحدد، سجل الملفات والأوامر والنتائج والفشل، حدّث ملف الحالة والتقدم وسجل المتطلبات، ثم ادفع إلى main وتحقق من CI. لا تطبق أي ترحيل على الإنتاج ولا تدّع اتصال Supabase/Onyx/AI/WhatsApp أو مزامنة Lovable دون إثبات مباشر. إذا انقطع الاتصال أو انتهت الجلسة، أعد فتح هذا الملف وابدأ من HEAD الحقيقي وأول بوابة غير مغلقة، دون تكرار ما ثبت.
+واصل من نقطة التوقف المحفوظة في `ops/AGHBARI-LATEST-EXECUTION-STATE.md`. تحقّق من `origin/main` وHEAD وCI المطابق، اقرأ `AGENTS.md` والمراجع المعتمدة، ثم نفّذ `next_task_id` مباشرة. لا تعِد الاستكشاف أو التقرير السابق ولا تطلب تعليمات محفوظة. نفّذ: INSPECT CURRENT STATE → RESUME NEXT OPEN TASK → IMPLEMENT → TEST → FIX → VERIFY → COMMIT → PUSH MAIN → SYNC LOVABLE. حدّث سجل المتطلبات والحالة بعد الدفعة، ولا تدّعِ نجاحًا بلا دليل exact-SHA.
 
 ## آخر حالة مثبتة وقت إنشاء هذا الملف
 - `main` عند بدء الدفعة التوثيقية الأولى كان `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459` ثم دُفعت ملفات الذاكرة برسالة commit `971a49d75b546ccba0a05d8829c8d9c38cae085a`. افحص HEAD الحي؛ لا تعتبر أي SHA في هذا الملف هو HEAD الحالي تلقائيًا.

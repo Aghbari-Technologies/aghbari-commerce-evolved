@@ -7,11 +7,22 @@
 **Canonical product name:** متجر الأغبري | Aghbari Commerce
 
 ## Read these first at the start of every session
-1. `ops/AGHBARI-SESSION-RESUME.md` — copy-ready recovery/startup prompt and resume procedure.
-2. `ops/AGHBARI-LATEST-EXECUTION-STATE.md` — last known operational state, SHA, evidence and blockers.
-3. `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md` — the single gap register / execution index.
-4. `docs/canonical/AGHBARI-EXECUTION-MANDATE.md` — enduring implementation and cost-control rules.
-5. `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` — complete user-supplied engineering spec (authoritative source).
+
+1. `AGENTS.md` — permanent shared agent rules. GitHub Copilot also has the repository-wide entry point `.github/copilot-instructions.md`.
+2. `PROJECT_MEMORY.md` — concise product and architecture decisions.
+3. `ops/AGHBARI-SESSION-RESUME.md` — short resume procedure; do not require the owner to copy it when the repository is already available.
+4. `ops/AGHBARI-LATEST-EXECUTION-STATE.md` — current verified checkpoint and `next_task_id`.
+5. `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md` — the only requirement/gap ledger and stable IDs.
+6. `docs/canonical/AGHBARI-EXECUTION-MANDATE.md` — enduring execution/cost/safety rules.
+7. `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` — authoritative product acceptance criteria; consult only the portion required for the active task.
+
+## Mandatory session-resume contract
+
+Run `git fetch origin`, inspect `git status --short --branch`, current branch, local `HEAD`, `origin/main`, latest commit, and GitHub Actions for that exact SHA once at session start. Match live remote state to the saved checkpoint, then execute `next_task_id`; do not repeat broad discovery or ask the owner to resend information already stored. Keep `DONE_VERIFIED` closed unless its exact-SHA proof is invalidated by a changed SHA/dependency/input, regression, security finding, or failed relevant test.
+
+After each coherent batch, update the existing state, registry, and resume records with stable task ID, changed paths, real test commands/results, exact tested SHA, next task, and evidence-backed blocker. Commit and push safely to `main`, then independently verify the resulting remote SHA and its own CI. A prior SHA's PASS never transfers to a newer SHA. Lovable synchronization, Supabase production access, Onyx acceptance, AI-provider readiness and WhatsApp delivery each require separate direct evidence.
+
+The repository contains the shared `AGENTS.md` policy and the GitHub Copilot auto-instruction file. This does not prove that Lovable or another host automatically loaded the policy. Check host-specific settings/session evidence before making that claim. The dynamic cursor belongs in the latest execution-state file, not in this memory text, so it is maintained in one place.
 
 Do not reread the repository broadly when these records answer the question. Inspect only the paths and evidence necessary for the next open acceptance gate; update these records in the same commit as materially related implementation.
 
@@ -49,7 +60,7 @@ The owner specified a hard budget of five Lovable points. Do not spend points on
 - Full user master specification: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`.
 - Continuation prompt: `ops/AGHBARI-SESSION-RESUME.md`.
 
-## Latest source checkpoint — 2026-10-15
+## Historical source checkpoint — 2026-10-15 (the live cursor is in ops/AGHBARI-LATEST-EXECUTION-STATE.md)
 
 - PR #26 (server-derived tenant context and restrictive RLS) merged to `main`; merge SHA before this memory/ledger update: `fe22af0424947b56ae80e0679621cf0df333e284`.
 - Exact PR head `c117b0eee5b19411c1fa3bf5162dbef1e939455f` passed [CI 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672). Main merge SHA passed [CI 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295). These runs include unit tests, isolated PostgreSQL 17 applying all migrations and cross-tenant denial tests, lint, build and port 5173 route/PWA smoke.

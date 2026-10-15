@@ -3,7 +3,7 @@
 **Product:** متجر الأغبري | Aghbari Commerce  
 **Repository:** `Aghbari-Technologies/aghbari-commerce-evolved`  
 **Branch:** `main`  
-**Last reviewed main before this documentation pointer update:** `fe22af0424947b56ae80e0679621cf0df333e284`  
+**Source baseline verified immediately before this protocol batch:** `8324f22419a967fc86f20dddc3b8650a6fd89390`; exact-head CI [38690894558](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38690894558) **SUCCESS**. Re-read live `origin/main` after any push.  
 **Canonical specification:** [AGHBARI-MASTER-PROJECT-SPECIFICATION.md](./AGHBARI-MASTER-PROJECT-SPECIFICATION.md)  
 **Technical supplement:** [Platform Intelligence requirements](../specs/PLATFORM-INTELLIGENCE-PRODUCTION-REQUIREMENTS-2026-10-09.md)
 
@@ -20,24 +20,24 @@ This is an execution index, not proof that every feature is complete. A route, c
 
 ## Gap register at baseline
 
-| Area | Status | Evidence and required closure |
-|---|---|---|
-| Build gate | **PASS ON CODE MERGE SHA; CHECK EVERY NEW HEAD** | Tenant-scope PR head `c117b0eee5b19411c1fa3bf5162dbef1e939455f` passed [run 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672); merged `main` SHA `fe22af0424947b56ae80e0679621cf0df333e284` passed [run 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295), including unit tests, isolated PostgreSQL 17 migration acceptance, lint, build and port 5173 route/PWA smoke. Evidence is SHA-specific; inspect CI after every later commit. |
-| Production Supabase | **BLOCKED EXTERNALLY** | Repo references project `ffxxjaolfntzbapmfbuv`; connected Supabase account cannot access it. Never apply migrations to another project. |
-| Tenant isolation | **PARTIAL — AUTHENTICATED SCOPE PROVEN IN ISOLATED CI; PRODUCTION AND ANON ROUTING NOT PROVEN** | PR #26 merged at `fe22af0424947b56ae80e0679621cf0df333e284`. `getCurrentTenantScope()` resolves from `get_current_tenant_context()`; restrictive RLS covers all `public` base tables with `organization_id` for authenticated sessions and key relation tables; CI tests foreign-organization staff SELECT/INSERT denial on isolated PostgreSQL 17. [PR-head CI](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) and [main CI](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) pass. | Correct production Supabase access and authorized migration; authenticated customer/staff browser E2E; review public-read policies/domain-to-tenant selection and verify three-tier privacy. Never call tenant isolation production-certified yet. |
-| Orders / checkout | **PARTIAL / isolated DB tested** | Atomic staff-order creation, server pricing, idempotency and state/stock rules have isolated PostgreSQL evidence; target DB and authenticated browser E2E are unproven. |
-| Three pricing tiers | **PARTIAL / SECURITY CRITICAL** | Verify distinct tier outputs and deny alternate-tier values at DB/API/RPC/cache/export; tier must be derived server-side. |
-| Addresses / company users | **OPEN** | Customer address book and company-member administration remain open roadmap items. |
-| Invoices / statements | **PARTIAL** | Pages and RPC foundations exist; production flow, overpayment browser test and server-generated PDF remain open. |
-| Excel / CSV import | **PARTIAL** | CSV/XLSX streaming, DQS, hashing and resumable manifests exist; browser interruption E2E, rollback, TTL cleanup and large-file profiling are unproven. XLS binary and reliable PDF extraction are unsupported; manual mapping must be explicit. |
-| Onyx Pro | **PARTIAL** | Snapshots and comparison-only reconciliation exist; shared reporting must retain source lineage and avoid duplicate balances. No actual Onyx API contract is confirmed. |
-| Onyx Excel export | **PARTIAL / CODE-VERIFIED** | `src/lib/onyx-export.ts` now creates a real XLSX with a first detail sheet containing the exact 27 headers from section 21, a separate order/customer header sheet, inline-string SKU fields (leading zeroes preserved), and blanks for unmapped data. Unit tests and full CI pass on code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c` ([run 38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670)). **NOT PROVEN:** import acceptance on the owner's actual Onyx version and central audit logging for exports. |
-| Outbox / workers | **PARTIAL** | Schema/isolated acceptance exist; deployed workers, crash/replay recovery and consumer idempotency drills remain unproven. |
-| AI gateway / forecasting | **PARTIAL / no provider proven** | Deterministic assistant and governance schema exist; provider routing, safe Test Connection, budgets, sanitization, action cards and model-backed forecasts remain unproven. |
-| WhatsApp | **PARTIAL / external dependency** | Internal notifications exist. No official provider/credentials confirmed; never claim Sent without provider message ID/status. |
-| Offline/PWA | **PARTIAL** | Local catalog and cart draft exist; online server validation remains required before order creation. Conflict-safe mutation queue is unproven. |
-| Monitoring / DR / performance | **NOT PROVEN** | No production P95, 100k-row memory profile, backup restore, failover or DR drill evidence. |
-| Persistent memory | **PERSISTED / MAINTAINED** | `PROJECT_MEMORY.md`, this registry, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and progress ledger are committed on main. |
+| ID | Area | Status | Evidence and required closure |
+|---|---|---|---|
+| AGH-CI-001 | Build gate | **PASS ON CODE MERGE SHA; CHECK EVERY NEW HEAD** | Tenant-scope PR head `c117b0eee5b19411c1fa3bf5162dbef1e939455f` passed [run 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672); merged `main` SHA `fe22af0424947b56ae80e0679621cf0df333e284` passed [run 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295), including unit tests, isolated PostgreSQL 17 migration acceptance, lint, build and port 5173 route/PWA smoke. Evidence is SHA-specific; inspect CI after every later commit. |
+| AGH-EXT-SUPABASE-001 | Production Supabase | **BLOCKED EXTERNALLY** | Repo references project `ffxxjaolfntzbapmfbuv`; connected Supabase account cannot access it. Never apply migrations to another project. |
+| AGH-SEC-TENANT-001 | Tenant isolation | **PARTIAL — AUTHENTICATED SCOPE PROVEN IN ISOLATED CI; PRODUCTION AND ANON ROUTING NOT PROVEN** | PR #26 merged at `fe22af0424947b56ae80e0679621cf0df333e284`. `getCurrentTenantScope()` resolves from `get_current_tenant_context()`; restrictive RLS covers all `public` base tables with `organization_id` for authenticated sessions and key relation tables; CI tests foreign-organization staff SELECT/INSERT denial on isolated PostgreSQL 17. [PR-head CI](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) and [main CI](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) pass. | Correct production Supabase access and authorized migration; authenticated customer/staff browser E2E; review public-read policies/domain-to-tenant selection and verify three-tier privacy. Never call tenant isolation production-certified yet. |
+| AGH-ORDERS-001 | Orders / checkout | **PARTIAL / isolated DB tested** | Atomic staff-order creation, server pricing, idempotency and state/stock rules have isolated PostgreSQL evidence; target DB and authenticated browser E2E are unproven. |
+| AGH-PRICE-PRIVACY-001 | Three pricing tiers | **PARTIAL / SECURITY CRITICAL** | Verify distinct tier outputs and deny alternate-tier values at DB/API/RPC/cache/export; tier must be derived server-side. |
+| AGH-CUSTOMER-360-001 | Addresses / company users | **OPEN** | Customer address book and company-member administration remain open roadmap items. |
+| AGH-FINANCE-DOCS-001 | Invoices / statements | **PARTIAL** | Pages and RPC foundations exist; production flow, overpayment browser test and server-generated PDF remain open. |
+| AGH-DATA-IMPORT-001 | Excel / CSV import | **PARTIAL** | CSV/XLSX streaming, DQS, hashing and resumable manifests exist; browser interruption E2E, rollback, TTL cleanup and large-file profiling are unproven. XLS binary and reliable PDF extraction are unsupported; manual mapping must be explicit. |
+| AGH-ONYX-INTEGRATION-001 | Onyx Pro | **PARTIAL** | Snapshots and comparison-only reconciliation exist; shared reporting must retain source lineage and avoid duplicate balances. No actual Onyx API contract is confirmed. |
+| AGH-ONYX-XLSX-001 | Onyx Excel export | **PARTIAL / CODE-VERIFIED** | `src/lib/onyx-export.ts` now creates a real XLSX with a first detail sheet containing the exact 27 headers from section 21, a separate order/customer header sheet, inline-string SKU fields (leading zeroes preserved), and blanks for unmapped data. Unit tests and full CI pass on code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c` ([run 38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670)). **NOT PROVEN:** import acceptance on the owner's actual Onyx version and central audit logging for exports. |
+| AGH-ASYNC-OUTBOX-001 | Outbox / workers | **PARTIAL** | Schema/isolated acceptance exist; deployed workers, crash/replay recovery and consumer idempotency drills remain unproven. |
+| AGH-AI-GATEWAY-001 | AI gateway / forecasting | **PARTIAL / no provider proven** | Deterministic assistant and governance schema exist; provider routing, safe Test Connection, budgets, sanitization, action cards and model-backed forecasts remain unproven. |
+| AGH-WHATSAPP-001 | WhatsApp | **PARTIAL / external dependency** | Internal notifications exist. No official provider/credentials confirmed; never claim Sent without provider message ID/status. |
+| AGH-OFFLINE-PWA-001 | Offline/PWA | **PARTIAL** | Local catalog and cart draft exist; online server validation remains required before order creation. Conflict-safe mutation queue is unproven. |
+| AGH-OPS-DR-001 | Monitoring / DR / performance | **NOT PROVEN** | No production P95, 100k-row memory profile, backup restore, failover or DR drill evidence. |
+| AGH-OPS-RESUME-001 | Persistent memory | **PERSISTED / MAINTAINED** | `PROJECT_MEMORY.md`, this registry, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and progress ledger are committed on main. |
 
 ## Mandatory invariants
 1. Product identity is **متجر الأغبري | Aghbari Commerce** only.
@@ -48,6 +48,16 @@ This is an execution index, not proof that every feature is complete. A route, c
 6. Financial math is deterministic; AI explains measured facts. Insufficient history means no forecast.
 7. Use real loading/error/empty/retry/unauthorized/offline states; no decorative success buttons.
 8. Do not claim CI, DB, E2E, Lovable sync, WhatsApp send or AI readiness without exact evidence.
+
+## Permanent resume cursor and stable task IDs
+
+**Current cursor values are maintained here and mirrored in the latest execution-state file; do not create another task/progress ledger.**
+
+- `blocked_task_id = AGH-EXT-SUPABASE-001` — last-known external blocker: the intended production Supabase project `ffxxjaolfntzbapmfbuv` was inaccessible through the connected integration. Verify access again before concluding it remains blocked; never substitute another project or apply a migration without verified identity/authorization.
+- `next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN, first source-runnable security acceptance task after the current green isolated-DB baseline. Prove authenticated customer/staff browser paths and anonymous storefront behavior against the actual app/test harness; verify tenant separation and no purchase-cost, alternate price-tier, reserved inventory, or private admin/provider settings leakage through API/RPC/cache/export. Do not mutate production. Reuse existing test infrastructure; add only missing coverage.
+- The high-level gap register IDs above are permanent. New acceptance gates use an `AGH-<AREA>-<PURPOSE>-<NNN>` identifier and reference their parent row; never renumber an existing ID.
+- A requirement is `DONE_VERIFIED` only when the implementation path, access boundary, allowed and denied behavior, failure handling, and required tests pass on the recorded SHA. Reopen only for a newer relevant SHA/change, regression/security finding, changed dependency/input, or invalidated evidence.
+- Each execution batch records: task ID; status; exact tested SHA; changed paths; executed commands/tests and their actual outcomes; resulting commit/remote SHA; exact-SHA CI URL/result; next task ID; external blocker plus evidence. Do not inherit PASS from a parent SHA.
 
 ## Next execution order
 1. Check latest exact-head CI and keep unit → isolated PostgreSQL acceptance → lint → build → expanded route/PWA smoke green.

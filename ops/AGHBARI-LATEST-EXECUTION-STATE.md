@@ -1,5 +1,16 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active resume checkpoint — 2026-10-15
+
+- **Remote branch:** `main`; the source baseline checked immediately before this protocol-only batch was `8324f22419a967fc86f20dddc3b8650a6fd89390` ([commit](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/8324f22419a967fc86f20dddc3b8650a6fd89390)). Its commit date was 2026-10-15 06:10:49 UTC.
+- **Exact-SHA CI:** [run 38690894558](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38690894558) for that exact SHA completed **SUCCESS**; workflow job `test-and-build` concluded success. This evidence applies to `8324f224...` only, not to any later documentation commit.
+- **Source evidence in that baseline:** public storefront reads resolve scope from server-side publication configuration; isolated PostgreSQL migration tests assert tenant-scoped anonymous product/inventory visibility and deny direct reads of purchase cost, customer price tiers, reserved inventory fields, and private admin settings. Public catalog cache sanitization was added. This does not prove production Supabase or authenticated browser E2E.
+- **Repository/session instruction entry points:** root `AGENTS.md`; GitHub Copilot repository instructions `.github/copilot-instructions.md`; canonical references below. GitHub documents repository-wide Copilot instructions under that exact path. Whether Lovable automatically loads these files remains **UNVERIFIED** and must be confirmed in that host rather than assumed.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001`:** last-known external blocker is access to the intended project `ffxxjaolfntzbapmfbuv`. This batch did not access or mutate any production Supabase project; re-verify the same intended project before declaring the blocker current or trying a migration.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN:** implement/execute authenticated customer/staff browser acceptance and extend existing route/DB evidence to cover actual app flows, tenant boundaries, and privacy of tiered prices across API/RPC/cache/export. Include anonymous storefront checks. Use non-production fixtures; do not apply migrations to production. If the intended Supabase remains inaccessible, keep that blocker explicit and progress the source-runnable test coverage.
+- **Local Git note for this execution environment:** no repository checkout was mounted; the shell clone attempt failed because it could not resolve `github.com`. Therefore no local `git status`/local `git fetch origin` result is claimed. Remote branch/commit/Actions were checked through the GitHub integration. The next agent with a checkout must run commands in `AGENTS.md`; working-tree cleanliness is **UNKNOWN**, not inferred clean.
+- **Exact-SHA rule:** after this documentation commit is pushed, fetch the resulting remote `main` and its own Actions run. Never transfer the parent SHA's PASS to the new documentation SHA. The next session must read live HEAD first; the SHA above is a baseline, not an assumed future HEAD.
+
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`
 - Branch: `main`
 - Main SHA before this documentation-pointer update: `fe22af0424947b56ae80e0679621cf0df333e284`
