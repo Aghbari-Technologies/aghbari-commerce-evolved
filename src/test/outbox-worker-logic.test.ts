@@ -212,6 +212,17 @@ describe("outbox worker logical RPC result handling", () => {
     expect(value).toContain("[secret redacted]");
   });
 
+  it("redacts complete authorization header values regardless of scheme", () => {
+    const once = sanitizeOutboxErrorMessage(
+      "Authorization: Basic opaque-basic-token\nProxy-Authorization: Digest opaque-proxy-token",
+    );
+    expect(once).not.toContain("opaque-basic-token");
+    expect(once).not.toContain("opaque-proxy-token");
+    expect(once).toContain("Authorization=[redacted]");
+    expect(once).toContain("Proxy-Authorization=[redacted]");
+    expect(sanitizeOutboxErrorMessage(once)).toBe(once);
+  });
+
   it("is idempotent when a transport failure message is sanitized more than once", () => {
     const once = sanitizeOutboxErrorMessage(
       "request failed Authorization: Bearer opaque-access-token sk-12345678901234567890 AIza123456789012345678901234567890",
