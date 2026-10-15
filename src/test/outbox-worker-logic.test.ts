@@ -243,6 +243,18 @@ describe("outbox worker logical RPC result handling", () => {
     expect(twice).toContain("[secret redacted]");
   });
 
+  it("redacts OAuth codes, ID tokens, and client secrets in query and fragment URLs", () => {
+    const value = sanitizeOutboxErrorMessage(
+      "OAuth exchange failed: https://auth.example.test/callback?state=ok&code=opaque-auth-code#id_token=opaque-id-token&client_secret=opaque-client-secret",
+    );
+    for (const secret of ["opaque-auth-code", "opaque-id-token", "opaque-client-secret"]) {
+      expect(value).not.toContain(secret);
+    }
+    expect(value).toContain("code=[redacted]");
+    expect(value).toContain("id_token=[redacted]");
+    expect(value).toContain("client_secret=[redacted]");
+  });
+
   it("provides a bounded, non-empty fallback for unknown worker errors", () => {
     expect(sanitizeOutboxErrorMessage(null)).toBe("Unclassified worker error");
     expect(sanitizeOutboxErrorMessage(new Error("x".repeat(700)))).toHaveLength(500);

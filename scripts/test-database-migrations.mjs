@@ -656,7 +656,7 @@ async function main() {
       retryEventId,
       "ci-outbox-worker-recovery",
       "unsupported_event",
-      "No handler registered for CIUnsupportedEvent; buyer@example.com; Bearer opaque-access-token; api_key=opaque-api-key; sk-12345678901234567890; ?access_token=opaque-query-token\nAuthorization: Basic opaque-basic-token\nProxy-Authorization: Bearer opaque-proxy-token\nCookie: session=opaque-cookie; next=opaque-session\nSet-Cookie: refresh_token=opaque-refresh-cookie",
+      "No handler registered for CIUnsupportedEvent; buyer@example.com; Bearer opaque-access-token; api_key=opaque-api-key; sk-12345678901234567890; ?access_token=opaque-query-token\nAuthorization: Basic opaque-basic-token\nProxy-Authorization: Bearer opaque-proxy-token\nCookie: session=opaque-cookie; next=opaque-session\nSet-Cookie: refresh_token=opaque-refresh-cookie\nOAuth callback https://auth.example.test/callback?state=ok&code=opaque-auth-code#id_token=opaque-id-token&client_secret=opaque-client-secret",
     ],
   );
   assert.equal(retryResult[0].result.status, "retry");
@@ -682,6 +682,9 @@ async function main() {
   assert.ok(!durableError.includes("opaque-cookie"));
   assert.ok(!durableError.includes("opaque-session"));
   assert.ok(!durableError.includes("opaque-refresh-cookie"));
+  assert.ok(!durableError.includes("opaque-auth-code"));
+  assert.ok(!durableError.includes("opaque-id-token"));
+  assert.ok(!durableError.includes("opaque-client-secret"));
   assert.ok(!durableError.includes("sk-12345678901234567890"));
   assert.ok(!durableError.includes("opaque-query-token"));
 
