@@ -434,24 +434,6 @@ export async function buildCustomerStatementPdf(
     );
   }
 
-  if (y < 160) {
-    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    pages.push(page);
-    drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية — ملخص المبالغ");
-    y = PAGE_HEIGHT - 135;
-  }
-  drawRule(page, y - 4);
-  y -= 24;
-  drawArabic(page, font, "الإجمالي الفرعي", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
-  drawLtr(page, font, minorUnitsToText(subtotal) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
-  y -= 22;
-  drawArabic(page, font, "الضريبة", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
-  drawLtr(page, font, minorUnitsToText(taxAmount) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
-  y -= 24;
-  drawRule(page, y + 8);
-  drawArabic(page, font, "الإجمالي المستحق", PAGE_WIDTH - 47, y - 8, 10, BRAND, 125);
-  drawLtr(page, font, minorUnitsToText(totalAmount) + " " + currency, PAGE_WIDTH - 210, y - 8, 10, BRAND, 160);
-
   pages.forEach((current, index) => appendPageNumber(current, index, pages.length, font));
   return pdf.save({ useObjectStreams: false });
 }
@@ -652,6 +634,24 @@ export async function buildCustomerInvoicePdf(
       300,
     );
   }
+  if (y < 160) {
+    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    pages.push(page);
+    drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية — ملخص المبالغ");
+    y = PAGE_HEIGHT - 135;
+  }
+  drawRule(page, y - 4);
+  y -= 24;
+  drawArabic(page, font, "الإجمالي الفرعي", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
+  drawLtr(page, font, minorUnitsToText(subtotal) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
+  y -= 22;
+  drawArabic(page, font, "الضريبة", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
+  drawLtr(page, font, minorUnitsToText(taxAmount) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
+  y -= 24;
+  drawRule(page, y + 8);
+  drawArabic(page, font, "الإجمالي المستحق", PAGE_WIDTH - 47, y - 8, 10, BRAND, 125);
+  drawLtr(page, font, minorUnitsToText(totalAmount) + " " + currency, PAGE_WIDTH - 210, y - 8, 10, BRAND, 160);
+
   pages.forEach((current, index) => appendPageNumber(current, index, pages.length, font));
   return pdf.save({ useObjectStreams: false });
 }
