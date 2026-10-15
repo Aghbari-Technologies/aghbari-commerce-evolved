@@ -51,15 +51,23 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const scope = await getStorefrontDataScope();
   const { organizationId: orgId, warehouseId, isStaff } = scope;
   const publicProductColumns = 'id,organization_id,category_id,name,item_code,barcode,description,unit,status,image_url,created_at';
-  let productsQuery = supabase
-    .from('products')
-    .select(isStaff ? '*' : publicProductColumns)
-    .eq('organization_id', orgId);
-  // Public/customer catalog requests must not return disabled products even if a permissive
-  // tenant policy is later broadened. Staff tooling retains inactive rows for maintenance.
-  if (!isStaff) productsQuery = productsQuery.eq('status', 'active');
-  const { data: products, error } = await productsQuery.order('name');
-  if (error) throw error;
+  let products: Product[];
+  if (isStaff) {
+    // Sensitive product columns are not directly SELECTable by browser roles.
+    // Staff reads cross this tenant-bound, role-checked RPC instead of table-wide SELECT.
+    const { data, error } = await supabase.rpc('fetch_staff_products', { p_product_id: null });
+    if (error) throw error;
+    products = ((data ?? []) as Product[]).sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    const { data, error } = await supabase
+      .from('products')
+      .select(publicProductColumns)
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
+      .order('name');
+    if (error) throw error;
+    products = (data ?? []) as Product[];
+  }
 
   const customerPriceMap = isStaff
     ? null
@@ -105,26 +113,33 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   });
 }
 
+async function fetchStaffProductById(id: string): Promise<Product> {
+  const { data, error } = await supabase.rpc('fetch_staff_products', { p_product_id: id });
+  if (error) throw error;
+  const product = (data as Product[] | null)?.[0];
+  if (!product) throw new Error('الصنف غير موجود في المؤسسة الحالية أو لا تملك صلاحية قراءته.');
+  return product;
+}
+
 export async function createProduct(p: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
-  const { data, error } = await supabase
+  const productId = typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID();
+  const { error } = await supabase
     .from('products')
-    .insert({ ...p, organization_id: orgId })
-    .select()
-    .single();
+    .insert({ ...p, id: productId, organization_id: orgId });
   if (error) throw error;
-  return data;
+  return fetchStaffProductById(productId);
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
-  const { data, error } = await supabase
+  const { organizationId: orgId } = await getCurrentTenantScope();
+  const { error } = await supabase
     .from('products')
     .update(updates)
     .eq('id', id)
-    .select()
-    .single();
+    .eq('organization_id', orgId);
   if (error) throw error;
-  return data;
+  return fetchStaffProductById(id);
 }
 
 export async function deleteProduct(id: string): Promise<void> {

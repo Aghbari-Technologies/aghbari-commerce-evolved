@@ -126,6 +126,41 @@ describe("public catalog privacy and tenant query contract", () => {
     expect(mocks.from).toHaveBeenCalledTimes(3);
   });
 
+  it("loads sensitive staff product fields through the tenant-bound RPC", async () => {
+    mocks.getStorefrontDataScope.mockResolvedValueOnce({
+      organizationId: ORGANIZATION_ID,
+      warehouseId: WAREHOUSE_ID,
+      isStaff: true,
+    });
+    mocks.rpc.mockResolvedValueOnce({
+      data: [{
+        id: "staff-product-1",
+        organization_id: ORGANIZATION_ID,
+        category_id: null,
+        name: "Staff product",
+        item_code: "STAFF-1",
+        barcode: null,
+        description: null,
+        unit: "unit",
+        base_price: 200,
+        cost_price: 120,
+        min_stock: 4,
+        status: "active",
+        image_url: null,
+        created_at: "2026-01-01T00:00:00Z",
+      }],
+      error: null,
+    });
+
+    const rows = await fetchProducts();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].base_price).toBe(200);
+    expect(rows[0].cost_price).toBe(120);
+    expect(mocks.rpc).toHaveBeenCalledWith("fetch_staff_products", { p_product_id: null });
+    expect(mocks.queries.some((query) => query.table === "products")).toBe(false);
+  });
+
   it("uses only the server-resolved customer-tier price and never returns the raw base price", async () => {
     mocks.responses.products = {
       data: [{

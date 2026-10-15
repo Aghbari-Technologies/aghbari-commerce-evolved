@@ -334,9 +334,14 @@ async function main() {
     /quantity/i,
   );
 
-  const publicProducts = await db.unsafe("select id,organization_id,name,base_price from public.products order by id");
+  const publicProducts = await db.unsafe("select id,organization_id,name from public.products order by id");
   assert.ok(publicProducts.some((p) => p.id === productId), "public storefront must read the canonical tenant catalog");
   assert.ok(publicProducts.every((p) => p.organization_id === organizationId), "anonymous catalog cannot read another organization's products");
+  await expectFailure(
+    "anonymous clients cannot read raw base prices outside the tier-aware pricing RPC",
+    () => db.unsafe("select base_price from public.products limit 1"),
+    /permission denied/i,
+  );
   await expectFailure(
     "anonymous product reads cannot expose purchase cost",
     () => db.unsafe("select cost_price from public.products limit 1"),
@@ -371,6 +376,17 @@ async function main() {
 
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
+
+  await expectFailure(
+    "authenticated customers cannot directly read raw product base price",
+    () => db.unsafe("select base_price from public.products where id=$1", [productId]),
+    /permission denied/i,
+  );
+  const authenticatedSafeProducts = await db.unsafe(
+    "select id,name,item_code from public.products where id=$1",
+    [productId],
+  );
+  assert.equal(authenticatedSafeProducts.length, 1, "authenticated customers retain safe catalog fields");
 
   // Authenticated customers may submit a cart, but must not enumerate the
   // organization-wide pricing-tier table directly. A denied SELECT or an RLS
@@ -1294,6 +1310,23 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await db.unsafe("set role authenticated");
+  await expectFailure(
+    "staff cannot bypass the product price boundary with a direct table read",
+    () => db.unsafe("select base_price from public.products where id=$1", [productId]),
+    /permission denied/i,
+  );
+  const staffProducts = await db.unsafe(
+    "select id,organization_id,base_price from public.fetch_staff_products($1::uuid)",
+    [productId],
+  );
+  assert.equal(staffProducts.length, 1, "authorized staff can read sensitive product fields through the protected RPC");
+  assert.equal(staffProducts[0].organization_id, organizationId, "staff product RPC enforces tenant scope");
+  const staffForeignProducts = await db.unsafe(
+    "select id from public.fetch_staff_products(null::uuid) where organization_id<>$1",
+    [organizationId],
+  );
+  assert.equal(staffForeignProducts.length, 0, "staff product RPC cannot return foreign tenant products");
+  process.stdout.write("PASS raw product price boundary: anon/customer table reads denied and staff RPC tenant-scoped\\n");
   process.stdout.write("PASS Onyx export audit: server-derived actor/tenant, approved-order guard, row-count validation, central audit persistence and cross-tenant/customer denial\\n");
   process.stdout.write("PASS order-review approval, stale/unapproved confirmation guard, one-order price override, invoice and payment-request lifecycle\\n");
 
