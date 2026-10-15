@@ -86,6 +86,12 @@ function makeQuery(table: string) {
     limit(_limit: number) {
       return query;
     },
+    maybeSingle() {
+      return Promise.resolve({
+        data: (mocks.responses[table] ?? [])[0] ?? null,
+        error: null,
+      });
+    },
     then<TResult1 = { data: unknown[]; error: null }, TResult2 = never>(
       onfulfilled?: ((value: { data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
@@ -213,6 +219,81 @@ describe("customer quote workspace tenant boundary", () => {
   });
 
 
+
+  it("resolves customer-tier prices on the reorder route without selecting base_price", async () => {
+    mocks.user = {
+      id: USER_ID, profileId: PROFILE_ID, email: "ci-customer@example.test", name: "CI Customer",
+      roles: ["customer"], isStaff: false,
+    };
+    await mountQuoteWorkspace("/reorder");
+    expect(host?.textContent).toContain("إعادة الطلب");
+    expect(host?.textContent).toContain("Rice");
+    expect(mocks.fetchResolvedProductPrices).toHaveBeenCalledWith(["product-1"]);
+    const products = queryFor("products");
+    expect(products.columns).toBe("id,name,item_code,barcode,unit,status");
+    expect(products.columns).not.toMatch(/base_price|retail_price|wholesale_price|purchase_cost/i);
+    expect(products.filters).toContainEqual({ column: "organization_id", value: ORGANIZATION_ID });
+    expect(products.filters).toContainEqual({ column: "status", value: "active" });
+  });
+
+  it("resolves the barcode result price through the server helper", async () => {
+    mocks.user = {
+      id: USER_ID, profileId: PROFILE_ID, email: "ci-customer@example.test", name: "CI Customer",
+      roles: ["customer"], isStaff: false,
+    };
+    await mountQuoteWorkspace("/barcode");
+    const input = host?.querySelector<HTMLInputElement>('input[aria-label="رقم الباركود"]');
+    const form = input?.closest("form");
+    expect(input).not.toBeNull();
+    expect(form).not.toBeNull();
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "SKU-001");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host?.textContent).toContain("Rice");
+    expect(mocks.fetchResolvedProductPrices).toHaveBeenCalledWith(["product-1"]);
+    const products = queryFor("products");
+    expect(products.columns).toBe("id,name,item_code,barcode,unit,status");
+    expect(products.columns).not.toMatch(/base_price|retail_price|wholesale_price|purchase_cost/i);
+    expect(products.filters).toContainEqual({ column: "organization_id", value: ORGANIZATION_ID });
+    expect(products.filters).toContainEqual({ column: "status", value: "active" });
+  });
+
+  it("resolves assistant catalog search prices through the server helper", async () => {
+    mocks.user = {
+      id: USER_ID, profileId: PROFILE_ID, email: "ci-customer@example.test", name: "CI Customer",
+      roles: ["customer"], isStaff: false,
+    };
+    await mountQuoteWorkspace("/assistant");
+    const input = host?.querySelector<HTMLTextAreaElement>("textarea");
+    const form = input?.closest("form");
+    expect(input).not.toBeNull();
+    expect(form).not.toBeNull();
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(input, "ابحث عن Rice");
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host?.textContent).toContain("نتائج من الكتالوج");
+    expect(host?.textContent).toContain("Rice");
+    expect(mocks.fetchResolvedProductPrices).toHaveBeenCalledWith(["product-1"]);
+    const products = queryFor("products");
+    expect(products.columns).toBe("id,name,item_code,barcode,unit,status");
+    expect(products.columns).not.toMatch(/base_price|retail_price|wholesale_price|purchase_cost/i);
+    expect(products.filters).toContainEqual({ column: "organization_id", value: ORGANIZATION_ID });
+    expect(products.filters).toContainEqual({ column: "status", value: "active" });
+  });
 
   it("denies a customer from the admin quotes route before any staff data read", async () => {
     mocks.user = {
