@@ -173,12 +173,12 @@ export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
           {([
-            ['daily_cost_limit','حد التكلفة اليومي (USD)','0.01'],
-            ['monthly_cost_limit','حد التكلفة الشهري (USD)','1'],
-            ['per_request_cost_limit','حد التكلفة للطلب (USD)','0.01'],
-            ['daily_token_limit','حد الرموز اليومي','1000'],
-            ['monthly_token_limit','حد الرموز الشهري','20000'],
-          ] as const).map(([key,label,step]) => <label key={key} style={{ display: 'grid', gap: 6 }}>{label}
+            ['daily_cost_limit','حد التكلفة اليومي (USD)'],
+            ['monthly_cost_limit','حد التكلفة الشهري (USD)'],
+            ['per_request_cost_limit','حد التكلفة للطلب (USD)'],
+            ['daily_token_limit','حد الرموز اليومي'],
+            ['monthly_token_limit','حد الرموز الشهري'],
+          ] as const).map(([key,label]) => <label key={key} style={{ display: 'grid', gap: 6 }}>{label}
             <input style={field} type="number" min="0" step={key.includes('token') ? '1' : '0.000001'} value={draft[key]} onChange={(e) => patchGateway({ [key]: e.target.value } as Partial<AiGatewayDraft>)} />
           </label>)}
         </div>

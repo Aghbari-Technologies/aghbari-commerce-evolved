@@ -35,7 +35,7 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
   it("enforces length and non-empty request limits", () => {
     expect(sanitizeAiQuestion("  ")).toEqual({ ok: false, reason: "question_required" });
     expect(sanitizeAiQuestion("x".repeat(1201))).toEqual({ ok: false, reason: "question_too_long" });
-    expect(estimateInputTokens("سؤال قصير", 10)).toBe(7);
+    expect(estimateInputTokens("سؤال قصير", 10)).toBe(13);
   });
 
   it("blocks HTTP, userinfo, localhost and private IP provider endpoints", () => {

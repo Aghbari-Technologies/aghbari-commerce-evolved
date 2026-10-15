@@ -61,7 +61,7 @@ export function sanitizeAiQuestion(value: unknown): { ok: true; question: string
 /** Conservative estimate only; provider-reported usage is stored after completion. */
 export function estimateInputTokens(text: string, systemPromptLength = 900): number {
   const units = Math.max(1, text.length + Math.max(0, Math.min(systemPromptLength, 6000)));
-  return Math.min(2000000, Math.ceil(units / 3));
+  return Math.min(2000000, Math.ceil(units / 1.5));
 }
 
 export function estimateCost(inputTokens: number, outputTokens: number, rates: AiCostRates): number {

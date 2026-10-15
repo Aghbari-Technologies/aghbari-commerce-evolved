@@ -248,6 +248,9 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.ai_usage_ledger l WHERE l.organization_id=v_org AND l.request_id=p_request_id) THEN
     RETURN jsonb_build_object('status','duplicate_request');
   END IF;
+  UPDATE public.ai_usage_reservations r
+     SET status='expired'
+   WHERE r.organization_id=v_org AND r.status='reserved' AND r.expires_at<=now();
   SELECT coalesce(sum(l.estimated_cost),0),coalesce(sum(l.input_tokens+l.output_tokens),0)
     INTO v_daily_cost,v_daily_tokens FROM public.ai_usage_ledger l
    WHERE l.organization_id=v_org AND l.created_at>=date_trunc('day',now()) AND l.result_status<>'rejected_quota';
