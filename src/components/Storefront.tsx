@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { fetchCustomerAddresses, type CustomerAddress } from '@/lib/customer-addresses';
 
 type CartItem = { product: ProductWithInventory; quantity: number };
 type StoreView = 'shop' | 'product' | 'wishlist' | 'compare' | 'matrix' | 'cart' | 'checkout' | 'confirm';
@@ -355,6 +356,15 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
   const [business, setBusiness] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentTerms, setPaymentTerms] = useState<'cash_on_delivery' | 'credit'>('cash_on_delivery');
+  const [deliveryAddresses, setDeliveryAddresses] = useState<CustomerAddress[]>([]);
+  const [deliveryAddressId, setDeliveryAddressId] = useState('');
+  const [deliveryAddressesLoading, setDeliveryAddressesLoading] = useState(false);
+  const [deliveryAddressesError, setDeliveryAddressesError] = useState('');
+  const [deliveryAddressRetry, setDeliveryAddressRetry] = useState(0);
+  const selectedDeliveryAddress = useMemo(
+    () => deliveryAddresses.find((address) => address.id === deliveryAddressId) ?? null,
+    [deliveryAddresses, deliveryAddressId],
+  );
   const [cartValidation, setCartValidation] = useState<CheckoutValidation | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const [previewError, setPreviewError] = useState('');
@@ -366,6 +376,38 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    if (!user?.profileId) {
+      setDeliveryAddresses([]);
+      setDeliveryAddressId('');
+      setDeliveryAddressesLoading(false);
+      setDeliveryAddressesError('');
+      return () => { active = false; };
+    }
+
+    setDeliveryAddressesLoading(true);
+    setDeliveryAddressesError('');
+    void fetchCustomerAddresses().then((addresses) => {
+      if (!active) return;
+      setDeliveryAddresses(addresses);
+      setDeliveryAddressId((current) =>
+        addresses.some((address) => address.id === current)
+          ? current
+          : addresses.find((address) => address.is_default)?.id ?? addresses[0]?.id ?? '',
+      );
+    }).catch((cause) => {
+      if (!active) return;
+      setDeliveryAddresses([]);
+      setDeliveryAddressId('');
+      setDeliveryAddressesError(cause instanceof Error ? cause.message : 'تعذر تحميل عناوين التوصيل.');
+    }).finally(() => {
+      if (active) setDeliveryAddressesLoading(false);
+    });
+
+    return () => { active = false; };
+  }, [user?.profileId, deliveryAddressRetry]);
 
   useEffect(() => {
     let active = true;
@@ -406,7 +448,7 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
 
   function getIdempotencyKey() {
     const items = cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })).sort((a, b) => a.product_id.localeCompare(b.product_id));
-    const signature = JSON.stringify({ profile_id: user?.profileId, payment_terms: paymentTerms, items, contact_name: name.trim(), business_name: business.trim(), phone: phone.trim(), notes: notes.trim() });
+    const signature = JSON.stringify({ profile_id: user?.profileId, payment_terms: paymentTerms, items, contact_name: name.trim(), business_name: business.trim(), phone: phone.trim(), notes: notes.trim(), delivery_address: selectedDeliveryAddress ? { id: selectedDeliveryAddress.id, label: selectedDeliveryAddress.label, recipient_name: selectedDeliveryAddress.recipient_name, phone: selectedDeliveryAddress.phone, address_line1: selectedDeliveryAddress.address_line1, address_line2: selectedDeliveryAddress.address_line2, city: selectedDeliveryAddress.city, region: selectedDeliveryAddress.region, postal_code: selectedDeliveryAddress.postal_code, country: selectedDeliveryAddress.country, delivery_instructions: selectedDeliveryAddress.delivery_instructions } : null });
     if (idempotencyRef.current?.signature === signature) return idempotencyRef.current.key;
     const storageKey = 'aghbari:checkout-attempt:v1';
     try {
@@ -435,6 +477,7 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
         _items: cart.map((i) => ({ product_id: i.product.id, quantity: i.quantity })),
         _notes: notes.trim(), _business_name: business.trim(), _contact_name: name.trim(), _phone: phone.trim(),
         _payment_terms: paymentTerms, _idempotency_key: requestKey,
+        _delivery_address_id: deliveryAddressId || null,
       });
       if (rpcError) throw new Error(rpcError.message || 'تعذر إرسال الطلب');
       const result = data as { id?: unknown; order_number?: unknown; status?: unknown } | null;
@@ -462,6 +505,39 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
           <label className="sf-form-field"><span>الاسم الكامل *</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسمك الكامل" /></label>
           <label className="sf-form-field"><span>رقم الهاتف *</span><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="7XX XXX XXX" /></label>
           <label className="sf-form-field"><span>اسم المنشأة</span><input value={business} onChange={(e) => setBusiness(e.target.value)} placeholder="اسم المتجر أو الشركة" /></label>
+
+          <div className="sf-form-field">
+            <label htmlFor="checkout-delivery-address"><span>عنوان التوصيل</span></label>
+            <select
+              id="checkout-delivery-address"
+              value={deliveryAddressId}
+              onChange={(event) => setDeliveryAddressId(event.target.value)}
+              disabled={deliveryAddressesLoading || submitting}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '1px solid #d8e8e8', borderRadius: 10, background: '#fff', color: '#18383c' }}
+            >
+              <option value="">بدون عنوان محفوظ — سأؤكد تفاصيل التوصيل لاحقًا</option>
+              {deliveryAddresses.map((address) => (
+                <option key={address.id} value={address.id}>
+                  {address.label} — {address.city} — {address.address_line1}
+                </option>
+              ))}
+            </select>
+            {deliveryAddressesLoading && <small role="status" style={{ display: 'block', marginTop: 6 }}>جارٍ تحميل عناوينك المحفوظة...</small>}
+            {deliveryAddressesError && <div className="sf-form-error" role="alert" style={{ marginTop: 8 }}>
+              {deliveryAddressesError}
+              <button className="sf-link" type="button" onClick={() => setDeliveryAddressRetry((n) => n + 1)}>إعادة المحاولة</button>
+            </div>}
+            {!deliveryAddressesLoading && deliveryAddresses.length === 0 && (
+              <p style={{ color: '#71868a', lineHeight: 1.7, margin: '7px 0 0' }}>
+                لا يوجد عنوان محفوظ. يمكنك إتمام الطلب دون ربط عنوان، أو <Link to="/addresses" className="sf-link">إضافة عنوان توصيل</Link>.
+              </p>
+            )}
+            {selectedDeliveryAddress && (
+              <div role="note" style={{ marginTop: 8, padding: 10, borderRadius: 9, background: '#f2f7f8', color: '#536b70', lineHeight: 1.7 }}>
+                سيحفظ الطلب نسخة ثابتة من العنوان المحدد. تعديل دفتر العناوين لاحقًا لن يغير وجهة هذا الطلب.
+              </div>
+            )}
+          </div>
           <fieldset className="sf-form-field" style={{ border: '1px solid #d8e8e8', borderRadius: 12, padding: 12, margin: 0 }}><legend style={{ padding: '0 6px', fontWeight: 800 }}>شروط الدفع</legend>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}><input type="radio" name="paymentTerms" value="cash_on_delivery" checked={paymentTerms === 'cash_on_delivery'} onChange={() => setPaymentTerms('cash_on_delivery')} /> الدفع عند الاستلام</label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="radio" name="paymentTerms" value="credit" checked={paymentTerms === 'credit'} onChange={() => setPaymentTerms('credit')} /> الدفع الآجل وفق حد الائتمان المعتمد</label>
@@ -470,7 +546,7 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
           <label className="sf-form-field"><span>ملاحظات</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي ملاحظات على الطلب..." /></label>
           {previewError && <div className="sf-form-error" role="alert">{previewError} <button className="sf-link" type="button" onClick={() => setPreviewRetry((n) => n + 1)}>إعادة التحقق</button></div>}
           {error && <div className="sf-form-error">{error}</div>}
-          <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting || previewLoading || !cartValidation}>{submitting ? 'جار الإرسال...' : previewLoading ? 'جارٍ التحقق من السلة...' : 'تأكيد الطلب'}</button></div>
+          <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting || previewLoading || deliveryAddressesLoading || !cartValidation}>{submitting ? 'جار الإرسال...' : previewLoading ? 'جارٍ التحقق من السلة...' : deliveryAddressesLoading ? 'جارٍ تحميل عناوين التوصيل...' : 'تأكيد الطلب'}</button></div>
         </div>
         <aside className="sf-checkout-summary">
           <h3>ملخص الطلب</h3>

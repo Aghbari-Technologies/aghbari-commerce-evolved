@@ -132,3 +132,18 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - Added `src/test/customer-addresses.test.ts` and isolated PostgreSQL regressions in `scripts/test-database-migrations.mjs` for data projection, invalid input, false-success prevention, direct write denial, cross-customer isolation, default promotion and audit trail.
 - Added `prefers-reduced-motion: reduce` global policy and included `/addresses` in the CI dev-server smoke matrix.
 - Exact-SHA CI for this feature is pending. No production migration or live authenticated browser test was performed; checkout address snapshots and company-member screens remain open.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: implementation CI verified
+
+- Implementation head `64a7056274a7b24324c53f9020ec1b710133a724`; exact-head PR CI [run 38699933765](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38699933765) completed **SUCCESS**.
+- Passed gates: `npm test`; `npm run test:db` applying all migrations/workflow assertions on isolated PostgreSQL 17; lint excluding the repository-wide Prettier rule; production build; dev-server port-5173 smoke including `/addresses`.
+- The first attempt found the invalid PostgreSQL column privilege name `DELETE`; it was corrected to verify INSERT/UPDATE at column level and DELETE at table level. The fixed exact SHA passed all gates.
+- Evidence is repository code + isolated CI only. No production migration or live authenticated browser test; checkout order-address snapshots and company contact/member management remain open.
+
+## 2026-10-15 — AGH-CUSTOMER-360-001: delivery-address snapshot in checkout
+
+- Checkout now loads the customer's saved addresses, preselects the default when present, lets the customer choose an address or continue without one, and includes the selected address fields in the retry-intent signature. Load failures remain visible with retry and a safe no-address fallback.
+- New additive migration `20261015140000_checkout_delivery_address_snapshot.sql` extends `submit_customer_order` with `_delivery_address_id`, validates ownership server-side, saves a frozen display-safe snapshot on the order, and keeps the snapshot after later address edits/deletion.
+- The same transaction emits an idempotent `OrderCreated` outbox event with order identity and delivery snapshot. A replay cannot silently rebind an order to an edited address under the same idempotency key.
+- Customer order details and the staff order review show the saved delivery snapshot. Customer direct grants include only `delivery_address_snapshot`; the mutable FK and fingerprint remain inaccessible to customer SELECT.
+- Extended the existing isolated PostgreSQL workflow tests for snapshot values, transaction outbox uniqueness, immutable history, privacy boundaries and retry mismatch. Exact-SHA CI is pending; no production DB migration/live browser proof is claimed.

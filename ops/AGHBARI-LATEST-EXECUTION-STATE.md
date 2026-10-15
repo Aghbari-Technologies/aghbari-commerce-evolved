@@ -1,15 +1,15 @@
 # Aghbari Commerce — Latest Execution State
 
-## Active implementation — AGH-CUSTOMER-360-001: customer address book
+## Active implementation — AGH-CUSTOMER-360-001: freeze delivery address into checkout/order lifecycle
 
-- Added customer-facing `/addresses` route and account-workspace UI for creating, editing, deleting and listing delivery addresses, with a single default-address policy.
-- Added `supabase/migrations/20261015130000_customer_address_book.sql`: identity and organization are server-derived, RLS limits rows to the owner or same-organization staff, direct client writes are revoked, RPC mutations are audited, and a lock plus partial unique index enforces one default address.
-- Added data-contract tests and isolated PostgreSQL regressions for direct-write denial, same-organization cross-customer isolation, RPC ownership, default replacement, deletion promotion and audit events. Added the route to the actual port-5173 smoke matrix.
-- Added global `prefers-reduced-motion: reduce` rules for animation, transitions and smooth scrolling.
-- **Exact-SHA CI is pending for this batch.** No production database was changed. Intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible; no live browser or Lovable editor sync is claimed. Checkout delivery-address snapshots and company contacts/users remain open.
-- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL. Check exact-SHA CI and fix any failure, then connect delivery-address snapshots to checkout/orders and implement company contacts/users. Keep `AGH-SEC-BROWSER-E2E-001` separately OPEN for real authenticated browser and production evidence.
+- The customer address book landed in main at `12b31fa9c1a9ad89934e936ef822b1288f342649`; exact-head CI for its implementation SHA `64a7056274a7b24324c53f9020ec1b710133a724` passed unit tests, isolated PostgreSQL 17, lint, build and port-5173 route smoke.
+- This follow-up adds `orders.delivery_address_snapshot` and a source-address link, submits the selected saved address from checkout, validates ownership in the server command, freezes the destination in the same transaction, prevents idempotent retries from silently changing it, and writes a transactional `OrderCreated` outbox event.
+- Customer and staff order-detail screens display the persisted snapshot. The customer order projection exposes only the snapshot JSON; the address foreign key and fingerprint stay private. Regression coverage verifies address ownership at checkout, frozen historical content, private-column denial, one outbox event and address-sensitive retry rejection.
+- The follow-up commit is being prepared on `feat/checkout-delivery-address-20261015`; exact-SHA CI remains pending. No production database was changed; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible.
+- `next_task_id = AGH-CUSTOMER-360-001` — PARTIAL until exact-SHA CI passes. Next subtask: company contacts and member administration, then live authenticated browser acceptance/production migration proof when the intended project becomes available.
 
 ---
+
 
 ## Verified offline catalog cache privacy subgate
 

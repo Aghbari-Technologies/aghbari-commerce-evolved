@@ -12,7 +12,7 @@ type CustomerOrderSummary = Pick<Order, 'id' | 'order_number' | 'status' | 'tota
   customer_payment_requested_at?: string | null;
   payment_request_status?: string;
 };
-type CustomerOrderDocument = Pick<Order, 'id' | 'order_number' | 'customer_id' | 'status' | 'total_items' | 'notes' | 'created_at'> & {
+type CustomerOrderDocument = Pick<Order, 'id' | 'order_number' | 'customer_id' | 'status' | 'total_items' | 'notes' | 'created_at' | 'delivery_address_snapshot'> & {
   quantity_review_required?: boolean;
   customer_adjustment_note?: string | null;
   customer_payment_requested_at?: string | null;
@@ -97,7 +97,7 @@ function OrderInvoiceInner({ id }: { id: string }) {
   const { user } = useAuth();
   const { data, loading, error } = useFetch(async () => {
     const [o, i, h] = await Promise.all([
-      supabase.from('orders').select('id,order_number,customer_id,status,total_items,notes,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,customer_confirmed_at,payment_request_status').eq('id', id).maybeSingle(),
+      supabase.from('orders').select('id,order_number,customer_id,status,total_items,notes,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,customer_confirmed_at,payment_request_status,delivery_address_snapshot').eq('id', id).maybeSingle(),
       supabase.from('order_items').select('id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity').eq('order_id', id),
       supabase.from('order_status_history').select('id,to_status,created_at,notes').eq('order_id', id).order('created_at'),
     ]);
@@ -130,6 +130,17 @@ function OrderInvoiceInner({ id }: { id: string }) {
           <div style={{ textAlign: 'left' }}><strong>تأكيد طلب</strong><div>{order.order_number}</div><small>{formatDate(order.created_at)}</small></div>
         </header>
         <p style={{ margin: '14px 0' }}>رقم العميل: <strong>{customer?.customer_code ?? '—'}</strong> — العميل: <strong>{customer?.business_name ?? customer?.contact_name ?? user?.name ?? '—'}</strong> — الحالة: <strong>{STATUS_LABELS[order.status] ?? order.status}</strong></p>
+
+        {order.delivery_address_snapshot && <section style={{ marginTop: 16, padding: 14, border: '1px solid #dce9e9', borderRadius: 12 }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: 16 }}>عنوان التوصيل المسجل مع الطلب</h2>
+          <strong>{order.delivery_address_snapshot.label}</strong>
+          <p style={{ margin: '7px 0 3px', fontWeight: 750 }}>{order.delivery_address_snapshot.recipient_name}</p>
+          <p dir="auto" style={{ margin: '0 0 5px' }}>{order.delivery_address_snapshot.phone}</p>
+          <p style={{ margin: '0 0 5px' }}>{order.delivery_address_snapshot.address_line1}{order.delivery_address_snapshot.address_line2 ? '، ' + order.delivery_address_snapshot.address_line2 : ''}</p>
+          <p style={{ margin: '0 0 5px', color: '#536b70' }}>{[order.delivery_address_snapshot.city, order.delivery_address_snapshot.region, order.delivery_address_snapshot.postal_code].filter(Boolean).join('، ')} — {order.delivery_address_snapshot.country}</p>
+          {order.delivery_address_snapshot.delivery_instructions && <p style={{ margin: '7px 0 0', color: '#536b70' }}>تعليمات التوصيل: {order.delivery_address_snapshot.delivery_instructions}</p>}
+        </section>}
+
         <div style={{ margin: '16px 0', padding: 12, borderRadius: 10, background: '#f4f8f9', color: '#536b70' }}>
           تفاصيل الكميات المطلوبة للمتابعة. لا تُعرض الأسعار أو الإجماليات في مستند العميل.
         </div>
