@@ -1,23 +1,25 @@
 # Aghbari Commerce — Latest Execution State
 
-## Current execution pointer — 2026-10-16 (offline cart interaction and Outbox hardening)
+## Current execution pointer — 2026-10-16 (offline cart idempotency + bounded PWA cache)
 
 - Active PR #72: https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72
 - Work branch: fix/acceptance-hardening-cart-finance-20261015, target main. Do not merge or publish from this session.
-- Branch HEAD at this checkpoint: dde148960bd077dc9fd01f716e9494b59e3bb728. Exact-head CI is still in progress/unconfirmed.
-- Last known exact-head CI success: 5796aa16949d1fcd256bb9db5152f43d74e45bfb, run 38816536023 SUCCESS. This included offline legacy-cart preservation. Do not transfer PASS to newer commits.
-- Newer code awaiting exact-head CI: 1b51e003ba89268b8df54d9ac8e335e0d5a8ed49 added editable local cart lines (increase/decrease/remove) and a focused test; its initial run failed because a search assertion checked the whole page while the cart legitimately retained Rice. That assertion now targets the catalog panel only in dde148960bd077dc9fd01f716e9494b59e3bb728.
-- Offline cart journal: compacted operation signatures, fail-closed legacy unsigned checkpoint retries, concurrent-compaction safety, legacy draft preservation during first ledger seed, and scoped storage change subscriptions are implemented. Latest source includes the real editable local cart draft with no prices or order submission.
-- Offline workspace: scoped sanitized catalog, Arabic storefront search, 100-row result limit, explicit old/unknown cache freshness, preservation on malformed sync, storage-error recovery action, and local add/edit/remove are implemented. Orders and money remain server-only.
-- Service worker: reads only from its owned cache, writes only public shell/build assets/favicon, no order-commit POST replay, no arbitrary image caching, cache-write/storage-open failures are handled.
-- Outbox worker: streaming 4096-byte request limit, strict UTF-8/body/claim validation, controlled transport exceptions for claim/process/failure RPCs, and sanitization of PII/auth/cookies/JWT/provider secrets. Isolated PostgreSQL test already proves claims/lease recovery/idempotency/retry/dead-letter semantics.
-- Requirement status remains PARTIAL for AGH-OFFLINE-PWA-001 and AGH-ASYNC-OUTBOX-001 pending current exact-head CI and authenticated live/deployed acceptance. Current branch SHA must be tested exactly; do not use older passing runs as proof for newer source.
-- External boundary: intended Supabase project ffxxjaolfntzbapmfbuv inaccessible; never substitute mrcyqezbhpncuvaehwgf. No production DB writes/migrations, Lovable publish, or merge to main.
-- next_task_id = AGH-OFFLINE-PWA-001 — OPEN. Finish exact-head acceptance, then harden/verify retry of local catalog and cart restoration; continue with Outbox worker recovery once this feature batch is stable.
-- Resume rule: read this file first, resolve live branch/PR refs, verify current SHA evidence, make code changes directly, commit and push coherent batches. Do not restart discovery or ask the owner to repeat the mandate.
+- Current branch SHA before this state commit: 0d3a6d2c6d2eee978ec6f02fb37d4cb9425b55c2. Exact-head CI not confirmed yet.
+- Latest known successful source CI: ba67f3efc3073913087e8da4b285652cb0310e51, run 38817897066 SUCCESS. Every later code commit requires a fresh exact-head result; do not transfer this PASS.
+- Offline cart ledger has stable mutation IDs, signatures for compacted IDs, fail-closed handling of unsigned legacy checkpoints, race-safe compaction, and scoped storage event subscriptions.
+- Offline workspace in src/components/CustomerWorkflows.tsx has a scoped sanitized catalog, Arabic storefront search, 100-row rendering cap, stale/unknown cache freshness warnings, add/increment/decrement/remove, and confirmed local draft clear. Money and order submission stay server-only.
+- Local mutation recovery keeps intent IDs until full reconciliation finishes. The retry action replays uncertain edits using the same ID, so a write-then-throw does not double-increment; regression test in src/test/customer-workflow-tenant.test.tsx models this failure.
+- Catalog sync separates malformed/network response from local persistence errors and best-effort rolls back cache plus freshness timestamp when writes fail.
+- Service worker caches public shell/assets only, reads its own cache namespace, avoids private-route/order POST caching, and bounds build assets to 120 by evicting oldest /assets/* entries. The asset extension matcher has been corrected to use a literal dot.
+- Outbox worker has streaming 4096-byte request limits, strict UTF-8/body/claim validation, handled RPC transport errors, and sanitized durable error text. Isolated PostgreSQL acceptance covers lease reclaim, idempotent receipts, retry/backoff, and poison-event dead-lettering.
+- Known older CI failures were addressed in later source: run 38817974329 exposed malformed-sync/rollback test expectations; run 38818267326 exposed asset regex escaping and a one-shot server response consumed before the test click. Newer exact-head CI still needs to confirm all fixes together.
+- AGH-OFFLINE-PWA-001 and AGH-ASYNC-OUTBOX-001 remain PARTIAL pending current exact-head CI, authenticated browser offline/resume, and deployed worker crash/replay evidence.
+- External boundary: intended Supabase project ffxxjaolfntzbapmfbuv is inaccessible; never substitute mrcyqezbhpncuvaehwgf. No production DB write/migration, Lovable publish, or main merge.
+- next_task_id = AGH-OFFLINE-PWA-001 — OPEN. Fix exact-head CI failures, then continue recovery/restore edge cases for the local draft. Don't create fake orders or treat local quantities/prices as authoritative.
+- Resume rule: resolve live branch/PR refs, edit only files relevant to the next task, save a coherent source commit, update this pointer and the one canonical registry, and proceed without restarting discovery or asking for the mandate again.
 
 ## Persistent execution protocol
-- Canonical references already exist: AGENTS.md, ops/AGHBARI-PERSISTENT-EXECUTION-PROTOCOL.md, and docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md. Keep one resume pointer and one requirement registry.
+- Canonical references: AGENTS.md, ops/AGHBARI-PERSISTENT-EXECUTION-PROTOCOL.md, docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md. Keep one resume pointer and one registry.
 
 ---
 
