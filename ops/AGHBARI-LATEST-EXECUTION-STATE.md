@@ -1,5 +1,12 @@
 # Aghbari Commerce — Latest Execution State
 
+## Active subgate — customer denial on the actual admin quotes route
+
+- The direct tier-table access fix at SHA `8f1a7ec7b6f85a280da66e183bfd130996902ed` passed exact-SHA CI [38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337), including unit, isolated PostgreSQL, lint, build and port-5173 smoke.
+- Extends `src/test/customer-workflow-tenant.test.tsx` to mount the actual `/admin/quotes` route with a customer identity and assert the application denies administration before any tenant/data/RPC access. This is route/jsdom acceptance, not a real browser authentication session. New exact-SHA CI is pending.
+- `AGH-SEC-BROWSER-E2E-001` remains OPEN for live authenticated customer/staff browser acceptance and all-channel price tier verification; production Supabase is still externally inaccessible.
+
+---
 ## Verified security fix — authenticated tier-price enumeration closed in isolated CI
 
 - **Code SHA:** `8f1a7ec7b6f85a280da66e183bfd130996902edb`.

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
+  signOut: vi.fn(),
   responses: {} as Record<string, unknown[]>,
   queries: [] as Array<{
     table: string;
@@ -33,6 +34,7 @@ vi.mock("@/lib/auth", () => ({
     ready: true,
     loading: false,
     configurationError: null,
+    signOut: mocks.signOut,
   }),
   AuthProvider: ({ children }: { children: unknown }) => children,
 }));
@@ -142,13 +144,13 @@ describe("customer quote workspace tenant boundary", () => {
     host = undefined;
   });
 
-  async function mountQuoteWorkspace() {
+  async function mountQuoteWorkspace(path = "/quotes") {
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
     const router = createRouter({
       routeTree,
-      history: createMemoryHistory({ initialEntries: ["/quotes"] }),
+      history: createMemoryHistory({ initialEntries: [path] }),
       context: { queryClient: new QueryClient() },
     });
     await router.load();
@@ -195,6 +197,26 @@ describe("customer quote workspace tenant boundary", () => {
       value: "active",
     });
     expect(queryFor("sales_quotes")).toBeDefined();
+  });
+
+
+
+  it("denies a customer from the admin quotes route before any staff data read", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-customer@example.test",
+      name: "CI Customer",
+      roles: ["customer"],
+      isStaff: false,
+    };
+
+    await mountQuoteWorkspace("/admin/quotes");
+
+    expect(host?.textContent).toContain("لا تملك صلاحية الإدارة");
+    expect(mocks.getCurrentTenantScope).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("fails closed when the authenticated server scope cannot be resolved", async () => {

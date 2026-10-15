@@ -93,3 +93,7 @@ Read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, latest state and requ
 - New migration `supabase/migrations/20261015120000_customer_tier_price_read_boundary.sql` revokes direct SELECT from all client roles and validates no table-level or column-level SELECT remains for `authenticated`; `scripts/test-database-migrations.mjs` checks direct customer reads return no price rows or are denied.
 - Exact fix SHA `8f1a7ec7b6f85a280da66e183bfd130996902edb`; Actions [run 38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337) **SUCCESS** for unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
 - Scope: no production database mutation. This closes the direct-table read flaw in CI and keeps the price-tier item PARTIAL pending all-channel and authenticated real-browser evidence. `next_task_id = AGH-SEC-BROWSER-E2E-001` remains OPEN.
+## 2026-10-15 — Customer denial at admin route
+
+- Extended `src/test/customer-workflow-tenant.test.tsx` to mount the real `/admin/quotes` route with a customer identity and verify the app displays `لا تملك صلاحية الإدارة` without calling `getCurrentTenantScope`, `supabase.from`, or `supabase.rpc`.
+- This remains route/jsdom evidence, not a live authenticated browser session. Exact-SHA CI is pending; the prior direct-price-table fix remains independently proven on SHA `8f1a7ec7b6f85a280da66e183bfd130996902edb` / run [38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337).
