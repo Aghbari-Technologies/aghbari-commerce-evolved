@@ -2,13 +2,23 @@
 
 Rule: tests and evidence apply only to the exact SHA recorded with them. The push and Lovable sync are separate acceptance events. The master spec, mandate, registry, project memory and resume prompt are now persisted on main.
 
+## 2026-10-15 — Storefront empty-catalog truth state (PR #50)
+
+- **PR:** [#50](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/50), merged to `main` at `fffa5035f6b3ee3f55f4a2456b515aa0814e4899` from tested PR head `ced57138b68515b581fcc988271a1b9a1c847ed9`.
+- **Exact PR-head CI:** [38776511699](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776511699) **SUCCESS** including unit tests, PostgreSQL 17 migration/workflow acceptance, lint, build, production preview and dev-server smoke.
+- **Files changed:** `src/components/Storefront.tsx`, `src/test/storefront-discovery.test.tsx`.
+- **Behavior:** an empty published catalog now announces that no active items are available; a nonempty catalog with no matches retains the search/filter-specific message. Test covers the empty-catalog rendering. No fake records or production writes were added.
+- **Limit:** public live readback still shows zero items, so this is not evidence that the production catalog has been populated or is bound to the intended project. `/invoices`, `/statement` and `/manifest.webmanifest` still returned 404 in the checked snapshot. Owner-signed Lovable publishing/authenticated browser verification remains open.
+- **Current cursor:** `AGH-SEC-BROWSER-E2E-001` remains OPEN; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains EXTERNAL / permission-denied. No production migrations were applied.
+
+
 ## 2026-10-15 — AGH-AI-GATEWAY-001: Gemini API-key URL leakage closed in source
 
 - **PR:** [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49), merged by squash at main SHA `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3`.
 - **Exact tested PR head:** `664d7b361f1ed8f001ef8bb5b53f8c307d5eb361`; Actions run [38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** across unit, isolated PostgreSQL 17 migration/workflow acceptance, lint, build, production-artifact smoke and dev-server smoke.
 - **Changed source paths:** `supabase/functions/ai-gateway/logic.ts`, `supabase/functions/ai-gateway/index.ts`, `src/test/ai-gateway-logic.test.ts`.
 - **Root cause and fix:** Gemini API keys were appended to the request URL. Requests now use `x-goog-api-key`; a shared builder validates the host and required model/key and regression tests confirm an empty URL query and header-only key transport. No real key or external service was contacted by the tests.
-- **Merge verification:** remote `main` was read back as `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3`. Exact main CI run [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) was still in progress at the time this ledger entry was prepared; verify its final result before treating the merge SHA as CI-certified.
+- **Merge verification:** remote `main` was read back as `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3`. Exact main CI run [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) **SUCCESS** on the exact main merge SHA `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3`.
 - **Not closed:** `AGH-AI-GATEWAY-001` remains PARTIAL because provider secrets/configuration and live provider connection are not proven. `AGH-SEC-BROWSER-E2E-001` remains the sole `next_task_id`: the published homepage currently shows an empty catalog and public `/invoices`, `/statement`, `/manifest.webmanifest` return 404 despite successful source CI; signed-in Lovable publishing/live SHA readback and authenticated browser checks remain open. `AGH-EXT-SUPABASE-001` remains externally blocked on permission to intended project ref `ffxxjaolfntzbapmfbuv`; no production database was changed.
 - **Host limitation:** the execution environment has no repository checkout, so local Git commands were unavailable; branch, remote SHA, files and Actions were checked through GitHub APIs.
 

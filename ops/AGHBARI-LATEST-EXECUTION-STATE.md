@@ -1,6 +1,19 @@
 # Aghbari Commerce — Latest Execution State
 
-## Current implementation pointer — 2026-10-15 (Gemini API-key transport hardening)
+## Current implementation pointer — 2026-10-15 (storefront empty-catalog truth state)
+
+- **Latest source change:** PR [#50](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/50) merged to `main` at `fffa5035f6b3ee3f55f4a2456b515aa0814e4899`, tested PR head `ced57138b68515b581fcc988271a1b9a1c847ed9`. Exact PR-head CI [38776511699](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776511699) **SUCCESS**. The separate main merge-SHA run is [38776814715](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776814715); read its live conclusion before transferring the PR-head result.
+- **Storefront behavior:** when the live/cached catalog has zero products, the page now says no active products are published; when products exist but search/category filters match none, it retains the filter-specific empty message. Regression test lives in `src/test/storefront-discovery.test.tsx`. No sample products were inserted.
+- **Live-data limitation:** read-only published homepage still displayed zero products. This source change fixes the misleading empty state only; it does not prove or repair production catalog data. Published `/invoices`, `/statement` and `/manifest.webmanifest` still returned 404 on the checked snapshot.
+- **Prior security batch:** PR [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49) moved Gemini API keys from URL query strings to `x-goog-api-key`; exact PR-head CI [38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** and main merge-SHA CI [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) **SUCCESS**.
+- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Real authenticated browser journey, live Lovable deploy-SHA readback and correction of published deep routes remain unverified. The separate Lovable sign-in profile was created, but its signed-in-site list remains empty until the owner finishes setup.
+- **`blocked_task_id = AGH-EXT-SUPABASE-001` — EXTERNAL.** Intended production project ref `ffxxjaolfntzbapmfbuv` remains permission-denied. Do not substitute `mrcyqezbhpncuvaehwgf`; no production database writes or migrations were performed.
+- **Persistent instructions:** `AGENTS.md` and `.github/copilot-instructions.md` remain present in remote `main`; repository auto-load rules are separate from live Lovable deployment synchronization.
+- **Execution host:** no checkout is mounted, so local `git fetch/status/HEAD` remain unavailable; remote state and Actions were read through GitHub APIs.
+
+---
+
+## Previous verified implementation pointer — 2026-10-15 (Gemini API-key transport hardening)
 
 - **Merged source:** PR [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49) merged to `main` at `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3` from the tested PR head `664d7b361f1ed8f001ef8bb5b53f8c307d5eb361`.
 - **Exact PR-head CI:** [run 38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** for the exact PR-head SHA, including unit tests, isolated PostgreSQL 17 migration/workflow assertions, lint, build, production-artifact smoke and dev-server smoke. Main merge-SHA Actions run [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) was still running at the time of this checkpoint; verify its final conclusion and do not transfer PR-head CI to the merge SHA.
