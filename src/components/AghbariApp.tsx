@@ -23,8 +23,9 @@ import { Login } from '@/components/Login';
 import {
   AiCenter, Devices, Field, Loading, ErrorBox, Empty, Button,
   TableWrap, Modal, Notifications, OrderDetail, SettingsPage, Suppliers,
+  type AiCenterTab,
 } from '@/components/AdminPages';
-import { OperationsCenter } from '@/components/OperationsCenter';
+import { OperationsCenter, type OperationTab } from '@/components/OperationsCenter';
 import { StaffQuotesPage, StaffFinancePage } from '@/components/CustomerWorkflows';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
@@ -61,20 +62,24 @@ const adminPaths: Record<View, string> = {
   quotes: '/admin/quotes', finance: '/admin/finance',
 };
 
-function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
+function AppContent({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string }) {
   const { user, ready, signOut } = useAuth();
   const canOperateAdmin = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'staff'));
   const canManageFinance = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'accountant'));
   const isFinanceOnly = canManageFinance && !canOperateAdmin;
   const visibleNav = nav.filter(({ id }) => isFinanceOnly ? id === 'finance' : id !== 'finance' || canManageFinance);
   const navigate = useNavigate();
-  const [view, setView] = useState<View>(initialView);
+  const [view, setView] = useState<View>(initialOrderDetailId ? 'orders' : initialView);
   const [mobileNav, setMobileNav] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
+  const [orderDetailId, setOrderDetailId] = useState<string | null>(initialOrderDetailId ?? null);
   const [navigationBlocked, setNavigationBlocked] = useState(false);
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(null), 2800); };
+  useEffect(() => {
+    setView(initialOrderDetailId ? 'orders' : initialView);
+    setOrderDetailId(initialOrderDetailId ?? null);
+  }, [initialView, initialOrderDetailId]);
   const setMode = (_m: 'storefront') => {
     if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل مغادرة مراجعة الطلب.'); return; }
     void navigate({ to: '/' });
@@ -145,16 +150,16 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
           {view === 'products' && <Products onNotice={showNotice} />}
           {view === 'customers' && <Customers onNotice={showNotice} />}
           {view === 'orders' && !orderDetailId && <Orders onViewDetail={setOrderDetailId} />}
-          {view === 'orders' && orderDetailId && <OrderDetail orderId={orderDetailId} onBack={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الرجوع.'); return; } setOrderDetailId(null); }} onNotice={showNotice} onBlockedChange={setNavigationBlocked} />}
+          {view === 'orders' && orderDetailId && <OrderDetail orderId={orderDetailId} onBack={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الرجوع.'); return; } if (initialOrderDetailId) { void navigate({ to: adminPaths.orders as never }); } else { setOrderDetailId(null); } }} onNotice={showNotice} onBlockedChange={setNavigationBlocked} />}
           {view === 'pricing' && <Pricing onNotice={showNotice} />}
           {view === 'offers' && <Offers onNotice={showNotice} />}
           {view === 'suppliers' && <Suppliers onNotice={showNotice} />}
           {view === 'devices' && <Devices onNotice={showNotice} />}
           {view === 'reports' && <Reports />}
-          {view === 'ai' && <AiCenter onNotice={showNotice} />}
+          {view === 'ai' && <AiCenter onNotice={showNotice} initialTab={initialAiTab} />}
           {view === 'notifications' && <Notifications onNotice={showNotice} />}
           {view === 'data' && <DataCenter onNotice={showNotice} />}
-          {view === 'operations' && <OperationsCenter onNotice={showNotice} />}
+          {view === 'operations' && <OperationsCenter onNotice={showNotice} initialTab={initialOperationTab} />}
           {view === 'settings' && <SettingsPage onNotice={showNotice} />}
           {view === 'quotes' && <StaffQuotesPage />}
           {view === 'finance' && <StaffFinancePage />}
@@ -190,8 +195,8 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   );
 }
 
-export function AdminApp({ initialView = 'dashboard' }: { initialView?: View }) {
-  return <AppContent initialView={initialView} />;
+export function AdminApp({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string }) {
+  return <AppContent initialView={initialView} initialOperationTab={initialOperationTab} initialAiTab={initialAiTab} initialOrderDetailId={initialOrderDetailId} />;
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {

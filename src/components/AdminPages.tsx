@@ -56,12 +56,15 @@ const defaultAiGatewayDraft: AiGatewayDraft = {
   daily_cost_limit: '1', monthly_cost_limit: '20', daily_token_limit: '50000', monthly_token_limit: '1000000', per_request_cost_limit: '0.05',
 };
 
-export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
+export type AiCenterTab = 'alerts' | 'tasks';
+
+export function AiCenter({ onNotice, initialTab = 'alerts' }: { onNotice: (m: string) => void; initialTab?: AiCenterTab }) {
   const { user } = useAuth();
   const canManageGateway = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
   const { data: alerts, loading: aLoading, refetch: rAlerts } = useFetch(fetchAiAlerts);
   const { data: tasks, loading: tLoading, refetch: rTasks } = useFetch(fetchAiTasks);
-  const [tab, setTab] = useState<'alerts' | 'tasks'>('alerts');
+  const [tab, setTab] = useState<AiCenterTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const [gateway, setGateway] = useState<AiGatewayBudget | null>(null);
   const [draft, setDraft] = useState<AiGatewayDraft>(defaultAiGatewayDraft);
   const [gatewayLoading, setGatewayLoading] = useState(false);

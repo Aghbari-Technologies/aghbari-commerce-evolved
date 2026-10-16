@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, BarChart3, Check, Database, FileText,
   Gauge, History, Package, RefreshCw, ShieldCheck, Upload, Zap,
@@ -15,7 +15,7 @@ import { DEFAULT_SYNONYMS, normalizeHeader as normalizeImportHeader } from '@/li
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from '@/components/AdminPages';
 import { UnifiedImportEngine } from '@/components/UnifiedImportEngine';
 
-type OperationTab = 'imports' | 'onyx' | 'reconcile' | 'dictionary';
+export type OperationTab = 'imports' | 'import-logs' | 'onyx' | 'reconcile' | 'dictionary';
 
 const synonymMap: Record<string, string> = { ...DEFAULT_SYNONYMS };
 
@@ -31,26 +31,29 @@ function qualityLabel(score: number): string {
 }
 
 
-export function OperationsCenter({ onNotice }: { onNotice: (message: string) => void }) {
-  const [tab, setTab] = useState<OperationTab>('imports');
+export function OperationsCenter({ onNotice, initialTab = 'imports' }: { onNotice: (message: string) => void; initialTab?: OperationTab }) {
+  const [tab, setTab] = useState<OperationTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const tabs: Array<{ id: OperationTab; label: string; icon: typeof Upload }> = [
     { id: 'imports', label: 'محرك الاستيراد الذكي', icon: Upload },
+    { id: 'import-logs', label: 'سجل دفعات الاستيراد', icon: History },
     { id: 'onyx', label: 'مزامنة أونكس برو', icon: Activity },
     { id: 'reconcile', label: 'مطابقة المخزون', icon: Gauge },
     { id: 'dictionary', label: 'قاموس المرادفات', icon: FileText },
   ];
   return <AdminPage eyebrow="البيانات والذكاء" title="مركز العمليات الذكي" description="استيراد ومزامنة ومطابقة موحدة مع حفظ مصدر البيانات وأثر التغييرات" icon={Zap} note="تظهر بيانات المتجر وأونكس ضمن سياق واحد، مع حفظ المصدر ومنع التعديل دون اعتماد" toolbar={<Button variant="secondary" onClick={() => setRefreshVersion((version) => version + 1)}><RefreshCw size={16} /> تحديث البيانات</Button>}>
-    <div className="operation-tabs">{tabs.map(({ id, label, icon: Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={16} />{label}</button>)}</div>
+    <div className="operation-tabs">{tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={16} />{label}</button>)}</div>
     {tab === 'imports' && <ImportEngine onNotice={onNotice} refreshVersion={refreshVersion} />}
+    {tab === 'import-logs' && <ImportEngine onNotice={onNotice} refreshVersion={refreshVersion} historyOnly />}
     {tab === 'onyx' && <OnyxDashboard onNotice={onNotice} refreshVersion={refreshVersion} />}
     {tab === 'reconcile' && <InventoryReconciliation onNotice={onNotice} refreshVersion={refreshVersion} />}
     {tab === 'dictionary' && <SynonymDictionary refreshVersion={refreshVersion} />}
   </AdminPage>;
 }
 
-function ImportEngine({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
-  return <UnifiedImportEngine onNotice={onNotice} refreshVersion={refreshVersion} />;
+function ImportEngine({ onNotice, refreshVersion, historyOnly = false }: { onNotice: (message: string) => void; refreshVersion: number; historyOnly?: boolean }) {
+  return <UnifiedImportEngine onNotice={onNotice} refreshVersion={refreshVersion} historyOnly={historyOnly} />;
 }
 
 function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
