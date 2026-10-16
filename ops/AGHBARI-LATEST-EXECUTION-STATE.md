@@ -2,8 +2,8 @@
 
 ## Active workstream
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`.
-- Verified base HEAD before this batch: `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`.
-- Verified base CI: SUCCESS on exact SHA `6ca3826ba5d6e3c469c5721a28e045d480eb53d9` — [Actions 38830342032](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38830342032). The new ZIP-header hardening candidate must pass its own exact-SHA CI; no proof transfers from this base.
+- Current branch HEAD before tenant-scope batch: `a95e0d40d47590bb18e07a4c057c44900928b07e` (checkpoint-only commit). Last source-tested SHA `3420307d1d54a46a4f2f48a8bfc68a5b50ba494b`, Actions [38832196621](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38832196621) SUCCESS; this evidence does not transfer to the new tenant batch.
+- Latest source CI: exact SHA `3420307d1d54a46a4f2f48a8bfc68a5b50ba494b`, Actions [38832196621](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38832196621) SUCCESS. Tenant-scope batch CI is pending and requires its own exact-SHA evidence.
 - Last previously verified baseline: exact source/workflow SHA `f71f3f70f0683685d7707b085e7ef63fa1ec89a5`, Actions [38829458881](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38829458881) PASS, including 21 test files, isolated PostgreSQL migration/workflow checks, RLS/policy/trigger/sequence/extension signatures, lint, production build, preview smoke 4173 and dev-server smoke 5173. Subsequent test-fixture and globals/ACL changes are evaluated only by current candidate CI above.
 
 ## Only next task
@@ -14,7 +14,7 @@
 - `AGH-OPS-DR-001` remains **PARTIAL** because production backup/restore, production failover, and live runtime proof are not available; do not close the umbrella requirement. Lovable/browser/prod access remains a separate gate.
 
 ## Evidence checkpoint
-- Last verified pre-patch HEAD: `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`; Actions `38830342032` SUCCESS. Candidate `4554980c6ffbf4c3a8ca49d8f5d166cdce7e0645` failed the regression fixture (Actions `38832046485`); fixture reader corrected for the test runtime, with new exact-SHA CI pending.
+- Last tested source SHA `3420307d1d54a46a4f2f48a8bfc68a5b50ba494b` / Actions `38832196621` SUCCESS; branch head now includes docs checkpoint `a95e0d40d47590bb18e07a4c057c44900928b07e`. Every later source SHA is evaluated separately.
 - Previously verified importer profile SHA: `c241970e648f7292178e0a9a88bdf4938a69ef2f` / Actions 38828317225.
 - Previously verified PWA source preview: `2ee243599c60054468f419c541f3d52ea7e2a111` / Actions 38825705008 and `cdfed3adb21ee881f85117e6f2f163a4c7cf0de2` / Actions 38825885494.
 - Recheck exact HEAD every resume. Isolated CI, live browser acceptance, and production database proof remain separate claims.
@@ -38,3 +38,12 @@ After each coherent batch and **before any response, pause, timeout/context limi
 
 ## History location
 Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGRESS.md` and the existing requirement rows. This file is intentionally a **single live cursor**, not a second historical ledger.
+
+
+## AGH-SEC-TENANT-001 source batch checkpoint
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72. Batch parent: `a95e0d40d47590bb18e07a4c057c44900928b07e`; no branch switch or main update.
+- Changed paths: `supabase/migrations/20261016140000_public_storefront_warehouse_scope_guard.sql`, `scripts/test-database-migrations.mjs`, this state file and `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+- Defect: the public warehouse getter and `get_public_storefront_context()` could return a configured warehouse ID without confirming its `organization_id` matched the published organization. Public inventory RLS uses the warehouse getter, so malformed configuration could mis-scope anonymous stock reads.
+- Fix: a BEFORE INSERT/UPDATE trigger rejects cross-organization warehouse bindings; both public resolvers now return a warehouse only when it belongs to the configured organization and is active. The SQL regression tests reject the bad write and simulates legacy corruption in isolated CI to require a NULL warehouse and zero anonymous inventory rows.
+- Local commands: `node scripts/test-database-migrations.mjs` and `npx vitest run src/test/tenant-scope.test.ts` — NOT RUN locally because this runtime cannot resolve GitHub and has no checkout. Exact-SHA Actions result is pending after pushing this batch.
+- Next step after exact-SHA CI: inspect any CI failure and fix it, then continue the next open requirement; do not claim production tenant isolation without authorized production project and authenticated browser evidence.

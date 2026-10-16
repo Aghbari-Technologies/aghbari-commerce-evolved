@@ -379,6 +379,54 @@ async function main() {
   );
   await db.unsafe("reset role");
 
+  // AGH-SEC-TENANT-001: the publication config cannot pair one tenant with another tenant's warehouse.
+  await expectFailure(
+    "publication config rejects a warehouse owned by another organization",
+    () => db.unsafe(
+      "update public.storefront_publication_config set warehouse_id=$1 where singleton=true",
+      [foreignWarehouseId],
+    ),
+    /Storefront warehouse must belong to the configured organization/i,
+  );
+
+  // Simulate legacy corruption with the guard temporarily disabled, then prove every
+  // anonymous resolver hides the invalid warehouse and no inventory rows remain visible.
+  await db.unsafe("ALTER TABLE public.storefront_publication_config DISABLE TRIGGER storefront_publication_warehouse_scope_guard");
+  try {
+    await db.unsafe(
+      "update public.storefront_publication_config set warehouse_id=$1 where singleton=true",
+      [foreignWarehouseId],
+    );
+    await db.unsafe("set role anon");
+    const mismatchedPublicScopeRows = await db.unsafe("select public.get_public_storefront_context() as scope");
+    assert.equal(mismatchedPublicScopeRows[0].scope.organization_id, organizationId,
+      "a bad warehouse binding must not change the public storefront tenant");
+    assert.equal(mismatchedPublicScopeRows[0].scope.warehouse_id, null,
+      "public tenant scope must hide a warehouse owned by a different organization");
+    const mismatchedPublicWarehouseRows = await db.unsafe(
+      "select public.public_storefront_warehouse_id() as warehouse_id",
+    );
+    assert.equal(mismatchedPublicWarehouseRows[0].warehouse_id, null,
+      "the anonymous warehouse resolver must not return a foreign tenant's warehouse id");
+    const mismatchedPublicInventory = await db.unsafe(
+      "select product_id,warehouse_id,quantity_on_hand,quantity_available from public.inventory_balances",
+    );
+    assert.equal(mismatchedPublicInventory.length, 0,
+      "anonymous stock reads must fail closed when the publication warehouse is misbound");
+  } finally {
+    await db.unsafe("reset role");
+    try {
+      await db.unsafe(
+        "update public.storefront_publication_config set warehouse_id=$1 where singleton=true",
+        [publicScope.warehouse_id],
+      );
+    } finally {
+      await db.unsafe("ALTER TABLE public.storefront_publication_config ENABLE TRIGGER storefront_publication_warehouse_scope_guard");
+    }
+  }
+
+  await db.unsafe("reset role");
+
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
 
