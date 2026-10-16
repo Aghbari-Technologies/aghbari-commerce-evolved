@@ -1404,6 +1404,55 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(mocks.queries.some((query) => query.table === "customers")).toBe(false);
   });
 
+  it("shows a recoverable error when invoice detail retrieval rejects", async () => {
+    const invoiceId = "22222222-2222-4222-8222-222222222222";
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-customer@example.test",
+      name: "CI Customer",
+      roles: ["customer"],
+      isStaff: false,
+    };
+    mocks.responses = {
+      customer_invoices: [{
+        id: invoiceId,
+        invoice_number: "INV-UI-002",
+        order_id: "33333333-3333-4333-8333-333333333333",
+        customer_id: "44444444-4444-4444-8444-444444444444",
+        status: "issued",
+        issued_at: "2026-10-15T09:00:00.000Z",
+        due_at: null,
+        currency: "YER",
+      }],
+      orders: [{
+        quantity_review_required: false,
+        customer_adjustment_note: null,
+        customer_payment_requested_at: null,
+        payment_request_status: "none",
+        status: "confirmed",
+      }],
+    };
+    mocks.rpc.mockRejectedValueOnce(new Error("invoice detail read failed"));
+
+    await mountQuoteWorkspace("/invoices");
+    const openButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes("عرض / طباعة"),
+    );
+    expect(openButton).toBeDefined();
+
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain(
+      "تعذر تحميل تفاصيل الفاتورة ومبالغها المصرح بها",
+    );
+    expect(host?.textContent).not.toContain("سعر الوحدة");
+    expect(host?.textContent).not.toContain("الإجمالي المستحق");
+  });
+
   it("warns when the customer invoice list reaches its 100-row read cap", async () => {
     mocks.user = {
       id: USER_ID,
