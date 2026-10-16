@@ -427,6 +427,29 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
+  it("requires authentication before a direct order detail route can read data", async () => {
+    await mountQuoteWorkspace("/orders/11111111-1111-4111-8111-111111111111");
+
+    expect(host?.querySelector('[data-testid="login-required"]')).not.toBeNull();
+    expect(mocks.from).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("renders order history with a safe summary projection for an authenticated customer", async () => {
+    configureCustomerOrderFixture("33333333-3333-4333-8333-333333333333");
+
+    await mountQuoteWorkspace("/orders");
+
+    expect(host?.textContent).toContain("طلباتي");
+    expect(host?.textContent).toContain("SO-UI-001");
+    expect(host?.textContent).toContain("بانتظار المراجعة");
+    const ordersQuery = queryFor("orders");
+    expect(ordersQuery.columns).toBe(
+      "id,order_number,status,total_items,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status",
+    );
+    expect(ordersQuery.columns).not.toMatch(/total_amount|unit_price|line_total|base_price|cost_price/i);
+  });
+
   it("loads the customer catalog only after resolving the organization from the server scope", async () => {
     mocks.user = {
       id: USER_ID,
