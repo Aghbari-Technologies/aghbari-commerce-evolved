@@ -9,6 +9,11 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   fetchPromotions: vi.fn(),
   fetchPopularProductRanking: vi.fn(),
+  fetchFeaturedProductRanking: vi.fn(),
+  featuredRanking: [
+    { product_id: "product-1", ranking_position: 1 },
+    { product_id: "product-3", ranking_position: 2 },
+  ],
   popularRanking: [
     { product_id: "product-3", ranking_position: 1 },
     { product_id: "product-1", ranking_position: 2 },
@@ -26,12 +31,14 @@ const mocks = vi.hoisted(() => ({
 
 const initialProducts = [...mocks.products];
 const initialPopularRanking = [...mocks.popularRanking];
+const initialFeaturedRanking = [...mocks.featuredRanking];
 
 vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCategories: mocks.fetchCategories,
   fetchPromotions: mocks.fetchPromotions,
   fetchPopularProductRanking: mocks.fetchPopularProductRanking,
+  fetchFeaturedProductRanking: mocks.fetchFeaturedProductRanking,
   fetchSettingsMap: mocks.fetchSettingsMap,
 }));
 
@@ -41,6 +48,7 @@ vi.mock("@/lib/useFetch", () => ({
     if (fetcher === mocks.fetchCategories) return { data: [], loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchPromotions) return { data: [], loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchPopularProductRanking) return { data: mocks.popularRanking, loading: false, error: null, refetch: vi.fn() };
+    if (fetcher === mocks.fetchFeaturedProductRanking) return { data: mocks.featuredRanking, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchSettingsMap) return { data: {}, loading: false, error: null, refetch: vi.fn() };
     return { data: null, loading: false, error: null, refetch: vi.fn() };
   },
@@ -111,6 +119,7 @@ describe("customer storefront saved discovery", () => {
     window.localStorage.clear();
     mocks.products.splice(0, mocks.products.length, ...initialProducts);
     mocks.popularRanking.splice(0, mocks.popularRanking.length, ...initialPopularRanking);
+    mocks.featuredRanking.splice(0, mocks.featuredRanking.length, ...initialFeaturedRanking);
     mocks.user = null;
     mocks.rpc.mockReset();
     mocks.rpc.mockResolvedValue({ data: null, error: null });
@@ -128,6 +137,32 @@ describe("customer storefront saved discovery", () => {
     expect(empty.host.textContent).toContain("لا توجد أصناف منشورة حالياً");
     expect(empty.host.textContent).toContain("لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً");
     expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
+  });
+
+  it("renders the featured storefront using only server-selected catalog items", async () => {
+    const featured = await mountAt("/featured");
+    const names = Array.from(featured.host.querySelectorAll("article h3")).map((node) => node.textContent);
+    expect(featured.host.textContent).toContain("المنتجات المميزة");
+    expect(names).toEqual(["Rice", "Oil"]);
+    expect(featured.host.textContent).toContain("الترتيب ضمن المنتجات المميزة");
+    expect(featured.host.textContent).not.toContain("Sugar");
+  });
+
+  it("fails closed if a featured server id no longer exists in the active catalog", async () => {
+    mocks.featuredRanking.splice(0, mocks.featuredRanking.length,
+      { product_id: "missing-featured-product", ranking_position: 1 },
+      { product_id: "product-1", ranking_position: 2 },
+    );
+    const featured = await mountAt("/featured");
+    expect(featured.host.textContent).toContain("أُخفيت القائمة كاملة");
+    expect(featured.host.querySelector("article h3")).toBeNull();
+  });
+
+  it("shows a deliberate empty state before an administrator selects featured products", async () => {
+    mocks.featuredRanking.splice(0, mocks.featuredRanking.length);
+    const featured = await mountAt("/featured");
+    expect(featured.host.textContent).toContain("لم يحدد فريق الكتالوج منتجات مميزة");
+    expect(featured.host.querySelector("article h3")).toBeNull();
   });
 
   it("orders the popular route by the server ranking and hides raw sales totals", async () => {

@@ -1,13 +1,13 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "@tanstack/react-router";
 import { AlertCircle, Boxes, Search, Tag } from "lucide-react";
-import { fetchCategories, fetchPopularProductRanking, fetchProducts, fetchPromotions, type PopularProductRanking } from "@/lib/api";
+import { fetchCategories, fetchFeaturedProductRanking, fetchPopularProductRanking, fetchProducts, fetchPromotions, type PopularProductRanking } from "@/lib/api";
 import { useFetch } from "@/lib/useFetch";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { matchesArabicCatalogSearch } from "@/lib/commerce-utils";
 import type { Category, ProductWithInventory, Promotion } from "@/lib/types";
 
-export type CustomerDiscoveryMode = "categories" | "collections" | "featured" | "offers" | "collection" | "advanced-search";
+export type CustomerDiscoveryMode = "categories" | "collections" | "offers" | "collection" | "advanced-search";
 const shell: CSSProperties = { maxWidth: 1180, margin: "0 auto", padding: "28px 20px 64px", color: "var(--foreground, #183b3c)" };
 const panel: CSSProperties = { border: "1px solid var(--border, #dce8e6)", borderRadius: 16, padding: 18, background: "var(--card, #fff)" };
 const quiet: CSSProperties = { color: "var(--muted-foreground, #637b7b)", lineHeight: 1.8 };
@@ -56,7 +56,6 @@ export function CustomerDiscoveryPage({ mode, slugKey }: { mode: CustomerDiscove
   }, [promotions]);
   const title = mode === "categories" ? "تصنيفات المنتجات"
     : mode === "collections" ? "مجموعات التصفح"
-    : mode === "featured" ? "المنتجات المميزة"
     : mode === "offers" ? "العروض الحالية"
     : mode === "collection" ? (matchedCategory?.name ?? "مجموعة المنتجات")
     : "البحث المتقدم";
@@ -96,11 +95,6 @@ export function CustomerDiscoveryPage({ mode, slugKey }: { mode: CustomerDiscove
       <p style={quiet}>لا توجد علاقة موثقة تربط كل عرض بأصناف محددة في هذا العرض العام؛ لذلك لا ننسب خصمًا لمنتج دون علاقة مصدر مؤكدة.</p>
     </section>}
 
-    {mode === "featured" && <section style={{ ...panel, maxWidth: 820 }} role="status">
-      <AlertCircle size={26} aria-hidden="true" /><h2>مصدر المنتجات المميزة غير مهيأ</h2>
-      <p style={quiet}>عقد المنتج الحالي لا يوفر علامة موثوقة للمميز؛ لن نخترع ترتيبًا أو نستخدم بيانات عشوائية.</p><Link to="/catalog">فتح الكتالوج الحالي</Link>
-    </section>}
-
     {mode === "collection" && <section style={{ display: "grid", gap: 12 }}>
       {!categoryLoading && !categoryError && !matchedCategory && <div style={panel} role="alert"><h2>المجموعة غير موجودة</h2><p style={quiet}>لم يطابق العنوان تصنيفًا حقيقيًا، ولا يوجد مصدر مستقل موثق للمجموعات التسويقية.</p><Link to="/collections">عرض مجموعات التصفح المتاحة</Link></div>}
       {categoryError && <div style={panel} role="alert">تعذر التحقق من المجموعة: {categoryError.message} <button type="button" onClick={() => void retryCategories()}>إعادة المحاولة</button></div>}
@@ -121,6 +115,59 @@ export function CustomerDiscoveryPage({ mode, slugKey }: { mode: CustomerDiscove
       {categoryError && <p role="alert">تعذر تحميل التصنيفات: {categoryError.message}</p>}
       <ProductGrid products={results} loading={productLoading} error={productError?.message ?? null} retry={() => void retryProducts()} empty="لا توجد نتائج لهذه المعايير." />
     </section>}
+  </main>;
+}
+
+export function CustomerFeaturedProductsPage() {
+  const { data: products, loading: productsLoading, error: productsError, refetch: retryProducts } = useFetch(fetchProducts);
+  const { data: rankings, loading: rankingLoading, error: rankingError, refetch: retryRankings } = useFetch(fetchFeaturedProductRanking);
+
+  const productsById = useMemo(() => new Map((products ?? []).map((product) => [product.id, product])), [products]);
+  const rankedProducts = useMemo(
+    () => (rankings ?? []).flatMap((row) => {
+      const product = productsById.get(row.product_id);
+      return product ? [product] : [];
+    }),
+    [rankings, productsById],
+  );
+  const rankingByProductId = useMemo(
+    () => new Map((rankings ?? []).map((row) => [row.product_id, row] as const)),
+    [rankings],
+  );
+  const catalogMismatch = useMemo(
+    () => !productsLoading && !productsError && (rankings ?? []).some((row) => !productsById.has(row.product_id)),
+    [productsLoading, productsError, rankings, productsById],
+  );
+
+  return <main dir="rtl" className="storefront" style={shell}>
+    <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 22 }}>
+      <div>
+        <p style={{ margin: "0 0 4px", ...quiet }}>الأغبري · اختيارات يحددها فريق الكتالوج</p>
+        <h1 style={{ margin: 0, fontSize: 30 }}>المنتجات المميزة</h1>
+        <p style={quiet}>تعتمد القائمة على علامة ترويج محفوظة في كتالوج المؤسسة الحالية. الأسعار والمخزون تأتي من مصادر الكتالوج المعتادة.</p>
+      </div>
+      <nav aria-label="روابط الكتالوج" style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        <Link to="/catalog">الكتالوج</Link><Link to="/categories">التصنيفات</Link><Link to="/popular">الأكثر طلبًا</Link><Link to="/cart">السلة</Link>
+      </nav>
+    </header>
+
+    {rankingLoading && <div style={panel} role="status">جارٍ تحميل اختيارات الكتالوج...</div>}
+    {rankingError && <div style={panel} role="alert">تعذر تحميل المنتجات المميزة: {rankingError} <button type="button" onClick={() => void retryRankings()}>إعادة المحاولة</button></div>}
+    {!rankingLoading && !rankingError && (rankings ?? []).length === 0 && <div style={panel} role="status">لم يحدد فريق الكتالوج منتجات مميزة منشورة حتى الآن.</div>}
+    {!rankingLoading && !rankingError && (rankings ?? []).length > 0 && productsError &&
+      <div style={panel} role="alert">تعذر التحقق من الكتالوج النشط: {productsError} <button type="button" onClick={() => void retryProducts()}>إعادة تحميل الكتالوج</button></div>}
+    {!rankingLoading && !rankingError && (rankings ?? []).length > 0 && catalogMismatch &&
+      <div style={panel} role="alert">تعذر مطابقة جميع الاختيارات مع الكتالوج النشط؛ أُخفيت القائمة كاملة حتى تتطابق البيانات. أعد التحميل للمحاولة مجددًا.</div>}
+    {!rankingLoading && !rankingError && !productsError && !catalogMismatch && (rankings ?? []).length > 0 &&
+      <ProductGrid
+        products={rankedProducts}
+        loading={productsLoading}
+        error={productsError}
+        retry={() => void retryProducts()}
+        empty="لا توجد منتجات مميزة نشطة مطابقة للكتالوج الحالي."
+        rankingByProductId={rankingByProductId}
+        rankingLabel="الترتيب ضمن المنتجات المميزة"
+      />}
   </main>;
 }
 
@@ -183,7 +230,7 @@ function PromotionCard({ item }: { item: Promotion }) {
   </article>;
 }
 
-function ProductGrid({ products, loading, error, retry, empty, rankingByProductId }: { products: ProductWithInventory[]; loading: boolean; error: string | null; retry: () => void; empty: string; rankingByProductId?: ReadonlyMap<string, PopularProductRanking> }) {
+function ProductGrid({ products, loading, error, retry, empty, rankingByProductId, rankingLabel }: { products: ProductWithInventory[]; loading: boolean; error: string | null; retry: () => void; empty: string; rankingByProductId?: ReadonlyMap<string, PopularProductRanking>; rankingLabel?: string }) {
   if (loading && products.length === 0) return <div style={panel} role="status">جارٍ تحميل المنتجات من الخادم...</div>;
   if (error && products.length === 0) return <div style={panel} role="alert">تعذر تحميل المنتجات: {error} <button type="button" onClick={retry}>إعادة المحاولة</button></div>;
   if (!products.length) return <div style={panel} role="status">{empty}</div>;
@@ -196,7 +243,7 @@ function ProductGrid({ products, loading, error, retry, empty, rankingByProductI
         <h3 style={{ margin: "0 0 6px" }}>{product.name}</h3><div style={quiet}>{product.category?.name ?? "غير مصنف"} · <code>{product.item_code}</code></div>
         <p style={{ fontWeight: 700 }}>{typeof product.display_price === "number" ? formatCurrency(product.display_price) : "السعر غير متاح حاليًا"} <small>{product.unit}</small></p>
         <small style={quiet}>{formatNumber(product.inventory?.quantity_available ?? 0)} متاح حسب آخر قراءة</small>
-        {ranking && <small style={{ display: "block", ...quiet, marginTop: 6 }}>الترتيب حسب الطلبات المعتمدة: {formatNumber(ranking.ranking_position)}</small>}
+        {ranking && <small style={{ display: "block", ...quiet, marginTop: 6 }}>{rankingLabel ?? "الترتيب حسب الطلبات المعتمدة"}: {formatNumber(ranking.ranking_position)}</small>}
       </Link>
     </article>;
     })}

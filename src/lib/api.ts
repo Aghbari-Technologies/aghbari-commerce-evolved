@@ -122,6 +122,41 @@ export type PopularProductRanking = {
  * Returns tenant-scoped product IDs and positions only. Raw order totals, prices and
  * customer identifiers remain server-side; storefront prices still come through fetchProducts.
  */
+export type FeaturedProductRanking = {
+  product_id: string;
+  ranking_position: number;
+};
+
+/** Server-ranked editorial picks. Only safe product identifiers and positions cross the RPC boundary. */
+export async function fetchFeaturedProductRanking(limit = 20): Promise<FeaturedProductRanking[]> {
+  const requestedLimit = Number.isFinite(limit) ? Math.trunc(limit) : 20;
+  const safeLimit = Math.max(1, Math.min(50, requestedLimit));
+  const { data, error } = await supabase.rpc("fetch_public_featured_products", { p_limit: safeLimit });
+  if (error || !Array.isArray(data)) {
+    throw new Error("تعذر تحميل المنتجات المميزة من إعدادات الكتالوج؛ لم يتم إنشاء قائمة بديلة.");
+  }
+
+  const seenProducts = new Set<string>();
+  const seenPositions = new Set<number>();
+  const rankings = (data as Array<{ product_id?: unknown; ranking_position?: unknown }>).map((row) => {
+    if (typeof row.product_id !== "string" || row.product_id.trim().length === 0 || seenProducts.has(row.product_id)) {
+      throw new Error("أعاد الخادم هوية صنف غير صالحة في قائمة المنتجات المميزة.");
+    }
+    const position = Number(row.ranking_position);
+    if (!Number.isSafeInteger(position) || position < 1 || position > safeLimit || seenPositions.has(position)) {
+      throw new Error("أعاد الخادم موضع ترتيب غير صالح للمنتجات المميزة.");
+    }
+    seenProducts.add(row.product_id);
+    seenPositions.add(position);
+    return { product_id: row.product_id, ranking_position: position };
+  }).sort((a, b) => a.ranking_position - b.ranking_position);
+
+  if (rankings.length > safeLimit || rankings.some((row, index) => row.ranking_position !== index + 1)) {
+    throw new Error("قائمة المنتجات المميزة التي أعادها الخادم غير متسقة.");
+  }
+  return rankings;
+}
+
 export async function fetchPopularProductRanking(limit = 20): Promise<PopularProductRanking[]> {
   const requestedLimit = Number.isFinite(limit) ? Math.trunc(limit) : 20;
   const safeLimit = Math.max(1, Math.min(50, requestedLimit));

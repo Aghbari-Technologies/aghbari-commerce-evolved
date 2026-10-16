@@ -274,6 +274,7 @@ async function main() {
       on conflict(id) do nothing`,
     [otherProductId, otherOrganizationId],
   );
+  await db.unsafe("update public.products set is_featured=true where id=$1", [otherProductId]);
 
   // The original schema seeded one wholesale price break at 10; migration 600 adds a second break.
   await db.unsafe(
@@ -1735,6 +1736,12 @@ async function main() {
     "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Popularity Product','CI-POPULAR-01','unit',1,'active') on conflict(id) do update set status='active'",
     [popularityProductId, organizationId],
   );
+  await db.unsafe("update public.products set is_featured=true where id=$1", [popularityProductId]);
+  const inactiveFeaturedProductId = "a1000000-0000-0000-0000-000000000097";
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status,is_featured) values($1,$2,'CI Inactive Featured Product','CI-POPULAR-INACTIVE-01','unit',1,'inactive',true) on conflict(id) do update set status='inactive',is_featured=true",
+    [inactiveFeaturedProductId, organizationId],
+  );
   await db.unsafe(
     "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Pending-Only Product','CI-POPULAR-PENDING-01','unit',1,'active') on conflict(id) do update set status='active'",
     [pendingOnlyProductId, organizationId],
@@ -1794,6 +1801,49 @@ async function main() {
   );
   assert.ok(foreignPopularity.some((row) => row.product_id === otherProductId), "signed-in foreign tenant sees its own eligible popular product");
   assert.ok(!foreignPopularity.some((row) => row.product_id === popularityProductId), "tenant product IDs do not cross the ranking boundary");
+
+  // AGH-CUSTOMER-DISCOVERY-FEATURED-001: curation flag write/read, active filtering, and tenant isolation.
+  await db.unsafe("reset role");
+  await db.unsafe("select set_config('request.jwt.claim.sub','',false), set_config('request.jwt.claims','{}',false)");
+  await db.unsafe("set role anon");
+  const anonymousFeatured = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_featured_products($1)",
+    [10],
+  );
+  assert.equal(anonymousFeatured.length, 1, "anonymous storefront only receives active featured products from the published tenant");
+  assert.equal(anonymousFeatured[0]?.product_id, popularityProductId);
+  assert.equal(Number(anonymousFeatured[0]?.ranking_position), 1);
+  assert.ok(!anonymousFeatured.some((row) => row.product_id === otherProductId), "public feature list cannot reveal another organization's featured product");
+  assert.ok(!anonymousFeatured.some((row) => row.product_id === inactiveFeaturedProductId), "inactive featured products are not published");
+  assert.deepEqual(Object.keys(anonymousFeatured[0]).sort(), ["product_id","ranking_position"], "featured endpoint reveals no prices or product details");
+  const anonymousFeaturedLimit = await db.unsafe("select product_id,ranking_position from public.fetch_public_featured_products($1)", [1]);
+  assert.equal(anonymousFeaturedLimit.length, 1, "featured endpoint respects the requested limit");
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const ownFeatured = await db.unsafe("select product_id,ranking_position from public.fetch_public_featured_products($1)", [20]);
+  assert.equal(ownFeatured[0]?.product_id, popularityProductId);
+  assert.ok(!ownFeatured.some((row) => row.product_id === otherProductId), "authenticated customers only receive their tenant's featured products");
+  assert.ok(!ownFeatured.some((row) => row.product_id === inactiveFeaturedProductId), "authenticated customers cannot see inactive featured entries");
+
+  await db.unsafe("reset role");
+  await setIdentity(foreignAuthUserId, "foreign-ci-profile@example.test");
+  await db.unsafe("set role authenticated");
+  const foreignFeatured = await db.unsafe("select product_id,ranking_position from public.fetch_public_featured_products($1)", [20]);
+  assert.equal(foreignFeatured.length, 1);
+  assert.equal(foreignFeatured[0]?.product_id, otherProductId, "the foreign tenant can see its own featured product");
+  assert.ok(!foreignFeatured.some((row) => row.product_id === popularityProductId));
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  await db.unsafe("update public.products set is_featured=false where id=$1 and organization_id=$2", [popularityProductId, organizationId]);
+  const staffUpdatedFeatured = await db.unsafe("select is_featured from public.fetch_staff_products($1::uuid)", [popularityProductId]);
+  assert.equal(staffUpdatedFeatured[0]?.is_featured, false, "staff can turn off a featured flag within their active tenant");
+  await db.unsafe("update public.products set is_featured=true where id=$1 and organization_id=$2", [popularityProductId, organizationId]);
+  const staffRestoredFeatured = await db.unsafe("select is_featured from public.fetch_staff_products($1::uuid)", [popularityProductId]);
+  assert.equal(staffRestoredFeatured[0]?.is_featured, true);
 
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
