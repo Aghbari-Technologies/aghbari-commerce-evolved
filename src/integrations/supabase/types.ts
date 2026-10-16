@@ -1895,6 +1895,10 @@ export type Database = {
         Args: { p_lines: Json; p_name: string; p_source_order_id?: string }
         Returns: string
       }
+      update_reorder_template: {
+        Args: { p_lines: Json; p_name: string; p_template_id: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

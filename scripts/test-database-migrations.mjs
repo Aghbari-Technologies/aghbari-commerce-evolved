@@ -953,7 +953,34 @@ async function main() {
     "select count(*)::int as count from public.reorder_template_items where template_id=$1",
     [reorderId[0].id],
   );
+
   assert.equal(reorderItems[0].count, 1, "reorder template must persist its items");
+
+  const updatedTemplate = await db.unsafe(
+    "select public.update_reorder_template($1::uuid,$2,$3::jsonb) as id",
+    [reorderId[0].id, "CI regular order edited", db.json([{ product_id: productId, quantity: 4 }])],
+  );
+  assert.equal(updatedTemplate[0].id, reorderId[0].id, "update must preserve template identity");
+  const updatedTemplateHeader = await db.unsafe("select name from public.reorder_templates where id=$1", [reorderId[0].id]);
+  assert.equal(updatedTemplateHeader[0]?.name, "CI regular order edited", "update must persist the name");
+  const updatedTemplateItems = await db.unsafe("select quantity from public.reorder_template_items where template_id=$1", [reorderId[0].id]);
+  assert.equal(updatedTemplateItems.length, 1, "update must replace the item list atomically");
+  assert.equal(Number(updatedTemplateItems[0].quantity), 4, "update must persist changed quantity");
+
+  await db.unsafe("reset role");
+  await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "customer cannot update another customer's reorder template",
+    () => db.unsafe("select public.update_reorder_template($1::uuid,$2,$3::jsonb)", [reorderId[0].id, "Not owned", db.json([{ product_id: productId, quantity: 5 }])]),
+    /not owned|42501|customer account/i,
+  );
+  const foreignDelete = await db.unsafe("delete from public.reorder_templates where id=$1 returning id", [reorderId[0].id]);
+  assert.equal(foreignDelete.length, 0, "RLS must prevent deleting another customer's template");
+  await db.unsafe("reset role");
+  const templateStillExists = await db.unsafe("select id from public.reorder_templates where id=$1", [reorderId[0].id]);
+  assert.equal(templateStillExists.length, 1, "unauthorized delete must leave the template intact");
+
 
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
