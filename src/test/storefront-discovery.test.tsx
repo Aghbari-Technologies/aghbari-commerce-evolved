@@ -159,8 +159,8 @@ describe("customer storefront saved discovery", () => {
 
   it("keeps the dashboard action for staff users", async () => {
     mocks.user = {
-      id: USER_ID,
-      profileId: PROFILE_ID,
+      id: "ci-staff-user",
+      profileId: "ci-staff-profile",
       email: "ci-staff@example.test",
       name: "CI Staff",
       roles: ["staff"],
@@ -536,7 +536,14 @@ describe("customer storefront saved discovery", () => {
   });
 
   it("renders the guarded AI settings screen without a style crash", async () => {
-    mocks.user = { profileId: "admin-settings-profile", roles: ["staff"], name: "CI Staff" };
+    mocks.user = {
+      id: "ci-admin-settings-user",
+      profileId: "admin-settings-profile",
+      email: "ci-admin-settings@example.test",
+      roles: ["staff"],
+      name: "CI Staff",
+      isStaff: true,
+    };
 
     const settings = await mountAt("/admin/ai/settings");
 
@@ -566,11 +573,11 @@ describe("customer storefront saved discovery", () => {
     const first = await mountAt("/");
     expect(first.host.textContent).toContain("المنتجات");
 
-    clickButton(first.host, 'button[aria-label="إضافة للمفضلة"]', 0);
+    clickButton(first.host, 'button[aria-label$="للمفضلة"]', 0);
     await waitForStorage("aghbari:wishlist:v2:profile:saved-list-profile", ["product-1"]);
 
     for (let index = 0; index < 4; index++) {
-      clickButton(first.host, 'button[aria-label="إضافة للمقارنة"]', index);
+      clickButton(first.host, 'button[aria-label$="للمقارنة"]', index);
     }
     await waitForStorage("aghbari:compare:v2:profile:saved-list-profile", ["product-1", "product-2", "product-3"]);
     expect(first.host.textContent).toContain("يمكن مقارنة ثلاثة أصناف فقط");
