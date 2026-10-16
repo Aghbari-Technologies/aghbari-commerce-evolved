@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateCustomerReorderTemplateInput } from "@/lib/customer-reorder-templates";
-const productId="a1000000-0000-0000-0000-000000000001";
+const productId="a1000000-0000-4000-8000-000000000001";
 describe("customer reorder-template input validation",()=>{
  it("normalizes names and accepts positive integer quantities",()=>{
   expect(validateCustomerReorderTemplateInput("  قالب دوري  ",[{product_id:productId,quantity:3}])).toEqual({name:"قالب دوري",lines:[{product_id:productId,quantity:3}]});
