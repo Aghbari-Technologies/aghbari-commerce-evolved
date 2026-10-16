@@ -13,21 +13,24 @@ function routeKey(category: Category): string {
   return category.code?.trim() || category.id;
 }
 
-function CategoryCard({ category, childrenCount }: { category: Category; childrenCount: number }) {
+function CategoryCard({ category, children }: { category: Category; children: Category[] }) {
   return (
     <article style={panel}>
       <Boxes size={22} aria-hidden="true" />
       <h2 style={{ margin: "10px 0 4px", fontSize: 18 }}>{category.name}</h2>
       <p style={{ margin: "0 0 14px", color: "#61787a", fontSize: 13 }}>
-        {childrenCount ? `التصنيفات الفرعية: ${childrenCount}` : "عرض المنتجات التابعة لهذا التصنيف"}
+        {children.length ? `التصنيفات الفرعية: ${children.length}` : "عرض المنتجات التابعة لهذا التصنيف"}
       </p>
       <Link to={("/category/" + encodeURIComponent(routeKey(category))) as never} style={linkStyle}>
         عرض المنتجات <ArrowLeft size={15} aria-hidden="true" />
       </Link>
-      {childrenCount > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-          <span style={{ color: "#61787a", fontSize: 12 }}>تصنيفات فرعية متاحة:</span>
-          <span style={{ color: "#61787a", fontSize: 12 }}>{childrenCount}</span>
+      {children.length > 0 && (
+        <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+          {children.map((child) => (
+            <Link key={child.id} to={("/category/" + encodeURIComponent(routeKey(category)) + "/subcategory/" + encodeURIComponent(routeKey(child))) as never} style={{ ...linkStyle, justifyContent: "space-between", background: "#fff", border: "1px solid #dce8e8" }}>
+              {child.name} <ArrowLeft size={14} aria-hidden="true" />
+            </Link>
+          ))}
         </div>
       )}
     </article>
@@ -38,9 +41,12 @@ export function CustomerCategoriesPage() {
   const { data, loading, error, refetch } = useFetch(fetchCategories);
   const categories = (data ?? []).slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "ar"));
   const parents = categories.filter((category) => !category.parent_id);
-  const childCount = new Map<string, number>();
+  const childrenByParent = new Map<string, Category[]>();
   for (const category of categories) {
-    if (category.parent_id) childCount.set(category.parent_id, (childCount.get(category.parent_id) ?? 0) + 1);
+    if (!category.parent_id) continue;
+    const current = childrenByParent.get(category.parent_id) ?? [];
+    current.push(category);
+    childrenByParent.set(category.parent_id, current);
   }
 
   return (
@@ -58,7 +64,7 @@ export function CustomerCategoriesPage() {
       {!loading && !error && parents.length === 0 && <section role="status" style={panel}>لا توجد تصنيفات نشطة متاحة للعرض حاليًا.</section>}
       {!loading && !error && parents.length > 0 && (
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 14 }}>
-          {parents.map((category) => <CategoryCard key={category.id} category={category} childrenCount={childCount.get(category.id) ?? 0} />)}
+          {parents.map((category) => <CategoryCard key={category.id} category={category} children={childrenByParent.get(category.id) ?? []} />)}
         </section>
       )}
     </main>
