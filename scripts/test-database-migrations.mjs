@@ -2486,14 +2486,25 @@ async function main() {
   await db.unsafe("reset role");
   await setIdentity(foreignGovernanceAuthUserId,"ci-foreign-reviewer@example.test");
   await db.unsafe("set role authenticated");
+  const foreignTenantIdentity=await db.unsafe(
+    "select auth.uid()::text as auth_user_id,public.current_profile_id()::text as profile_id,public.current_organization_id()::text as organization_id",
+  );
+  assert.equal(foreignTenantIdentity[0].auth_user_id,foreignGovernanceAuthUserId,"the foreign reviewer JWT must be active");
+  assert.equal(foreignTenantIdentity[0].profile_id,foreignGovernanceProfileId,"tenant resolution must select the foreign reviewer's profile");
+  assert.equal(foreignTenantIdentity[0].organization_id,otherOrganizationId,"tenant resolution must select the foreign organization");
   const foreignPromptDraft=await db.unsafe(
     "select public.create_ai_prompt_draft($1,$2,$3,$4) as id",
     ["inventory.reorder.advice","Foreign tenant draft",null,"The foreign organization creates an isolated version with the same key without accessing the other tenant's prompt."],
   );
-  const foreignPromptRows=await db.unsafe("select id,version,status from public.ai_prompt_templates");
-  assert.equal(foreignPromptRows.length,1);
+  const foreignPromptRows=await db.unsafe("select id,version,status,organization_id from public.ai_prompt_templates");
+  assert.equal(foreignPromptRows.length,1,"foreign reviewer must only see prompts belonging to their own tenant");
   assert.equal(foreignPromptRows[0].id,foreignPromptDraft[0].id,"foreign tenant cannot observe the primary tenant's prompt rows");
+  assert.equal(foreignPromptRows[0].organization_id,otherOrganizationId,"foreign prompt remains stored under the server-resolved tenant");
   assert.equal(foreignPromptRows[0].version,1,"prompt versions are scoped by organization and key");
+  const foreignAuditRows=await db.unsafe("select organization_id,action from public.ai_prompt_audit_log");
+  assert.equal(foreignAuditRows.length,1,"foreign reviewer cannot observe another tenant's prompt audit rows");
+  assert.equal(foreignAuditRows[0].organization_id,otherOrganizationId);
+  assert.equal(foreignAuditRows[0].action,"draft_created");
   await expectFailure(
     "foreign reviewer cannot review a prompt from another organization",
     () => db.unsafe("select public.review_ai_prompt($1,'approve',null)",[promptDraftId]),

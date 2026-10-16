@@ -553,6 +553,25 @@ describe("customer storefront saved discovery", () => {
     expect(settings.host.textContent).toContain("مركز الذكاء");
   });
 
+  it.each([
+    ["/admin/dev-ai/audit", "تدقيق تطوير الذكاء"],
+    ["/admin/dev-ai/patches", "ترقيعات التطوير"],
+    ["/admin/dev-ai/settings", "إعدادات التطوير الآلي"],
+  ])("renders the actual dev-AI child screen at %s", async (path, expectedTitle) => {
+    mocks.user = {
+      id: "ci-dev-ai-user",
+      profileId: "ci-dev-ai-profile",
+      email: "ci-dev-ai@example.test",
+      roles: ["staff"],
+      name: "CI Staff",
+      isStaff: true,
+    };
+
+    const screen = await mountAt(path);
+    expect(screen.host.textContent).toContain("BLOCKED / NOT CONFIGURED");
+    expect(screen.host.textContent).toContain(expectedTitle);
+  });
+
   it("renders empty wishlist and comparison screens safely", async () => {
     mocks.user = { profileId: "empty-saved-lists-profile", roles: ["customer"], name: "CI Buyer" };
 
