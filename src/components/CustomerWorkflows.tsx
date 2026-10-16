@@ -456,64 +456,68 @@ function Invoices() {
     setItems([]);
     try {
       const [invoicePayloadResult, orderResult] = await Promise.all([
-      supabase.rpc("get_customer_invoice_pdf", { p_invoice_id: i.id }),
-      supabase
-        .from("orders")
-        .select(
-          "quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status,status",
-        )
-        .eq("id", i.order_id)
-        .maybeSingle(),
-    ]);
-    const payload = invoicePayloadResult.data as {
-      invoice?: InvoiceFinancialSummary & { id?: string };
-      lines?: InvoiceLine[];
-      customer?: {
-        customer_code?: string | null;
-        business_name?: string | null;
-        contact_name?: string | null;
-      };
-      amounts_visible?: boolean;
-    } | null;
-    const payloadValid = Boolean(
-      payload?.invoice &&
-      payload.invoice.id === i.id &&
-      Array.isArray(payload.lines) &&
-      payload.customer,
-    );
-    if (invoicePayloadResult.error || orderResult.error || !payloadValid || !payload) {
-      setError("تعذر تحميل تفاصيل الفاتورة ومبالغها المصرح بها. تحقق من صلاحية الفاتورة ونشر مخطط المالية.");
-      setChosen(null);
-      setChosenCustomer(null);
-      setChosenFinancials(null);
-      setItems([]);
-      setInvoiceOrder(null);
-    } else {
-      setError("");
-      setItems(payload.lines ?? []);
-      const showAmounts = payload.amounts_visible === true;
-      setAmountsVisible(showAmounts);
-      setChosenCustomer({
-        customer_code: payload.customer?.customer_code ?? "",
-        business_name: payload.customer?.business_name ?? "",
-        contact_name: payload.customer?.contact_name ?? null,
-      });
-      setChosenFinancials(showAmounts ? {
-        currency: payload.invoice.currency,
-        subtotal: payload.invoice.subtotal,
-        tax_amount: payload.invoice.tax_amount,
-        total_amount: payload.invoice.total_amount,
-      } : null);
-      setInvoiceOrder(
-        orderResult.data as {
-          quantity_review_required: boolean;
-          customer_adjustment_note: string | null;
-          customer_payment_requested_at: string | null;
-          payment_request_status: string;
-          status: string;
-        } | null,
+        supabase.rpc("get_customer_invoice_pdf", { p_invoice_id: i.id }),
+        supabase
+          .from("orders")
+          .select(
+            "quantity_review_required,customer_adjustment_note,customer_payment_requested_at,payment_request_status,status",
+          )
+          .eq("id", i.order_id)
+          .maybeSingle(),
+      ]);
+      const payload = invoicePayloadResult.data as {
+        invoice?: InvoiceFinancialSummary & { id?: string };
+        lines?: InvoiceLine[];
+        customer?: {
+          customer_code?: string | null;
+          business_name?: string | null;
+          contact_name?: string | null;
+        };
+        amounts_visible?: boolean;
+      } | null;
+      const payloadValid = Boolean(
+        payload?.invoice &&
+        payload.invoice.id === i.id &&
+        Array.isArray(payload.lines) &&
+        payload.customer,
       );
-    }
+      if (invoicePayloadResult.error || orderResult.error || !payloadValid || !payload) {
+        setError("تعذر تحميل تفاصيل الفاتورة ومبالغها المصرح بها. تحقق من صلاحية الفاتورة ونشر مخطط المالية.");
+        setChosen(null);
+        setChosenCustomer(null);
+        setChosenFinancials(null);
+        setItems([]);
+        setInvoiceOrder(null);
+      } else {
+        setError("");
+        setItems(payload.lines ?? []);
+        const showAmounts = payload.amounts_visible === true;
+        setAmountsVisible(showAmounts);
+        setChosenCustomer({
+          customer_code: payload.customer?.customer_code ?? "",
+          business_name: payload.customer?.business_name ?? "",
+          contact_name: payload.customer?.contact_name ?? null,
+        });
+        setChosenFinancials(
+          showAmounts
+            ? {
+                currency: payload.invoice.currency,
+                subtotal: payload.invoice.subtotal,
+                tax_amount: payload.invoice.tax_amount,
+                total_amount: payload.invoice.total_amount,
+              }
+            : null,
+        );
+        setInvoiceOrder(
+          orderResult.data as {
+            quantity_review_required: boolean;
+            customer_adjustment_note: string | null;
+            customer_payment_requested_at: string | null;
+            payment_request_status: string;
+            status: string;
+          } | null,
+        );
+      }
     } catch {
       setError("تعذر تحميل تفاصيل الفاتورة ومبالغها المصرح بها. تحقق من صلاحية الفاتورة ونشر مخطط المالية.");
       setChosen(null);
