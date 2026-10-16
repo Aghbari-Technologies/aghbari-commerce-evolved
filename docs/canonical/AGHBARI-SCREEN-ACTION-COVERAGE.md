@@ -21,7 +21,7 @@
 - Added direct routes for workspace, catalog, data center, import, import logs, Onyx, stock reconciliation, synchronization, finance data, AI alerts/tasks/report aliases, and dynamic order detail.
 - Operations Center now supports route-selected tabs. Import history uses the actual server job ledger in history-only mode; it hides the upload form and process pipeline rather than duplicating the import screen.
 - Dynamic `/admin/order/:id` validates UUIDs and passes the identifier to the existing server-backed order detail component. AI report and executive paths are marked as explicit aliases rather than separate engines.
-- Exact generated route-tree synchronization and full CI for this route batch are pending.
+- Official TanStack generator output captured from successful exact-head run [38848240501](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38848240501) and committed in this checkpoint (70 route imports). Build and 333 unit tests passed on the parent; restored route-tree drift guard and full CI for the synchronized head are pending.
 
 ## Behavior contracts by screen family
 

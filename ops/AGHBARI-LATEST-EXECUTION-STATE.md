@@ -190,3 +190,11 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - Added 14 exact route modules for the operational/admin paths listed in the coverage matrix and route-ID tests in `src/test/app-routing.test.tsx`.
 - `src/routeTree.gen.ts` is deliberately waiting for the official output from this batch's Vite/TanStack build; the workflow temporarily emits that generator output so the resulting source file can be committed exactly and the drift guard restored.
 - Exact-head CI for this batch pending. No local commands were run in this GitHub-only session.
+
+
+## 2026-10-16 — route-tree synchronized after administration batch
+- Exact parent: `79292f0c9e26758aa1065705993163bcb4a7c2a0`; PR #72 remained OPEN on `fix/acceptance-hardening-cart-finance-20261015`.
+- Successful parent CI [38848240501](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38848240501) produced the official Vite/TanStack route tree with **70 imports**; build succeeded, 27 test files / 333 tests passed, and the isolated PostgreSQL/core-workflow suite, backup/restore, lint and preview/dev smoke steps concluded SUCCESS.
+- The exact generator output is being committed to `src/routeTree.gen.ts`. The temporary route dump is removed and `git diff --exit-code -- src/routeTree.gen.ts` is restored as the build drift guard.
+- Exact-head CI for this synchronized commit remains pending; do not reuse parent CI as proof for the new SHA.
+- Next slice after exact-head CI: customer catalog/search/category paths and explicit blocked status pages only where no verified server contract exists.
