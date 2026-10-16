@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/commerce-completion-20261009
+      - fix/acceptance-hardening-cart-finance-20261015
   pull_request:
     branches:
       - main
