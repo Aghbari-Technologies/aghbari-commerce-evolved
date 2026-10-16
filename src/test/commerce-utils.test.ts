@@ -1,6 +1,39 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, MAX_IMPORT_FILE_BYTES, hashFileSha256, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
 import { classifyAssistantIntent, isCustomerStatementPossiblyPartial, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeCartCounts, summarizeInvoiceAmounts, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+
+
+async function forgeCentralDirectoryUncompressedSize(
+  blob: Blob,
+  targetName: string,
+  claimedSize: number,
+): Promise<Blob> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  let offset = 0;
+  while (offset + 46 <= bytes.length) {
+    if (view.getUint32(offset, true) !== 0x02014b50) {
+      offset += 1;
+      continue;
+    }
+    const fileNameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + fileNameLength;
+    if (nameEnd > bytes.length) break;
+    const name = decoder.decode(bytes.subarray(nameStart, nameEnd));
+    if (name === targetName) {
+      view.setUint32(offset + 24, claimedSize, true);
+      return new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    }
+    offset = nameEnd + extraLength + commentLength;
+  }
+  throw new Error(`ZIP central directory entry not found: ${targetName}`);
+}
 
 function makeStoredZip(files: Record<string, string>): Blob {
   const encoder = new TextEncoder();
@@ -326,6 +359,23 @@ describe('commerce completion utilities', () => {
   it('rejects malformed XLSX archives rather than treating them as empty tables', async () => {
     await expect(parseXlsxFirstWorksheet(new Blob(['not a zip file']), () => undefined))
       .rejects.toThrow('ترويسة ZIP');
+  });
+
+  it('rejects an XLSX archive member declaring inflated size above its budget before reading bytes', async () => {
+    const file = makeStoredZip({
+      'xl/workbook.xml': '<workbook xmlns:r="urn:relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      'xl/sharedStrings.xml': '<sst><si><t>item_code</t></si></sst>',
+      'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>',
+    });
+    const forged = await forgeCentralDirectoryUncompressedSize(file, 'xl/sharedStrings.xml', 5 * 1024 * 1024 + 1);
+    await expect(parseXlsxFirstWorksheet(forged, () => undefined)).rejects.toThrow('الحد الآمن');
+  });
+
+  it('rejects oversized CSV and XLSX files before reading file contents', async () => {
+    const oversized = { size: MAX_IMPORT_FILE_BYTES + 1 } as unknown as Blob;
+    await expect(hashFileSha256(oversized)).rejects.toThrow('100MB');
+    await expect(parseXlsxFirstWorksheet(oversized, () => undefined)).rejects.toThrow('100MB');
   });
 
   it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {

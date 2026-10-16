@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_ARCHIVE_EXPANSION_FACTOR, MAX_IMPORT_COLUMNS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS, MAX_IMPORT_CELL_CHARS,
   StreamingCsvParser, assertXlsxExpandedBytesWithinLimit, getXlsxExpandedByteLimit,
-  isImportFileSizeAllowed, validateCsvRow,
+  hashFileSha256, isImportFileSizeAllowed, parseXlsxFirstWorksheet, validateCsvRow,
 } from "@/lib/unified-import";
 
 describe("large-file import boundaries", () => {
-  it("accepts only positive safe file sizes at or below 100 MiB", () => {
+  it("accepts only positive safe file sizes at or below 100 MiB", async () => {
     expect(isImportFileSizeAllowed(1)).toBe(true);
     expect(isImportFileSizeAllowed(MAX_IMPORT_FILE_BYTES)).toBe(true);
     expect(isImportFileSizeAllowed(MAX_IMPORT_FILE_BYTES + 1)).toBe(false);
@@ -15,6 +15,11 @@ describe("large-file import boundaries", () => {
     expect(isImportFileSizeAllowed(1.5)).toBe(false);
     expect(isImportFileSizeAllowed(Number.NaN)).toBe(false);
     expect(isImportFileSizeAllowed(Number.POSITIVE_INFINITY)).toBe(false);
+
+    // Exercise the real pre-read guards without allocating an oversized 100 MiB test fixture.
+    const overLimitBlob = { size: MAX_IMPORT_FILE_BYTES + 1 } as unknown as Blob;
+    await expect(hashFileSha256(overLimitBlob)).rejects.toThrow("100MB");
+    await expect(parseXlsxFirstWorksheet(overLimitBlob, () => undefined)).rejects.toThrow("100MB");
   });
 
   it("accepts exactly 100 CSV columns and rejects a 101st column", () => {
