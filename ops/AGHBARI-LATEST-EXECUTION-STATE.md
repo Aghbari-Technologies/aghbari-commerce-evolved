@@ -1,15 +1,15 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
-## LATEST EXECUTION POINTER — 2026-10-16 (nested route closure + open-gap inventory)
+## LATEST EXECUTION POINTER — 2026-10-16 (canonical route reconciliation + fixture isolation)
 
-- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Last fully accepted source SHA: `e6fc6a9882cbb1b737fd223b06b3b999ba2dd2a7`. Do not merge or write directly to `main`.
-- Exact-head GitHub Actions run `38876694584` completed SUCCESS on `e6fc6a9`: dependency lock validation, build, official TanStack route-tree drift guard, unit tests, PostgreSQL 17 migrations/core-workflow acceptance, logical backup/restore drill, lint excluding repository-wide Prettier, production-preview smoke on 4173 and dev-server smoke on 5173.
-- Nested-parent fixes for `/admin/ai/*`, `/admin/dev-ai/*`, `/templates/:id/edit`, and `/category/:slug/subcategory/:slug` are included and tested. Storefront customer/staff exit navigation and product-card keyboard access are also covered.
-- AI prompt tenant fixtures use unique auth/profile UUIDs; restrictive tenant-scoped SELECT policies for prompt/audit rows passed isolated PostgreSQL 17 workflow. Production behavior is not inferred from CI.
-- Coverage matrix now classifies all 110 rows in seven columns: 90 PARTIAL, 15 BLOCKED, 2 SOURCE ADDED, 3 IMPLEMENTED IN SOURCE, 0 COMPLETE. §13.4 lists 109 canonical paths; reconcile the one extra route/alias before quoting any percentage. The matrix now has a complete 15-route BLOCKED list and cross-cutting open requirements.
-- Priority from here: resolve route/alias accounting; continue source-backed acceptance across the 90 PARTIAL rows; authenticated checkout/order read-after-write and role boundaries; deployed invoice/statement/PDF/manifest response/privacy tests; authorized intended Supabase migration/RLS proof; exact Lovable project/sync/publish SHA; real backend/integration work for company/profile/approval/payment, AI runtime/governance, invitations, dev-AI patches, production restore, Onyx and message/push delivery.
-- Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains NOT_PROVEN (previous permission denied); never use `mrcyqezbhpncuvaehwgf` as substitute. Lovable synced/published SHA and authenticated deployed-browser acceptance are also NOT_PROVEN. Do not mark these COMPLETE from CI.
-- Resume cursor: `AGH-ROUTE-PARENT-OUTLET-001` is VERIFIED on `e6fc6a9`. Continue with 110/109 route-to-requirement reconciliation, then the next source-feasible PARTIAL behavior. External authorization/deployment blockers stay NOT_PROVEN until evidence exists.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Source behavior last full CI PASS: `e6fc6a9882cbb1b737fd223b06b3b999ba2dd2a7`; current docs/test head before this checkpoint: `23f1754d5a86931f6c039bf53adb595913ed6074`.
+- CI `38876694584` on `e6fc6a9` passed build, official route-tree guard, unit tests, PostgreSQL 17, backup/restore, lint, preview 4173 and dev 5173. A docs/test CI run for the prior current head is separately in progress; this changed test/docs commit needs exact-head CI too.
+- Route reconciliation: canonical spec §13.4 has 64 customer + 45 admin = 109 unique paths. All 109 occur in the matrix; the only 110th row is supplementary `/offline`. No required canonical path is missing from the matrix.
+- Matrix is normalized/classified: 90 PARTIAL, 15 BLOCKED, 2 SOURCE ADDED, 3 IMPLEMENTED IN SOURCE, 0 COMPLETE. The complete BLOCKED inventory and cross-cutting open requirements now live in the same canonical coverage matrix. Route-list representation is not functional acceptance.
+- The category-route regression changes product category IDs. Test setup now clones initial product objects rather than reusing shared object references to prevent fixture mutation leaking between tests.
+- Next: exact-head CI on this docs/test checkpoint; then continue source-feasible PARTIAL behavior, starting with direct-link/state/role acceptance. Remaining external gates are authenticated checkout/order read-after-write, deployed finance/PDF/manifest privacy and routes, authorized intended Supabase ref `ffxxjaolfntzbapmfbuv`, and exact Lovable project/deployed SHA.
+- Supabase production access remains NOT_PROVEN because saved evidence was permission-denied; never substitute `mrcyqezbhpncuvaehwgf`. Lovable synced/published SHA and authenticated deployed-browser acceptance also remain NOT_PROVEN. No fake integration success.
+- Resume cursor: `AGH-COVERAGE-LEDGER-001` path reconciliation, then advance to the next source-feasible PARTIAL screen/action.
 
 ---
 ## LATEST EXECUTION POINTER — 2026-10-16 (checkout and order-history acceptance expanded)

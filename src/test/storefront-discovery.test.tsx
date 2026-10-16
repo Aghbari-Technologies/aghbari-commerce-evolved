@@ -122,7 +122,7 @@ describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
-    mocks.products.splice(0, mocks.products.length, ...initialProducts);
+    mocks.products.splice(0, mocks.products.length, ...initialProducts.map((product) => ({ ...product })));
     mocks.popularRanking.splice(0, mocks.popularRanking.length, ...initialPopularRanking);
     mocks.featuredRanking.splice(0, mocks.featuredRanking.length, ...initialFeaturedRanking);
     mocks.user = null;

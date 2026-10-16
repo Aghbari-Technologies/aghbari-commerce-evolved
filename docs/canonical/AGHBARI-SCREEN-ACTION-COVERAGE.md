@@ -6,7 +6,7 @@
 
 Treat the following as **not implemented, partial, or not proven** until each row gains source behavior and matching evidence; a route or component alone is not closure.
 
-- **Current matrix status accounting (source/documentation only):** 110 route entries: 90 PARTIAL, 15 BLOCKED, 2 SOURCE ADDED, 3 IMPLEMENTED IN SOURCE, 0 COMPLETE. “IMPLEMENTED IN SOURCE” means source behavior exists but is not yet fully accepted; it is not the same as COMPLETE. The matrix has 110 distinct entries while §13.4's canonical requirement count is 109; reconcile the route alias/extra entry before publishing a coverage percentage.
+- **Current matrix status accounting (source/documentation only):** 110 route entries: 90 PARTIAL, 15 BLOCKED, 2 SOURCE ADDED, 3 IMPLEMENTED IN SOURCE, 0 COMPLETE. “IMPLEMENTED IN SOURCE” means source behavior exists but is not yet fully accepted; it is not the same as COMPLETE. A direct path-by-path comparison confirms all 109 canonical §13.4 routes appear in this matrix; the 110th row is the supplementary `/offline` experience, not a required canonical route. Canonical route-list representation is 109/109; functional completion remains unproven for PARTIAL/BLOCKED rows.
 
 - **Route-to-screen behavior:** the last recorded source inventory was 77/109 required paths. Later route batches were added, so the count must be reconciled against the current generated route tree. Remaining PARTIAL rows still need per-screen actions, permission/error/empty/retry behavior, and direct-link/reload acceptance; route presence is not feature completion.
 - **Customer identity and company:** profile editing, company/profile onboarding writes, and authoritative account-approval state are unavailable without verified server contracts. Wishlist and compare are browser-local only and do not sync across devices.
@@ -16,6 +16,11 @@ Treat the following as **not implemented, partial, or not proven** until each ro
 - **Data and external integrations:** live Onyx connection/sync, external notification/WhatsApp delivery, AI-provider readiness and consumption, production import/export acceptance, restore drills against an authorized target, and production migration lineage are not certified by local/isolated tests alone.
 - **Security and release gates:** intended Supabase project `ffxxjaolfntzbapmfbuv` remains inaccessible in the saved evidence; the similarly named ref `mrcyqezbhpncuvaehwgf` is not an acceptable substitute. Lovable project identity plus synced/published SHA, authenticated customer/staff E2E, and deployed-route checks remain unverified. Do not mark these PASS without direct evidence.
 
+## Canonical route inventory reconciliation — 2026-10-16
+
+- Parsed both source lists in `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` §13.4: 64 customer paths + 45 admin paths = 109 unique canonical requirements.
+- Direct exact-path comparison found every one of those 109 in this matrix. The extra `/offline` row is a supplementary route; no canonical path is missing from the matrix.
+- This confirms route-list representation only. It does not mark any PARTIAL route functionally complete.
 ## Complete explicit BLOCKED inventory — 2026-10-16
 
 These 15 route entries have a capability intentionally blocked because trusted content, an authorized server contract, or a real production integration is unavailable. Route rendering itself is distinct from completing the underlying capability.
