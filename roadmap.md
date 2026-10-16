@@ -62,3 +62,6 @@ Release status: **NOT production-certified**. Exact target Supabase project `ffx
 ## Live DB sync (2026-10-15)
 - [x] 20261009010000_commerce_completion applied to live Cloud DB (drizzle 0001)
 - [ ] Apply remaining 18 supabase/migrations/20261009020000 … 20261009171000 in order (checkout depends on 040000)
+- [x] 20261009020000_commerce_commands applied (drizzle 0002)
+- [ ] Bring GitHub main (153 newer commits up to 6913e35) into the Lovable workspace — git merge/pull is not available to the agent; Lovable sync must pull it
+- [ ] Then apply the remaining 17 migrations from 2026-10-09 + 14 new ones from 2026-10-15 to the live database
