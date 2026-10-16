@@ -245,6 +245,22 @@ describe("customer storefront saved discovery", () => {
     expect(checkoutButton?.disabled).toBe(true);
   });
 
+  it("blocks checkout and never submits an order when the server price preview is unavailable", async () => {
+    mocks.user = { profileId: "checkout-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "RPC unavailable" } });
+
+    const checkout = await mountAt("/checkout");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(checkout.host.textContent).toContain("RPC unavailable");
+    const submitButton = Array.from(checkout.host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("تأكيد الطلب"));
+    expect(submitButton).toBeDefined();
+    expect(submitButton?.disabled).toBe(true);
+    expect(mocks.rpc.mock.calls.some(([name]) => name === "submit_customer_order")).toBe(false);
+  });
+
   it("keeps cart amounts hidden when the server policy is off", async () => {
     mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
     window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
