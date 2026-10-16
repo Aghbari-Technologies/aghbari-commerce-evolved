@@ -49,6 +49,8 @@ describe('Auth bootstrap resilience', () => {
     '/product/route-smoke-test-product',
     '/wishlist',
     '/login',
+    '/register',
+    '/forgot-password',
     '/orders',
     '/orders/route-smoke-test',
     '/invoices',
