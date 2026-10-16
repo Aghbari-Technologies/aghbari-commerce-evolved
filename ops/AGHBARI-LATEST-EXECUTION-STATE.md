@@ -64,3 +64,11 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - Proven behavior: cart/order money display is opt-in per surface and defaults hidden; only admin/manager can change policy; checkout uses the server-side tier+quantity resolver; order financials are scoped to the active customer's own tenant/order and return NULL amounts when hidden; raw product/tier finance columns are not granted directly to anon/customer roles; accountant is excluded from the operational base-price branch. Unit and isolated PostgreSQL tests are included in exact SHA `064f3e4d...` CI.
 - No additional source leak or policy bypass was established by this focused review; no speculative source change made. Requirement remains PARTIAL until authenticated browser testing and intended-production behavior are proven, including separate invoice-amount policy.
 - Local commands for this task: NOT RUN locally (no checkout; GitHub hostname resolution blocked). Next: `AGH-CUSTOMER-360-001`.
+
+
+## AGH-CUSTOMER-360-001 source/test hardening batch
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; parent source/doc SHA `b5bd4233078fe481d54afe3003fe604f652067cb`. No branch switch or main update.
+- Changed paths: `scripts/test-database-migrations.mjs`, this state file, and `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+- Added focused isolated-PostgreSQL assertions for capability alignment: invited buyer can create an address/contact under the invited company; finance member cannot mutate either surface despite read-only contact capability; after revocation the former buyer cannot read the member-created address/contact. Existing assertions continue to validate tenant scoping, order creation, one-time invitation acceptance, and revocation.
+- Test execution: `node scripts/test-database-migrations.mjs` NOT RUN locally because the container has no repo checkout and `git clone` failed with `Could not resolve host: github.com`. New exact-SHA Actions is **PENDING** at the time this checkpoint is committed. Do not treat it as PASS until run status is read back.
+- Keep `AGH-CUSTOMER-360-001` as the active task until the exact-SHA run is green or any failure has been fixed.

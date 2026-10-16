@@ -2024,6 +2024,25 @@ async function main() {
   assert.equal((await db.unsafe("select id from public.customers where profile_id=$1",[secondProfileId])).length,0,"member cannot read a different customer in the same organization");
   assert.equal((await db.unsafe("select id from public.customer_addresses where id=$1",[firstId])).length,1,"buyer is scoped to the invited company's addresses");
   assert.equal((await db.unsafe("select id from public.customer_company_contacts where id=$1",[firstContactId])).length,1,"buyer is scoped to the invited company's contacts");
+
+  const memberAddressRows=await db.unsafe(
+    "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean) as id",
+    [null,"CI Buyer-managed dock","Invited buyer","7771113333","Member street",null,"Sanaa",null,null,"YE","member address capability",false],
+  );
+  const memberAddressId=memberAddressRows[0].id;
+  const memberAddressOwner=await db.unsafe("select customer_id,organization_id from public.customer_addresses where id=$1",[memberAddressId]);
+  assert.equal(memberAddressOwner.length,1,"buyer with addresses.manage can save an address through the capability-scoped RPC");
+  assert.equal(memberAddressOwner[0].customer_id,customerOneId,"member-created address remains bound to the invited company");
+
+  const memberContactRows=await db.unsafe(
+    "select public.save_customer_company_contact($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::boolean) as id",
+    [null,"CI Buyer-managed contact","Buyer","Procurement","7771116666","member-buyer@example.test",false],
+  );
+  const memberContactId=memberContactRows[0].id;
+  const memberContactOwner=await db.unsafe("select customer_id,organization_id from public.customer_company_contacts where id=$1",[memberContactId]);
+  assert.equal(memberContactOwner.length,1,"buyer with contacts.manage can create a company contact");
+  assert.equal(memberContactOwner[0].customer_id,customerOneId,"member-created contact remains bound to the invited company");
+
   const memberOrderRows=await db.unsafe(
     "select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid) as result",
     [db.json([{product_id:productId,quantity:1}]),"Member checkout test","CI Company One","Invited buyer","7771113333","cash_on_delivery","member-checkout-key-000001",null],
@@ -2047,6 +2066,18 @@ async function main() {
   assert.equal(financeScope[0].customer_id,customerOneId);
   assert.equal(financeScope[0].can_order,false,"finance member cannot create orders");
   assert.equal(financeScope[0].can_statement,true,"finance member can read company statements");
+  await expectFailure("finance member cannot manage company addresses",
+    ()=>db.unsafe(
+      "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean)",
+      [null,"Finance-forbidden address","Finance member","7771114444","Finance street",null,"Sanaa",null,null,"YE",null,false],
+    ),
+    /company capability required/i);
+  await expectFailure("finance member cannot manage company contacts",
+    ()=>db.unsafe(
+      "select public.save_customer_company_contact($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::boolean)",
+      [null,"Finance-forbidden contact","Accountant","Finance","7771114444","finance@example.test",false],
+    ),
+    /company capability required/i);
   await expectFailure("finance member cannot bypass the order capability through checkout",
     ()=>db.unsafe("select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid)",
       [db.json([{product_id:productId,quantity:1}]),"Forbidden finance checkout","CI Company One","Finance member","7771114444","cash_on_delivery","finance-checkout-key-0001",null]),
@@ -2066,6 +2097,8 @@ async function main() {
   assert.equal(revokedScope[0].customer_id,null,"revocation removes active company scope");
   assert.equal(revokedScope[0].can_read,false);
   assert.equal((await db.unsafe("select id from public.orders where id=$1",[memberOrderId])).length,0,"revoked member loses order visibility");
+  assert.equal((await db.unsafe("select id from public.customer_addresses where id=$1",[memberAddressId])).length,0,"revoked member loses access to company addresses");
+  assert.equal((await db.unsafe("select id from public.customer_company_contacts where id=$1",[memberContactId])).length,0,"revoked member loses access to company contacts");
   process.stdout.write("PASS company membership: hash-only invitations, email-bound single-use acceptance, tenant isolation, buyer/finance capabilities, checkout linkage and revocation\n");
 
   // AGH-AI-GATEWAY-001: configuration authorization, atomic budget reservation and usage audit.
