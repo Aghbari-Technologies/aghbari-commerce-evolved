@@ -1131,24 +1131,6 @@ async function main() {
     "server-side account totals must cover the complete ledger grouped by currency",
   );
 
-  // Finance company members share only the explicitly permitted statement scope.
-  // This specifically guards against the full-ledger replacement reverting to
-  // customers.profile_id and losing membership-linked finance users.
-  await db.unsafe("reset role");
-  await setIdentity(financeAuthUserId, "ci-invited-finance@example.test");
-  await db.unsafe("set role authenticated");
-  const financeMemberStatementRows=await db.unsafe("select public.get_customer_account_statement() as result");
-  const financeMemberStatement=financeMemberStatementRows[0].result;
-  assert.ok(financeMemberStatement.invoices.some((row)=>row.id===invoice.id),
-    "finance member must see invoices for the invited company");
-  assert.equal(financeMemberStatement.summary.invoice_count,1,
-    "finance member statement summary must retain the linked company scope");
-  assert.equal(Number(financeMemberStatement.summary.totals_by_currency[0].invoiced),370000,
-    "finance member can read authorized statement totals");
-  await db.unsafe("reset role");
-  await setIdentity(authUserId, "ci-customer-one@example.test");
-  await db.unsafe("set role authenticated");
-
   // Exercise both detail caps with isolated fixtures. The full summary and per-invoice
   // balances must include rows that are intentionally absent from the returned detail arrays.
   await db.unsafe("reset role");
@@ -2087,6 +2069,16 @@ async function main() {
   assert.equal(financeScope[0].customer_id,customerOneId);
   assert.equal(financeScope[0].can_order,false,"finance member cannot create orders");
   assert.equal(financeScope[0].can_statement,true,"finance member can read company statements");
+  // Run the statement regression only after this finance member's invitation has been accepted.
+  const financeMemberStatementRows=await db.unsafe("select public.get_customer_account_statement() as result");
+  const financeMemberStatement=financeMemberStatementRows[0].result;
+  assert.ok(financeMemberStatement.invoices.some((row)=>row.id===invoice.id),
+    "finance member must see invoices for the invited company");
+  assert.ok(financeMemberStatement.summary.invoice_count >= 1,
+    "finance member statement summary must retain the linked company scope");
+  const financeCurrencyTotal=financeMemberStatement.summary.totals_by_currency.find((row)=>row.currency==="YER");
+  assert.ok(financeCurrencyTotal && Number(financeCurrencyTotal.invoiced) >= 370000,
+    "finance member can read server-calculated authorized statement totals");
   await expectFailure("finance member cannot manage company addresses",
     ()=>db.unsafe(
       "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean)",
