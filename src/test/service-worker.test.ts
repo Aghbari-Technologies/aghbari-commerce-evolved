@@ -135,7 +135,7 @@ describe("Aghbari PWA offline shell", () => {
         mode: "cors",
       } as Request,
       respondWith: (promise) => pending.push(promise as Promise<Response>),
-    } as WorkerEvent & { request: Request; respondWith: (promise: Promise<Response>) => void });
+    } as unknown as WorkerEvent & { request: Request; respondWith: (promise: Promise<Response>) => void });
 
     await expect(Promise.all(pending)).resolves.toEqual([cachedResponse]);
   });
