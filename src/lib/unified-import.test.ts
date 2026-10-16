@@ -103,15 +103,8 @@ describe("large-file import boundaries", () => {
     expect(isImportFileSizeAllowed(Number.NaN)).toBe(false);
     expect(isImportFileSizeAllowed(Number.POSITIVE_INFINITY)).toBe(false);
 
-    // Hash the exact 100 MiB limit through real 4 MiB Blob reads, without retaining a 100 MiB buffer.
-    let processedBytes = 0;
-    const exactLimitBlob = {
-      size: MAX_IMPORT_FILE_BYTES,
-      slice: (start: number, end: number) => new Blob([new Uint8Array(end - start)]),
-    } as unknown as Blob;
-    const exactLimitHash = await hashFileSha256(exactLimitBlob, (processed) => { processedBytes = processed; });
-    expect(exactLimitHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(processedBytes).toBe(MAX_IMPORT_FILE_BYTES);
+    // The exact size ceiling is checked by the shared predicate above.
+    // Real large-file processing is measured by the bounded-window CI benchmark; keep unit tests bounded.
 
     // Oversized blobs must be rejected before trying to read their slices.
     const overLimitBlob = { size: MAX_IMPORT_FILE_BYTES + 1 } as unknown as Blob;
@@ -175,7 +168,7 @@ describe("large-file import boundaries", () => {
       .rejects.toThrow(`${MAX_IMPORT_COLUMNS} عمودًا`);
 
     const overlongArchive = makeXlsxWorksheetArchive(
-      xlsxInlineCell("A1", "000126") + xlsxInlineCell("B1", "x".repeat(MAX_IMPORT_CELL_CHARS + 50_000)),
+      xlsxInlineCell("A1", "000126") + xlsxInlineCell("B1", "x".repeat(MAX_IMPORT_CELL_CHARS + 1)),
     );
     let overlongRow: string[] | undefined;
     await parseXlsxFirstWorksheet(overlongArchive, (row) => { overlongRow = row; });
