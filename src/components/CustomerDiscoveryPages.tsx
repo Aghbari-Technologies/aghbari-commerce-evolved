@@ -140,6 +140,10 @@ export function CustomerPopularProductsPage() {
     () => new Map((rankings ?? []).map((row) => [row.product_id, row] as const)),
     [rankings],
   );
+  const catalogMismatch = useMemo(
+    () => !productsLoading && !productsError && (rankings ?? []).some((row) => !productsById.has(row.product_id)),
+    [productsLoading, productsError, rankings, productsById],
+  );
 
   return <main dir="rtl" className="storefront" style={shell}>
     <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 22 }}>
@@ -156,9 +160,11 @@ export function CustomerPopularProductsPage() {
     {rankingLoading && <div style={panel} role="status">جارٍ حساب ترتيب الأصناف من الطلبات المؤهلة...</div>}
     {rankingError && <div style={panel} role="alert">تعذر تحميل ترتيب الطلبات: {rankingError} <button type="button" onClick={() => void retryRankings()}>إعادة المحاولة</button></div>}
     {!rankingLoading && !rankingError && (rankings ?? []).length === 0 && <div style={panel} role="status">لا توجد طلبات مؤهلة كافية لإنشاء ترتيب موثوق للأكثر طلبًا.</div>}
-    {!rankingLoading && !rankingError && (rankings ?? []).length > 0 && productsError && (products ?? []).length === 0 &&
-      <div style={panel} role="alert">تعذر مطابقة الأصناف مع ترتيب الخادم: {productsError} <button type="button" onClick={() => void retryProducts()}>إعادة تحميل الكتالوج</button></div>}
-    {!rankingLoading && !rankingError && (rankings ?? []).length > 0 &&
+    {!rankingLoading && !rankingError && (rankings ?? []).length > 0 && productsError &&
+      <div style={panel} role="alert">تعذر التحقق من تطابق كتالوج المنتجات: {productsError} <button type="button" onClick={() => void retryProducts()}>إعادة تحميل الكتالوج</button></div>}
+    {!rankingLoading && !rankingError && (rankings ?? []).length > 0 && catalogMismatch &&
+      <div style={panel} role="alert">لم تتطابق هوية بعض الأصناف في ترتيب الخادم مع الكتالوج النشط؛ أُخفي الترتيب كاملًا بدل عرض نتائج جزئية. أعد تحميل الكتالوج والترتيب.</div>}
+    {!rankingLoading && !rankingError && !productsError && !catalogMismatch && (rankings ?? []).length > 0 &&
       <ProductGrid
         products={rankedProducts}
         loading={productsLoading}

@@ -1751,8 +1751,8 @@ async function main() {
   await db.unsafe(
     `insert into public.order_items(id,order_id,product_id,item_code,product_name_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total,requested_quantity,approved_quantity,approved_unit_price)
      values
-       ('c1000000-0000-0000-0000-000000000099',$1,$2,'CI-POPULAR-01','CI Popularity Product','unit',20,0,0,20,20,0),
-       ('c1000000-0000-0000-0000-000000000098',$3,$2,'CI-POPULAR-01','CI Popularity Product','unit',5,0,0,5,5,0),
+       ('c1000000-0000-0000-0000-000000000099',$1,$2,'CI-POPULAR-01','CI Popularity Product','unit',200,0,0,200,200,0),
+       ('c1000000-0000-0000-0000-000000000098',$3,$2,'CI-POPULAR-01','CI Popularity Product','unit',50,0,0,50,50,0),
        ('c1000000-0000-0000-0000-000000000097',$4,$5,'CI-POPULAR-PENDING-01','CI Pending-Only Product','unit',100,0,0,100,100,0)
      on conflict(id) do update set product_id=excluded.product_id,quantity=excluded.quantity,approved_quantity=excluded.approved_quantity`,
     [popularityOrderOneId, popularityProductId, popularityOrderTwoId, popularityPendingOrderId, pendingOnlyProductId],
@@ -1797,6 +1797,7 @@ async function main() {
 
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
   await expectFailure(
     "staff cannot create an Onyx export audit for an order in another organization",
     () => db.unsafe("select public.record_onyx_order_export($1::uuid,$2::integer)", [foreignAuditOrderId, 1]),

@@ -10,9 +10,8 @@ const mocks = vi.hoisted(() => ({
   fetchPromotions: vi.fn(),
   fetchPopularProductRanking: vi.fn(),
   popularRanking: [
-    { product_id: "product-99", ranking_position: 1 },
-    { product_id: "product-3", ranking_position: 2 },
-    { product_id: "product-1", ranking_position: 3 },
+    { product_id: "product-3", ranking_position: 1 },
+    { product_id: "product-1", ranking_position: 2 },
   ],
   fetchSettingsMap: vi.fn(),
   user: null as null | { profileId: string; roles: string[]; name: string },
@@ -139,6 +138,16 @@ describe("customer storefront saved discovery", () => {
     expect(popular.host.textContent).toContain("الترتيب حسب الطلبات المعتمدة");
     expect(popular.host.textContent).toContain("لا تُعرض إجماليات المبيعات");
     expect(popular.host.textContent).not.toContain("Unknown product");
+  });
+
+  it("fails closed when server rankings cannot be matched to the active catalog", async () => {
+    mocks.popularRanking.splice(0, mocks.popularRanking.length,
+      { product_id: "missing-product", ranking_position: 1 },
+      { product_id: "product-3", ranking_position: 2 },
+    );
+    const popular = await mountAt("/popular");
+    expect(popular.host.textContent).toContain("أُخفي الترتيب كاملًا");
+    expect(popular.host.querySelector("article h3")).toBeNull();
   });
 
   it("shows an explicit empty state when no server-backed popularity ranking exists", async () => {
