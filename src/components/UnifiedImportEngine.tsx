@@ -8,8 +8,8 @@ import { useFetch } from "@/lib/useFetch";
 import { formatNumber } from "@/lib/format";
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/components/AdminPages";
 import {
-  DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
-  PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
+  DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
+  PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256, isImportFileSizeAllowed,
   applyImportProfileRules, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
@@ -470,7 +470,7 @@ export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice
     event.target.value = "";
     if (!file || runningRef.current) return;
     if (file.size === 0) { setErrorMessage('الملف فارغ. اختر ملفًا يحتوي على بيانات.'); return; }
-    if (file.size > MAX_IMPORT_FILE_BYTES) {
+    if (!isImportFileSizeAllowed(file.size)) {
       setErrorMessage("حجم الملف يتجاوز الحد المسموح 100MB.");
       return;
     }

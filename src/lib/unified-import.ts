@@ -10,6 +10,31 @@ export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PROCESSING_CHUNK_ROWS = 1_000;
 export const MAX_ARCHIVE_EXPANSION_FACTOR = 10;
 
+/** A shared guard used before hashing, parsing or resuming any selected import file. */
+export function isImportFileSizeAllowed(fileSize: number): boolean {
+  return Number.isSafeInteger(fileSize) && fileSize >= 1 && fileSize <= MAX_IMPORT_FILE_BYTES;
+}
+
+/** Hard ceiling for bytes inflated from an XLSX archive for this specific archive size. */
+export function getXlsxExpandedByteLimit(fileSize: number): number {
+  if (!isImportFileSizeAllowed(fileSize)) throw new Error('حجم ملف XLSX يجب أن يكون بين 1 بايت و100MB.');
+  return Math.min(MAX_IMPORT_FILE_BYTES, Math.max(fileSize * MAX_ARCHIVE_EXPANSION_FACTOR, 5 * 1024 * 1024));
+}
+
+/** Validate both the next ZIP member and the aggregate inflated-byte budget before retaining it. */
+export function assertXlsxExpandedBytesWithinLimit(
+  alreadyExpandedBytes: number,
+  nextEntryBytes: number,
+  expandedLimit: number,
+): void {
+  if (!Number.isSafeInteger(alreadyExpandedBytes) || alreadyExpandedBytes < 0 ||
+      !Number.isSafeInteger(nextEntryBytes) || nextEntryBytes < 0 ||
+      !Number.isSafeInteger(expandedLimit) || expandedLimit < 1 ||
+      nextEntryBytes > expandedLimit || alreadyExpandedBytes + nextEntryBytes > expandedLimit) {
+    throw new Error('محتوى XLSX بعد فك الضغط يتجاوز الحد الآمن؛ تم إيقاف القراءة قبل اعتماد أي لقطة.');
+  }
+}
+
 function sortJsonObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
   if (value && typeof value === 'object') {
@@ -175,6 +200,9 @@ export class IncrementalSha256 {
 }
 
 export async function hashFileSha256(file: Blob, onProgress?: (processedBytes: number) => void): Promise<string> {
+  if (!isImportFileSizeAllowed(file.size)) {
+    throw new Error('حجم ملف الاستيراد يجب أن يكون بين 1 بايت و100MB.');
+  }
   const digest = new IncrementalSha256();
   for (let offset = 0; offset < file.size; offset += UPLOAD_CHUNK_BYTES) {
     const bytes = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
@@ -544,9 +572,8 @@ type XlsxZipEntry = {
 };
 
 const MAX_XLSX_ENTRY_COUNT = 10_000;
-const MAX_XLSX_EXPANDED_BYTES = MAX_IMPORT_FILE_BYTES;
 
-function decodeXlsxXmlText(value: string): string {
+function decodeXlsxXmlText(value: string) {
   return value
     .replace(/&#x([0-9a-f]+);/gi, (_whole, hex: string) => {
       const point = Number.parseInt(hex, 16);
@@ -759,12 +786,12 @@ export async function parseXlsxFirstWorksheet(
   file: Blob,
   onRow: (values: string[]) => void | Promise<void>,
 ): Promise<{ rowCount: number; worksheetName: string }> {
-  if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_IMPORT_FILE_BYTES) {
+  if (!isImportFileSizeAllowed(file.size)) {
     throw new Error('حجم ملف XLSX يجب أن يكون بين 1 بايت و100MB.');
   }
   const entries = await readXlsxZipDirectory(file);
   let expandedBytes = 0;
-  const expandedLimit = Math.min(MAX_XLSX_EXPANDED_BYTES, Math.max(file.size * MAX_ARCHIVE_EXPANSION_FACTOR, 5 * 1024 * 1024));
+  const expandedLimit = getXlsxExpandedByteLimit(file.size);
 
   const readEntry = async (name: string, required: boolean): Promise<string | null> => {
     const entry = entries.get(name);
@@ -772,9 +799,7 @@ export async function parseXlsxFirstWorksheet(
       if (required) throw new Error('ملف XLSX يفتقد المكون المطلوب: ' + name);
       return null;
     }
-    if (entry.uncompressedSize > expandedLimit || expandedBytes + entry.uncompressedSize > expandedLimit) {
-      throw new Error('محتوى XLSX بعد فك الضغط يتجاوز الحد الآمن؛ تم إيقاف القراءة قبل اعتماد أي لقطة.');
-    }
+    assertXlsxExpandedBytesWithinLimit(expandedBytes, entry.uncompressedSize, expandedLimit);
     const localBytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
     if (localBytes.length !== 30) throw new Error('ترويسة مكون XLSX ناقصة.');
     const local = new DataView(localBytes.buffer, localBytes.byteOffset, localBytes.byteLength);
@@ -812,7 +837,13 @@ export async function parseXlsxFirstWorksheet(
         const result = await reader.read();
         if (result.done) break;
         actualBytes += result.value.byteLength;
-        if (actualBytes > entry.uncompressedSize || expandedBytes + actualBytes > expandedLimit) {
+        if (actualBytes > entry.uncompressedSize) {
+          await reader.cancel();
+          throw new Error('حجم مكون XLSX بعد فك الضغط تجاوز الحجم المعلن.');
+        }
+        try {
+          assertXlsxExpandedBytesWithinLimit(expandedBytes, actualBytes, expandedLimit);
+        } catch {
           await reader.cancel();
           throw new Error('محتوى XLSX بعد فك الضغط تجاوز الحجم المعلن أو الحد الآمن.');
         }
