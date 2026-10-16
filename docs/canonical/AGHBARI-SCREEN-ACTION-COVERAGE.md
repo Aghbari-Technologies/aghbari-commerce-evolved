@@ -14,6 +14,12 @@ Treat the following as **not implemented, partial, or not proven** until each ro
 - **Data and external integrations:** live Onyx connection/sync, external notification/WhatsApp delivery, AI-provider readiness and consumption, production import/export acceptance, restore drills against an authorized target, and production migration lineage are not certified by local/isolated tests alone.
 - **Security and release gates:** intended Supabase project `ffxxjaolfntzbapmfbuv` remains inaccessible in the saved evidence; the similarly named ref `mrcyqezbhpncuvaehwgf` is not an acceptable substitute. Lovable project identity plus synced/published SHA, authenticated customer/staff E2E, and deployed-route checks remain unverified. Do not mark these PASS without direct evidence.
 
+## 2026-10-16 — Shared storefront exit routing regression
+
+- The shared Storefront header now keeps staff's configured dashboard action but sends guests/customers to the store instead of routing them into the protected `/admin` area.
+- Added five direct-route behavior cases for `/catalog`, `/cart`, `/product/product-3`, `/wishlist`, and `/compare`. The existing checkout/review cases preserve their explicit `العودة إلى السلة` → `/cart` behavior.
+- This corrects a common shared-component defect without duplicating route-specific work. Exact-head CI is still pending, and no local run is claimed.
+
 ## 2026-10-16 — Checkout exit navigation regression
 
 - On direct `/checkout` and `/checkout/review`, the shared header previously labelled its exit action `لوحة التحكم` and routed to `/admin`. It now labels the action `العودة إلى السلة` and routes to `/cart`.

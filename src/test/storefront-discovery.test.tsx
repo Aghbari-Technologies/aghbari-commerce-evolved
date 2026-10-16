@@ -138,6 +138,25 @@ describe("customer storefront saved discovery", () => {
     window.sessionStorage.clear();
   });
 
+  it.each(["/catalog", "/cart", "/product/product-3", "/wishlist", "/compare"])(
+    "returns a guest from the storefront header to the store on %s without opening admin",
+    async (path) => {
+      const screen = await mountAt(path);
+      const exitButton = screen.host.querySelector<HTMLButtonElement>(".sf-admin-btn");
+
+      expect(exitButton?.textContent).toContain("العودة إلى المتجر");
+      expect(exitButton?.textContent).not.toContain("لوحة التحكم");
+
+      await act(async () => {
+        exitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(screen.router.state.location.pathname).toBe("/");
+      expect(screen.router.state.location.pathname).not.toBe("/admin");
+    },
+  );
+
   it.each(["/checkout", "/checkout/review"])(
     "returns to the cart from the checkout header on %s",
     async (path) => {
