@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Boxes, CheckCircle2, ChevronLeft, Database, RefreshCw, ShieldAlert } from "lucide-react";
 import { AdminApp } from "@/components/AghbariApp";
+import { AdminAIControlPlane } from "@/components/AdminAIControlPlane";
 import { Login } from "@/components/Login";
 import { useAuth } from "@/lib/auth";
 import { fetchAiGatewayBudget, fetchDashboardStats, fetchProducts } from "@/lib/api";
@@ -23,6 +24,8 @@ export function AdminOperationalScreen({feature}:{feature:AdminOperationalFeatur
  if(!ready)return <main dir="rtl" style={shell} role="status">جارٍ التحقق من صلاحيات الإدارة...</main>;
  if(!user)return <Login/>;
  if(!user.roles.some(role=>["admin","manager","staff"].includes(role)))return <BlockedAccess/>;
+ if(feature==="ai-prompts")return <AdminAIControlPlane initialTab="prompts"/>;
+ if(feature==="ai-governance")return <AdminAIControlPlane initialTab="governance"/>;;
  if(feature==="images")return <ImageInventory/>;
  if(feature==="engines")return <EngineSummary/>;
  if(feature==="ai-insights")return <RecommendationList/>;

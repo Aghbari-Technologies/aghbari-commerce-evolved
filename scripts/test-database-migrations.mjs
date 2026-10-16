@@ -2414,6 +2414,100 @@ async function main() {
     () => db.unsafe("select public.reserve_ai_gateway_usage($1::uuid,$2::text,$3::bigint,$4::bigint,$5::numeric)",[authUserId,"customer-spoof",1,1,0.001]),
     /permission denied/i);
   await db.unsafe("reset role");
+    // AGH-AI-PROMPT-GOVERNANCE-001: tenant isolation, immutable versions, maker-checker and audit trail.
+  const governanceReviewerProfileId = "f7777777-7777-4777-8777-777777777777";
+  const governanceReviewerAuthUserId = "77777777-7777-4777-8777-777777777777";
+  const foreignGovernanceProfileId = "f8888888-8888-4888-8888-888888888888";
+  const foreignGovernanceAuthUserId = "88888888-8888-4888-8888-888888888888";
+  await db.unsafe(
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Governance Reviewer','ci-governance-reviewer@example.test',true) on conflict(id) do nothing",
+    [governanceReviewerProfileId,governanceReviewerAuthUserId,organizationId],
+  );
+  await db.unsafe("insert into public.user_roles(profile_id,role) values($1,'manager') on conflict(profile_id,role) do nothing",[governanceReviewerProfileId]);
+  await db.unsafe(
+    "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Foreign Reviewer','ci-foreign-reviewer@example.test',true) on conflict(id) do nothing",
+    [foreignGovernanceProfileId,foreignGovernanceAuthUserId,otherOrganizationId],
+  );
+  await db.unsafe("insert into public.user_roles(profile_id,role) values($1,'manager') on conflict(profile_id,role) do nothing",[foreignGovernanceProfileId]);
+  // A manager author is intentionally used here so the same actor reaches the Maker–Checker guard rather than failing only a role check.
+  await db.unsafe("insert into public.user_roles(profile_id,role) values($1,'manager') on conflict(profile_id,role) do nothing",[operationsStaffProfileId]);
+
+  await db.unsafe("reset role");
+  await setIdentity(operationsStaffAuthUserId,"ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  const promptDraftResult = await db.unsafe(
+    "select public.create_ai_prompt_draft($1,$2,$3,$4) as id",
+    ["inventory.reorder.advice","Inventory reorder advice","Draft prompt for reorder advice and bounded inventory context.","Explain evidence-backed reorder options using only the approved tenant inventory snapshot; cite the inputs and do not execute actions."],
+  );
+  const promptDraftId = promptDraftResult[0].id;
+  let promptRow = await db.unsafe("select prompt_key,version,status,created_by from public.ai_prompt_templates where id=$1",[promptDraftId]);
+  assert.equal(promptRow[0].prompt_key,"inventory.reorder.advice");
+  assert.equal(promptRow[0].version,1);
+  assert.equal(promptRow[0].status,"draft");
+  assert.equal(promptRow[0].created_by,operationsStaffProfileId,"creator is derived server-side");
+  await expectFailure(
+    "direct prompt registry table writes are forbidden",
+    () => db.unsafe("insert into public.ai_prompt_templates(organization_id,prompt_key,display_name,prompt_body,version,created_by) values($1,'bypass.key','Bypass key','This should not bypass the prompt governance APIs.',99,$2)",[organizationId,operationsStaffProfileId]),
+    /permission denied/i,
+  );
+  await db.unsafe("select public.update_ai_prompt_draft($1,$2,$3,$4)",[promptDraftId,"Inventory reorder advice v1","Updated draft","Use only server-approved inventory facts, explain the calculation and return recommendations without executing mutations."]);
+  await db.unsafe("select public.submit_ai_prompt_for_review($1)",[promptDraftId]);
+  promptRow=await db.unsafe("select status,submitted_by,submitted_at from public.ai_prompt_templates where id=$1",[promptDraftId]);
+  assert.equal(promptRow[0].status,"pending_review");
+  assert.equal(promptRow[0].submitted_by,operationsStaffProfileId);
+  assert.ok(promptRow[0].submitted_at);
+  await expectFailure(
+    "prompt author cannot approve their own submitted prompt",
+    () => db.unsafe("select public.review_ai_prompt($1,'approve','self approval attempt')",[promptDraftId]),
+    /maker-checker|own prompt submission/i,
+  );
+
+  await db.unsafe("reset role");
+  await setIdentity(governanceReviewerAuthUserId,"ci-governance-reviewer@example.test");
+  await db.unsafe("set role authenticated");
+  const visiblePromptRows=await db.unsafe("select id from public.ai_prompt_templates");
+  assert.equal(visiblePromptRows.length,1,"reviewer sees only prompts belonging to their organization");
+  const visibleAuditRows=await db.unsafe("select id from public.ai_prompt_audit_log");
+  assert.equal(visibleAuditRows.length,3,"reviewer can read the tenant audit trail");
+  await db.unsafe("select public.review_ai_prompt($1,'approve','Reviewed by an independent manager.')",[promptDraftId]);
+  promptRow=await db.unsafe("select status,reviewed_by,review_note from public.ai_prompt_templates where id=$1",[promptDraftId]);
+  assert.equal(promptRow[0].status,"approved");
+  assert.equal(promptRow[0].reviewed_by,governanceReviewerProfileId,"review actor is derived server-side");
+  assert.equal(promptRow[0].review_note,"Reviewed by an independent manager.");
+  await expectFailure(
+    "approved prompt versions cannot be edited in place",
+    () => db.unsafe("select public.update_ai_prompt_draft($1,$2,$3,$4)",[promptDraftId,"Tamper approved prompt",null,"An attempt to rewrite a prompt version after approval must fail because it is no longer a draft."]),
+    /original author|draft/i,
+  );
+  const promptAudit=await db.unsafe("select action,metadata from public.ai_prompt_audit_log where prompt_template_id=$1 order by event_sequence",[promptDraftId]);
+  assert.deepEqual(promptAudit.map((row)=>row.action),["draft_created","draft_updated","submitted_for_review","approved"]);
+  assert.ok(promptAudit.every((row)=>!("prompt_body" in (row.metadata??{}))),"audit metadata never duplicates prompt text");
+
+  await db.unsafe("reset role");
+  await setIdentity(foreignGovernanceAuthUserId,"ci-foreign-reviewer@example.test");
+  await db.unsafe("set role authenticated");
+  const foreignPromptDraft=await db.unsafe(
+    "select public.create_ai_prompt_draft($1,$2,$3,$4) as id",
+    ["inventory.reorder.advice","Foreign tenant draft",null,"The foreign organization creates an isolated version with the same key without accessing the other tenant's prompt."],
+  );
+  const foreignPromptRows=await db.unsafe("select id,version,status from public.ai_prompt_templates");
+  assert.equal(foreignPromptRows.length,1);
+  assert.equal(foreignPromptRows[0].id,foreignPromptDraft[0].id,"foreign tenant cannot observe the primary tenant's prompt rows");
+  assert.equal(foreignPromptRows[0].version,1,"prompt versions are scoped by organization and key");
+  await expectFailure(
+    "foreign reviewer cannot review a prompt from another organization",
+    () => db.unsafe("select public.review_ai_prompt($1,'approve',null)",[promptDraftId]),
+    /prompt not found in this organization/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(authUserId,"ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "customers cannot create AI prompt drafts",
+    () => db.unsafe("select public.create_ai_prompt_draft($1,$2,$3,$4)",["customer.spoof","Customer spoof",null,"A customer cannot create a prompt governance draft even if calling the RPC directly."]),
+    /staff role required/i,
+  );
+  await db.unsafe("reset role");
   process.stdout.write("PASS AI gateway: admin-owned settings, HTTPS validation, atomic budget caps, usage ledger replay, service-only RPCs and customer denial\n");
 
   process.stdout.write("PASS: migrations applied, tier pricing, checkout idempotency, tenant isolation, quotations, reorder, invoices/payments, stock/pricing rules, outbox and AI gateway semantics.\n");
