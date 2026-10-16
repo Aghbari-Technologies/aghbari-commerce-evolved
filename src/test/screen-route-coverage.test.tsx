@@ -19,6 +19,16 @@ describe("new customer route coverage", () => {
     ["/financial-documents", "/financial-documents"],
     ["/payments", "/payments"],
     ["/receivables", "/receivables"],
+    ["/categories", "/categories"],
+    ["/collections", "/collections"],
+    ["/featured", "/featured"],
+    ["/new", "/new"],
+    ["/popular", "/popular"],
+    ["/offers", "/offers"],
+    ["/category/rice", "/category/$slug"],
+    ["/category/food/subcategory/rice", "/category/$slug/subcategory/$subcategorySlug"],
+    ["/collection/featured-rice", "/collection/$slug"],
+    ["/search/advanced", "/search_/advanced"],
   ])("registers %s as a direct route", (path, routeId) => {
     const matches = makeRouter().matchRoutes(path as never);
     expect(matches.at(-1)?.routeId).toBe(routeId);
