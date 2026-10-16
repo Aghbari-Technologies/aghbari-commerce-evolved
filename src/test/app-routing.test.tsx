@@ -16,6 +16,7 @@ describe("App routing", () => {
 
   it.each([
     "/cart",
+    "/invite/" + "a".repeat(64),
     "/login",
     "/register",
     "/forgot-password",

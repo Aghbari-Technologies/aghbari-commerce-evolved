@@ -25,7 +25,7 @@ export function Login({ onDone, initialMode = 'login' }: { onDone?: () => void; 
       if (mode === 'register') {
         if (name.trim().length < 2) { setError('أدخل الاسم الكامل'); return; }
         const { needsConfirmation } = await signUp(email, password, name);
-        if (needsConfirmation) { setInfo('تم إنشاء الحساب. افتح بريدك واضغط رابط التفعيل ثم سجّل الدخول.'); return; }
+        if (needsConfirmation) { setInfo('تم إنشاء الحساب. افتح بريدك واضغط رابط التفعيل ثم اتبع نتيجة التحقق.'); return; }
       } else {
         await signIn(email, password);
       }
