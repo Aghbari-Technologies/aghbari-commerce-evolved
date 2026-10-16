@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, Boxes, Search, Tag } from "lucide-react";
+import { Boxes, Search, Tag } from "lucide-react";
 import { fetchCategories, fetchFeaturedProductRanking, fetchPopularProductRanking, fetchProducts, fetchPromotions, type PopularProductRanking } from "@/lib/api";
 import { useFetch } from "@/lib/useFetch";
 import { formatCurrency, formatNumber } from "@/lib/format";
