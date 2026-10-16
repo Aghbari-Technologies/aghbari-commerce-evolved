@@ -1232,6 +1232,10 @@ async function main() {
   );
   assert.equal(invoiceVisibilityEnabled[0].result.visible, true, "admin can explicitly enable invoice amounts");
   await db.unsafe("reset role");
+  await db.unsafe(
+    "insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_invoice_amounts_visible','false'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+    [otherOrganizationId],
+  );
   await setIdentity(operationsStaffAuthUserId, "ci-operations-staff@example.test");
   await db.unsafe("set role authenticated");
   const staffCanReadInvoicePolicy = await db.unsafe(
@@ -1240,6 +1244,19 @@ async function main() {
   );
   assert.equal(staffCanReadInvoicePolicy.length, 1, "staff can read the display policy needed to render settings");
   assert.equal(staffCanReadInvoicePolicy[0].value, true);
+  const tenantVisiblePolicies = await db.unsafe(
+    "select organization_id,value from public.admin_settings where key='customer_invoice_amounts_visible'",
+  );
+  assert.equal(tenantVisiblePolicies.length, 1, "staff policy reads must not expose another tenant's setting");
+  assert.equal(tenantVisiblePolicies[0].organization_id, organizationId);
+  await expectFailure(
+    "staff cannot insert settings into another tenant",
+    () => db.unsafe(
+      "insert into public.admin_settings(organization_id,key,value,category) values ($1,'staff_cross_tenant_probe','true'::jsonb,'general')",
+      [otherOrganizationId],
+    ),
+    /row-level security|permission denied/i,
+  );
   for (const protectedKey of ["customer_invoice_amounts_visible", "customer_cart_amounts_visible", "customer_order_amounts_visible"]) {
     await expectFailure(
       "staff cannot write protected display setting directly: " + protectedKey,

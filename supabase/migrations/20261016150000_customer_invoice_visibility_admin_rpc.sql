@@ -60,6 +60,14 @@ CREATE POLICY "staff_all_admin_settings" ON public.admin_settings
 FOR ALL TO authenticated
 USING (
   public.is_staff()
+  AND organization_id = (
+    SELECT p.organization_id
+      FROM public.profiles p
+     WHERE p.id = public.current_profile_id()
+       AND p.auth_user_id = auth.uid()
+       AND p.is_active
+     LIMIT 1
+  )
   AND key NOT IN (
     'customer_invoice_amounts_visible',
     'customer_cart_amounts_visible',
@@ -68,6 +76,14 @@ USING (
 )
 WITH CHECK (
   public.is_staff()
+  AND organization_id = (
+    SELECT p.organization_id
+      FROM public.profiles p
+     WHERE p.id = public.current_profile_id()
+       AND p.auth_user_id = auth.uid()
+       AND p.is_active
+     LIMIT 1
+  )
   AND key NOT IN (
     'customer_invoice_amounts_visible',
     'customer_cart_amounts_visible',
@@ -80,6 +96,14 @@ CREATE POLICY "staff_read_customer_money_display_settings" ON public.admin_setti
 FOR SELECT TO authenticated
 USING (
   public.is_staff()
+  AND organization_id = (
+    SELECT p.organization_id
+      FROM public.profiles p
+     WHERE p.id = public.current_profile_id()
+       AND p.auth_user_id = auth.uid()
+       AND p.is_active
+     LIMIT 1
+  )
   AND key IN (
     'customer_invoice_amounts_visible',
     'customer_cart_amounts_visible',
