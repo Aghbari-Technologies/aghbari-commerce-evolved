@@ -1,24 +1,28 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
 ## Active workstream
-- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`.
-- Completed latest tested source SHA `96b064c9a772f2267e73e2ad41c0381593be4e05`, Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS. XLSX export-to-production-reader round-trip regression passes on this exact SHA. Outbox focused source review completed at current docs HEAD `12328cd75e0b1b5016784bbc4c741ea67785bdf9`; no additional source defect proved, deployed lifecycle still external.
-- Latest source CI: exact SHA `96b064c9a772f2267e73e2ad41c0381593be4e05`, Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS: 21/21 unit-test files, 250/250 tests, PostgreSQL 17 migrations/workflows, logical backup/restore, lint/build, preview smoke 4173 and dev smoke 5173. Import streaming benchmark skipped because this was only an XLSX test/docs change.
-- Last previously verified baseline: exact source/workflow SHA `f71f3f70f0683685d7707b085e7ef63fa1ec89a5`, Actions [38829458881](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38829458881) PASS, including 21 test files, isolated PostgreSQL migration/workflow checks, RLS/policy/trigger/sequence/extension signatures, lint, production build, preview smoke 4173 and dev-server smoke 5173. Subsequent test-fixture and globals/ACL changes are evaluated only by current candidate CI above.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`
+- Active PR: [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) — OPEN
+- Work branch: `fix/acceptance-hardening-cart-finance-20261015` → `main`
+- Preserve this branch while the PR is open. Do not push directly to `main`.
 
-## Only next task
-- `next_task_id = AGH-ONYX-INTEGRATION-001` — inspect only existing Onyx contracts, adapters, and import/export call sites. Do not invent API contracts or credentials; if no vendor contract exists, mark integration blocked and continue to `AGH-ONYX-XLSX-001`. `AGH-SEC-BROWSER-E2E-001` remains blocked pending authorized intended Lovable project/session and published SHA.
-- Completed source acceptance for `AGH-OPS-DR-001`: exact candidate SHA `3420307d1d54a46a4f2f48a8bfc68a5b50ba494b`, Actions [38832196621](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38832196621) **SUCCESS**. Unit tests 21/21 files and 249/249 tests; import streaming benchmark PASS; isolated PostgreSQL 17 migration/workflow suite PASS; backup/restore signatures PASS; lint, build, preview smoke 4173 and dev smoke 5173 PASS.
-- XLSX ZIP regression now checks local member filename + general-purpose flags against central-directory metadata and rejects central-directory redirection to another member. Test helper has FileReader fallback for the CI test Blob.
-- Benchmark on this exact SHA: 100,000 business rows + header, 76.28 MiB, 1,121.14 ms, 68.04 MiB/s, sampled heap delta +15,511,608 bytes / RSS delta +36,642,816 bytes over 1,221 samples. Synthetic single-run sample only; not production P95/peak.
-- `AGH-OPS-DR-001` remains **PARTIAL** because production backup/restore, production failover, and live runtime proof are not available; do not close the umbrella requirement. Lovable/browser/prod access remains a separate gate.
+## Exact-SHA evidence and latest-head discipline
+- **Latest source change accepted:** `84cb6350d6fb797206c6c56ba74653f1253d4512`, [Actions 38835322893](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38835322893) **SUCCESS**. The earlier `2ef8aa181bd787cb829e3158e569acdf5ce848a3` run failed only because the test used a non-file `import.meta.url` after Vitest transformation. The test now uses a repository-relative path. CI passed 21/21 test files, isolated PostgreSQL 17 migration/workflow acceptance, logical backup/restore, lint, build and preview/dev smoke. This proves the source candidate only; live AI provider/Edge deployment remains unproven.
+- **Last remote PR HEAD observed before this checkpoint write:** `db4d84fae0d3030456da1d035b41e983008e8a96` (documentation-only checkpoint), exact-head Actions [38835716890](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38835716890) was **IN PROGRESS** at last check. This state update creates a newer commit. Resolve the new live branch HEAD and its exact-SHA CI after this write; do not transfer a result from either prior SHA.
+- No local checkout is mounted in this execution context; no local `git fetch/status/HEAD` command was run. GitHub remote refs/files/Actions are the evidence source.
 
-## Evidence checkpoint
-- Last tested source SHA `96b064c9a772f2267e73e2ad41c0381593be4e05` / Actions `38834690553` SUCCESS. This metadata checkpoint is based on the latest XLSX round-trip candidate and does not transfer proof to later source SHA.
-- Previously verified importer profile SHA: `c241970e648f7292178e0a9a88bdf4938a69ef2f` / Actions 38828317225.
-- Previously verified PWA source preview: `2ee243599c60054468f419c541f3d52ea7e2a111` / Actions 38825705008 and `cdfed3adb21ee881f85117e6f2f163a4c7cf0de2` / Actions 38825885494.
-- Recheck exact HEAD every resume. Isolated CI, live browser acceptance, and production database proof remain separate claims.
+## Only task cursor
+- **`next_task_id = AGH-ONYX-INTEGRATION-001` — close the existing source review as BLOCKED EXTERNALLY using the evidence already recorded in its registry row. Do not restart vendor/API discovery.** No verified Onyx API/import contract or vendor credentials are recorded, and the intended production Supabase project is inaccessible. Update the matching row/state with the exact blocker, then advance immediately.
+- After recording that external blocker, select the first **still-unimplemented, source-feasible** requirement in the existing registry. Do not reimplement tasks whose source acceptance already passed merely because browser/production proof remains open. In particular, source acceptance for `AGH-ONYX-XLSX-001` and `AGH-ASYNC-OUTBOX-001` is already documented; their remaining runtime/download gates must not trigger another broad code review. Continue until no source-feasible open requirement remains, then prepare the targeted Lovable handoff for live integration/sync/publish gates.
+- External gates remain separate: authenticated browser E2E and published SHA, production Supabase identity/access, Onyx contract/target compatibility, provider/Edge runtime. Never substitute another Supabase project.
 
+## Mandatory end-of-run checkpoint
+After every coherent batch and **before every response, pause, timeout, context limit or session end**, update this file and the matching row in `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`. Record actual branch/PR/HEAD; changed paths; commands and test results; exact tested SHA and exact CI link/status; current/next task ID; and each evidenced blocker. Mark `NOT RUN` and `UNPUSHED` honestly. If current-head CI fails, keep the failed task open and fix the cause before advancing. A fresh session must begin from this pointer without asking the owner to repeat context.
+
+## History
+Detailed prior implementation evidence is kept below as **historical batch records only**. The task IDs in those sections are not current pointers and must never override the section above.
+
+---
 
 ## AGH-OPS-DR-001 source batch checkpoint
 - Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; base HEAD `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`.
