@@ -33,6 +33,24 @@ type CartItem = { product: ProductWithInventory; quantity: number };
 type StoreView = 'shop' | 'product' | 'wishlist' | 'compare' | 'matrix' | 'cart' | 'checkout' | 'confirm';
 export type StorefrontInitialView = 'shop' | 'product' | 'wishlist' | 'compare' | 'cart' | 'checkout';
 
+function normalizeCategoryRouteKey(value: string): string {
+  return value
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/[\\s_]+/g, '-')
+    .replace(/[^\\p{L}\\p{N}-]/gu, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function categoryMatchesRouteKey(category: Category, key: string): boolean {
+  if (category.id === key || category.code === key) return true;
+  const wanted = normalizeCategoryRouteKey(key);
+  return [category.name, category.code ?? '', category.id]
+    .some((value) => normalizeCategoryRouteKey(value) === wanted);
+}
+
 function readSavedProductIds(key: string, maxItems: number): string[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -42,11 +60,14 @@ function readSavedProductIds(key: string, maxItems: number): string[] {
   }
 }
 
-export function Storefront({ onExit, initialView = 'shop', initialProductId, initialQuery }: {
+export function Storefront({ onExit, initialView = 'shop', initialProductId, initialQuery, initialCategorySlug, initialSubcategorySlug, initialCatalogMode = 'default' }: {
   onExit: () => void;
   initialView?: StorefrontInitialView;
   initialProductId?: string;
   initialQuery?: string;
+  initialCategorySlug?: string;
+  initialSubcategorySlug?: string;
+  initialCatalogMode?: 'default' | 'newest';
 }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -81,6 +102,9 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
   const cartRestored = cartRestoredScope === cartScopeKey;
   const [query, setQuery] = useState(initialQuery ?? '');
   const [activeCat, setActiveCat] = useState<string>('');
+  const [categoryResolution, setCategoryResolution] = useState<'idle' | 'pending' | 'matched' | 'missing'>(
+    initialCategorySlug ? 'pending' : 'idle',
+  );
   const [matrixQuantities, setMatrixQuantities] = useState<Record<string, string>>({});
   const [matrixFeedback, setMatrixFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
@@ -126,6 +150,35 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
   useEffect(() => {
     setQuery(initialQuery ?? '');
   }, [initialQuery]);
+
+  useEffect(() => {
+    if (!initialCategorySlug) {
+      setActiveCat('');
+      setCategoryResolution('idle');
+      return;
+    }
+    if (!categories) {
+      setCategoryResolution(categoriesError ? 'missing' : 'pending');
+      return;
+    }
+
+    const parent = categories.find((category) => categoryMatchesRouteKey(category, initialCategorySlug));
+    const target = initialSubcategorySlug
+      ? categories.find((category) =>
+          Boolean(parent) &&
+          category.parent_id === parent?.id &&
+          categoryMatchesRouteKey(category, initialSubcategorySlug),
+        )
+      : parent;
+
+    if (!target) {
+      setActiveCat('');
+      setCategoryResolution('missing');
+      return;
+    }
+    setActiveCat(target.id);
+    setCategoryResolution('matched');
+  }, [categories, categoriesError, initialCategorySlug, initialSubcategorySlug]);
 
   useEffect(() => {
     if (cachedCatalog.scopeKey === cartScopeKey || typeof window === 'undefined') return;
@@ -296,10 +349,18 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
 
   const filtered = useMemo(() => {
     let list = products ?? [];
+    if (initialCategorySlug && categoryResolution !== 'matched') return [];
     if (activeCat) list = list.filter((p) => p.category_id === activeCat);
     if (query.trim()) list = list.filter((p) => matchesArabicCatalogSearch(p, query));
+    if (initialCatalogMode === 'newest') {
+      list = [...list].sort((a, b) => {
+        const aTime = Date.parse(a.created_at);
+        const bTime = Date.parse(b.created_at);
+        return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+      });
+    }
     return list;
-  }, [products, activeCat, query]);
+  }, [products, activeCat, query, initialCategorySlug, categoryResolution, initialCatalogMode]);
 
   const tickerMessages = (settings?.ticker_messages as string[]) ?? [];
   const tickerEnabled = settings?.ticker_enabled as boolean ?? true;
@@ -351,7 +412,7 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
             )}
 
             <section className="sf-products">
-              <div className="sf-products-head"><div><h2>المنتجات</h2><span>{productsLoading && !products.length ? 'جار تحميل الكتالوج...' : `${formatNumber(filtered.length)} صنف حسب بحثك وتصنيفك`}</span></div><div className="sf-discovery-links"><button onClick={() => void navigate({ to: '/wishlist' })}><Heart size={15} /> المفضلة</button><button onClick={() => void navigate({ to: '/compare' })}><GitCompare size={15} /> المقارنة ({compare.length}/3)</button><button onClick={() => { setMatrixFeedback(null); setView('matrix'); }}><ClipboardList size={15} /> طلب سريع</button></div></div>
+              <div className="sf-products-head"><div><h2>{initialCatalogMode === 'newest' ? 'أحدث المنتجات' : initialCategorySlug ? (categories?.find((category) => category.id === activeCat)?.name ?? 'منتجات التصنيف') : 'المنتجات'}</h2><span>{productsLoading && !products.length ? 'جار تحميل الكتالوج...' : `${formatNumber(filtered.length)} صنف حسب بحثك وتصنيفك`}</span></div><div className="sf-discovery-links"><button onClick={() => void navigate({ to: '/wishlist' })}><Heart size={15} /> المفضلة</button><button onClick={() => void navigate({ to: '/compare' })}><GitCompare size={15} /> المقارنة ({compare.length}/3)</button><button onClick={() => { setMatrixFeedback(null); setView('matrix'); }}><ClipboardList size={15} /> طلب سريع</button></div></div>
               {productsLoading && !products.length
                 ? <div className="sf-empty" role="status"><Package size={30} /><span>جار تحميل كتالوج المنتجات...</span></div>
                 : productsError && !products.length
@@ -361,9 +422,13 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
                     wishlist={wishlist}
                     compare={compare}
                     emptyTitle={products.length === 0 ? 'لا توجد أصناف منشورة حالياً' : 'لا توجد منتجات مطابقة'}
-                    emptyDescription={products.length === 0
-                      ? 'لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً. يُرجى التواصل مع إدارة المتجر إذا كنت تتوقع ظهور المنتجات.'
-                      : 'جرّب تغيير البحث أو التصنيف'}
+                    emptyDescription={initialCategorySlug && categoryResolution === 'missing'
+                      ? 'التصنيف أو التصنيف الفرعي غير موجود ضمن بيانات التصنيفات التي أعادها الخادم.'
+                      : initialCatalogMode === 'newest'
+                        ? 'لا توجد منتجات في هذه المجموعة.'
+                        : products.length === 0
+                          ? 'لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً. يُرجى التواصل مع إدارة المتجر إذا كنت تتوقع ظهور المنتجات.'
+                          : 'جرّب تغيير البحث أو التصنيف'}
                     onOpen={openProduct}
                     onAdd={addToCart}
                     onWishlist={toggleWishlist}
