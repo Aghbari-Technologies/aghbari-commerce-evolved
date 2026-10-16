@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Keep the verified invitation token through email confirmation; redirects are limited to this fixed in-app path.
           emailRedirectTo: window.location.pathname === '/company/accept-invitation' && new URLSearchParams(window.location.search).has('token')
             ? `${window.location.origin}${window.location.pathname}${window.location.search}`
-            : `${window.location.origin}/login`,
+            : `${window.location.origin}/verify`,
           data: { full_name: fullName.trim() },
         },
       });
@@ -103,8 +103,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const resetPassword = useCallback(async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/reset-password` });
-    if (error) throw new Error(translateAuthError(error.message));
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/reset-password` });
+      if (error) throw new Error(translateAuthError(error.message));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const signOut = useCallback(async () => { await supabase.auth.signOut(); setUser(null); }, []);
