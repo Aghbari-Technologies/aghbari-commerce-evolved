@@ -430,6 +430,21 @@ describe("customer storefront saved discovery", () => {
     expect(JSON.parse(window.localStorage.getItem("aghbari:cart:v1") || "null")).toEqual(savedCart);
   });
 
+  it("renders empty wishlist and comparison screens safely", async () => {
+    mocks.user = { profileId: "empty-saved-lists-profile", roles: ["customer"], name: "CI Buyer" };
+
+    const wishlist = await mountAt("/wishlist");
+    expect(wishlist.host.textContent).toContain("المفضلة");
+    expect(wishlist.host.textContent).toContain("لا توجد منتجات محفوظة في المفضلة ضمن الكتالوج الحالي");
+    expect(wishlist.host.querySelectorAll("article")).toHaveLength(0);
+    await unmount(wishlist);
+
+    const compare = await mountAt("/compare");
+    expect(compare.host.textContent).toContain("مقارنة المنتجات");
+    expect(compare.host.textContent).toContain("اختر حتى ثلاثة منتجات من الكتالوج للمقارنة");
+    expect(compare.host.querySelectorAll("article")).toHaveLength(0);
+  });
+
   it("persists wishlist and caps comparison at three across direct route loads", async () => {
     mocks.user = { profileId: "saved-list-profile", roles: ["customer"], name: "CI Buyer" };
     const first = await mountAt("/");
