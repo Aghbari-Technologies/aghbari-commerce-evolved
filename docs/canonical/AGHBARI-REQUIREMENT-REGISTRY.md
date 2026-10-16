@@ -7,6 +7,14 @@
 
 ---
 
+## 2026-10-16 — AGH-PRODUCT-SCREEN-COVERAGE-001 customer account slice
+
+- Source slice added `CustomerAccount.tsx` plus routes for profile, company details, approval status, and the two onboarding entry paths; route smoke coverage and behavior tests were expanded.
+- `CompanyDetailsPage` reads the existing `list_customer_company_members` contract and has loading/error/retry handling. `CustomerProfilePage` displays the authenticated identity and performs a real Supabase Auth sign-out. No profile/company write or approval status is simulated.
+- Known gap remains: profile/company edit mutations and an authoritative account-approval-status API have not been verified, so related controls remain unavailable.
+- Official route-tree regeneration capture was added to the CI workflow, but `src/routeTree.gen.ts` synchronization and exact-head CI for this slice remain pending.
+- Parent source/workflow SHA: `9826d0a3cc8b2264b59207dc0fad0cd25593d469`. Local tests were not run in this remote GitHub-only session.
+
 # Aghbari Commerce — Requirement Registry and Execution Rules
 
 **Product:** متجر الأغبري | Aghbari Commerce  

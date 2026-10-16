@@ -165,3 +165,12 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 ## AGH-AI-GATEWAY-001 test harness correction
 - First candidate `2ef8aa181bd787cb829e3158e569acdf5ce848a3`, Actions [38835193715](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38835193715), FAILED in `src/test/ai-gateway-logic.test.ts`: the UTF-8 byte-limit test passed, but handler-wiring test called `readFile(new URL(..., import.meta.url))` in Vitest, where `import.meta.url` is not a `file:` URL (`ERR_INVALID_URL_SCHEME`). Unit suite: 20/21 files passed, 251/252 tests passed. The fixture now reads the repository-relative source path; production source was not implicated in this failure.
 - New exact-SHA rerun pending; task remains `AGH-AI-GATEWAY-001`. Do not advance until full CI completes.
+
+## 2026-10-16 — customer account/company slice checkpoint (parent SHA 9826d0a3cc8b2264b59207dc0fad0cd25593d469)
+- Active cursor remains `AGH-PRODUCT-SCREEN-COVERAGE-001`; PR #72 remains open on `fix/acceptance-hardening-cart-finance-20261015`.
+- Added `src/components/CustomerAccount.tsx` and route files `profile.tsx`, `company.details.tsx`, `account.pending.tsx`, `onboarding.profile.tsx`, `onboarding.company.tsx`.
+- Expanded `src/test/app-routing.test.tsx` and added `src/test/customer-account.test.tsx` for profile identity/logout success and failure, company RPC-backed data/retry, and non-inferred approval state.
+- Updated the screen/action matrix and requirement registry. Company/profile editing and account approval-state data remain explicitly unavailable because a verified server mutation/read contract is not present in the current client contract.
+- `.github/workflows/commerce-checks.yml` now emits the post-build TanStack-generated route tree as temporary diagnostic evidence; use that output to synchronize `src/routeTree.gen.ts` from the official Vite plugin result, then remove the diagnostic step and keep a drift guard if supported.
+- **Verification:** local commands not run (no local checkout). Exact-head CI for the slice is **PENDING**. Route tree must not be called source-synchronized until generated output from the new route files is committed.
+- Next action: read the generated tree from the latest workflow run, commit generated route-tree output, add route-tree drift protection, then continue remaining account and admin paths.
