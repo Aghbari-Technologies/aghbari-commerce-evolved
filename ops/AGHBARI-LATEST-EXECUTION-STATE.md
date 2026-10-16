@@ -1,3 +1,14 @@
+# CURRENT EXECUTION POINTER — 2026-10-16 (authoritative; historical pointers below are not active)
+
+- **Active work:** PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72), branch `fix/acceptance-hardening-cart-finance-20261015`, base `main`. Preserve this branch and all existing code. Do not switch branches or push directly to `main` while PR #72 is open.
+- **next_task_id = AGH-OPS-DR-001 — OPEN.** Implement boundary tests for the declared 100 MB file limit, 100-column limit, 4,000-character cell limit, and XLSX archive-expansion guard. Run the focused tests, repair real defects, and continue to measured runtime/memory and safe backup/restore drills.
+- **One cursor only:** this top section is the authoritative task pointer. Any `next_task_id` appearing in older dated checkpoints later in this file is historical; do not resume from those values.
+- **Execution policy:** proceed directly to code/tests for this task. Do not redo repository-wide discovery, reread the full specification, prepare another plan, or stop after a report. External blockers must be isolated while independent source work continues.
+- **Mandatory end-of-run save:** before any response/finalization, session end, timeout/context limit, or pause, update this file and the matching registry row with actual branch/PR/HEAD, files changed, real test commands and outcomes, exact tested SHA and matching CI, next task, and evidenced blocker. Also update after every coherent batch. State NOT RUN when a test was not run; mark failed pushes as UNPUSHED. Never end an execution run with a stale or missing next-task cursor.
+- **Lovable budget:** source code and automated tests first. Use free Lovable points only for work that needs its live editor/database/browser (integration, sync, publish). A push alone is not synchronization proof; production access or success requires direct evidence.
+
+---
+
 # Aghbari Commerce — Latest Execution State
 
 ## Current execution pointer — 2026-10-16 (PWA installability + import row-boundary acceptance)
