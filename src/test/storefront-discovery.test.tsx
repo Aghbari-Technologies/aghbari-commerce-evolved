@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   productFetchError: null as string | null,
   categoryFetchError: null as string | null,
+  categories: [] as Array<{ id: string; name: string; code: string | null; parent_id: string | null; sort_order: number; is_active: boolean }>,
   refetchProducts: vi.fn(),
   fetchPromotions: vi.fn(),
   fetchPopularProductRanking: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/useFetch", () => ({
   useFetch: (fetcher: unknown) => {
     if (fetcher === mocks.fetchProducts) return { data: mocks.productFetchError ? null : mocks.products, loading: false, error: mocks.productFetchError, refetch: mocks.refetchProducts };
-    if (fetcher === mocks.fetchCategories) return { data: mocks.categoryFetchError ? null : [], loading: false, error: mocks.categoryFetchError, refetch: vi.fn() };
+    if (fetcher === mocks.fetchCategories) return { data: mocks.categoryFetchError ? null : mocks.categories, loading: false, error: mocks.categoryFetchError, refetch: vi.fn() };
     if (fetcher === mocks.fetchPromotions) return { data: [], loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchPopularProductRanking) return { data: mocks.popularRanking, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchFeaturedProductRanking) return { data: mocks.featuredRanking, loading: false, error: null, refetch: vi.fn() };
@@ -127,6 +128,7 @@ describe("customer storefront saved discovery", () => {
     mocks.user = null;
     mocks.productFetchError = null;
     mocks.categoryFetchError = null;
+    mocks.categories.splice(0, mocks.categories.length);
     mocks.refetchProducts.mockReset();
     mocks.rpc.mockReset();
     mocks.rpc.mockResolvedValue({ data: null, error: null });
@@ -570,6 +572,45 @@ describe("customer storefront saved discovery", () => {
     const screen = await mountAt(path);
     expect(screen.host.textContent).toContain("BLOCKED / NOT CONFIGURED");
     expect(screen.host.textContent).toContain(expectedTitle);
+  });
+
+  it("renders the nested template edit screen instead of the parent view screen", async () => {
+    mocks.user = {
+      id: "ci-template-customer",
+      profileId: "ci-template-customer-profile",
+      email: "ci-template-customer@example.test",
+      roles: ["customer"],
+      name: "CI Customer",
+    };
+
+    const screen = await mountAt("/templates/template-1/edit");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.host.querySelector("h1")?.textContent).toContain("تعديل قالب الشراء");
+  });
+
+  it("renders the nested category route using the child category filter", async () => {
+    mocks.categories.splice(0, mocks.categories.length,
+      { id: "category-dry-goods", name: "Dry Goods", code: "dry-goods", parent_id: null, sort_order: 1, is_active: true },
+      { id: "category-grains", name: "Grains", code: "grains", parent_id: "category-dry-goods", sort_order: 1, is_active: true },
+    );
+    const rice = mocks.products.find((product) => product.id === "product-1");
+    const sugar = mocks.products.find((product) => product.id === "product-2");
+    if (!rice || !sugar) throw new Error("Required category test products are missing");
+    rice.category_id = "category-grains";
+    sugar.category_id = "category-dry-goods";
+
+    const screen = await mountAt("/category/dry-goods/subcategory/grains");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const productSection = screen.host.querySelector(".sf-products");
+    expect(productSection?.querySelector("h2")?.textContent).toBe("Grains");
+    expect(productSection?.textContent).toContain("Rice");
+    expect(productSection?.textContent).not.toContain("Sugar");
   });
 
   it("renders empty wishlist and comparison screens safely", async () => {
