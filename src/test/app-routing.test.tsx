@@ -45,6 +45,20 @@ describe("App routing", () => {
     "/reorder",
     "/offline",
     "/admin",
+    "/admin/workspace",
+    "/admin/catalog",
+    "/admin/data-center",
+    "/admin/import",
+    "/admin/import-logs",
+    "/admin/onyx",
+    "/admin/ai/stock-sync",
+    "/admin/ai/sync",
+    "/admin/finance-data",
+    "/admin/ai/alerts",
+    "/admin/ai/tasks",
+    "/admin/ai/reports",
+    "/admin/ai/executive",
+    "/admin/order/11111111-1111-4111-8111-111111111111",
     "/admin/ai",
     "/admin/customers",
     "/admin/data",
@@ -82,6 +96,11 @@ describe("App routing", () => {
   ])("resolves $path to its intended file route", ({ path, routeId }) => {
     const matches = makeRouter().matchRoutes(path as never);
     expect(matches.some((match) => match.routeId === routeId)).toBe(true);
+  });
+
+  it.each([{"path":"/admin/workspace","id":"/admin_/workspace"},{"path":"/admin/catalog","id":"/admin_/catalog"},{"path":"/admin/data-center","id":"/admin_/data-center"},{"path":"/admin/import","id":"/admin_/import"},{"path":"/admin/import-logs","id":"/admin_/import-logs"},{"path":"/admin/onyx","id":"/admin_/onyx"},{"path":"/admin/ai/stock-sync","id":"/admin_/ai/stock-sync"},{"path":"/admin/ai/sync","id":"/admin_/ai/sync"},{"path":"/admin/finance-data","id":"/admin_/finance-data"},{"path":"/admin/ai/alerts","id":"/admin_/ai/alerts"},{"path":"/admin/ai/tasks","id":"/admin_/ai/tasks"},{"path":"/admin/ai/reports","id":"/admin_/ai/reports"},{"path":"/admin/ai/executive","id":"/admin_/ai/executive"},{"path":"/admin/order/11111111-1111-4111-8111-111111111111","id":"/admin_/order/$id"}])("resolves $path to its intended admin route", ({ path, id }) => {
+    const matches = makeRouter().matchRoutes(path as never);
+    expect(matches.some((match) => match.routeId === id)).toBe(true);
   });
 
 });
