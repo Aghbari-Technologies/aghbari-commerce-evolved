@@ -2,6 +2,13 @@
 
 > This is a live gap tracker, not a completion certificate. It is derived from `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` §13.4 and the current source tree. A route file or successful build does not prove a screen's actions, security boundary, error/empty/offline states, audit, or deployed behavior.
 
+## 2026-10-16 — Administration screen completion slice (source modules)
+
+- Added 22 direct administrative route modules required by §13.4: product image inventory, configured AI engines, AI assistant/governance/insights/prompts/models/settings/usage ledger, architecture, audit, errors, health, queues, staff invites, restore, dev-AI home/patches/audit/settings, users/roles, and admin appearance.
+- Reused the existing tenant-scoped `AdminOperationalScreen` for product, AI recommendation, usage, audit, queue, failure, and health reads. User/role entry remains admin-only; appearance reuses the current settings form.
+- Where no verified backend contract exists (assistant execution, governance registry, prompt/model registry, staff invites, live restore, dev-AI mutations, AI-specific settings), the destination explicitly renders `BLOCKED / NOT CONFIGURED`; no fake write, connection, backup, or delivery action is claimed.
+- Regression coverage asserts each new URL resolves to its exact TanStack file-route ID. `src/routeTree.gen.ts` is intentionally left for the official TanStack build generator; synchronized output and exact-head CI are pending, so these paths are not marked registered/PASS until that evidence lands.
+
 ## Baseline
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72; branch `fix/acceptance-hardening-cart-finance-20261015`.

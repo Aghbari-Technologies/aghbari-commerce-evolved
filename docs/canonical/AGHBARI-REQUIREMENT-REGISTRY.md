@@ -1,3 +1,9 @@
+## 2026-10-16 — Administration screen completion slice
+
+- Source batch adds 22 missing administrative direct route modules from specification §13.4 and route-ID assertions for every route.
+- Existing trusted components are reused: tenant-scoped operational screens for live diagnostics and ledgers, admin-only user roles, and existing appearance settings. Unsupported server contracts are disclosed as `BLOCKED / NOT CONFIGURED`, not simulated.
+- Official TanStack route tree generation and exact-head CI are the immediate next gate; paths are not marked registered or PASS until generated-tree and current-head evidence prove it.
+
 ## 2026-10-16 — Administration operational route slice
 
 - Added direct route modules for `/admin/workspace`, `/admin/catalog`, `/admin/data-center`, `/admin/import`, `/admin/import-logs`, `/admin/onyx`, `/admin/ai/stock-sync`, `/admin/ai/sync`, `/admin/finance-data`, `/admin/order/:id`, `/admin/ai/alerts`, `/admin/ai/tasks`, `/admin/ai/reports`, and `/admin/ai/executive`.

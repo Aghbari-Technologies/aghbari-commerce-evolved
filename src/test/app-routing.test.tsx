@@ -103,4 +103,10 @@ describe("App routing", () => {
     expect(matches.some((match) => match.routeId === id)).toBe(true);
   });
 
+  it.each([["/admin/images","/admin_/images"],["/admin/engines","/admin_/engines"],["/admin/ai/assistant","/admin_/ai/assistant"],["/admin/ai/governance","/admin_/ai/governance"],["/admin/ai/insights","/admin_/ai/insights"],["/admin/ai/prompts","/admin_/ai/prompts"],["/admin/ai/models","/admin_/ai/models"],["/admin/ai/settings","/admin_/ai/settings"],["/admin/ai/audit","/admin_/ai/audit"],["/admin/architecture","/admin_/architecture"],["/admin/audit","/admin_/audit"],["/admin/errors","/admin_/errors"],["/admin/health","/admin_/health"],["/admin/queues","/admin_/queues"],["/admin/invites","/admin_/invites"],["/admin/restore","/admin_/restore"],["/admin/dev-ai","/admin_/dev-ai"],["/admin/dev-ai/patches","/admin_/dev-ai/patches"],["/admin/dev-ai/audit","/admin_/dev-ai/audit"],["/admin/dev-ai/settings","/admin_/dev-ai/settings"],["/admin/users","/admin_/users"],["/admin/appearance","/admin_/appearance"]])("resolves the administration screen %s to its exact file route", (path, routeId) => {
+    const matches = makeRouter().matchRoutes(path as never);
+    expect(matches.at(-1)?.routeId).toBe(routeId);
+    expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
+  });
+
 });
