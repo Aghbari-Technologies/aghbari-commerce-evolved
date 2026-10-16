@@ -10,7 +10,7 @@ function CheckoutPage() {
   const navigate = useNavigate();
   return (
     <ClientOnly fallback={<div className="storefront" dir="rtl" role="status">جار التحقق من السلة...</div>}>
-      <Storefront initialView="checkout" onExit={() => void navigate({ to: "/admin" })} />
+      <Storefront initialView="checkout" onExitLabel="العودة إلى السلة" onExit={() => void navigate({ to: "/cart" })} />
     </ClientOnly>
   );
 }

@@ -76,7 +76,7 @@ import {
   readOfflineCartLedger,
 } from "@/lib/offline-cart-ledger";
 
-type Mount = { root: Root; host: HTMLDivElement; active: boolean };
+type Mount = { root: Root; host: HTMLDivElement; active: boolean; router: ReturnType<typeof routerAt> };
 const mounts: Mount[] = [];
 
 function routerAt(path: string) {
@@ -91,9 +91,9 @@ async function mountAt(path: string): Promise<Mount> {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  const mount: Mount = { root, host, active: true };
-  mounts.push(mount);
   const router = routerAt(path);
+  const mount: Mount = { root, host, active: true, router };
+  mounts.push(mount);
   await router.load();
   await act(async () => {
     root.render(<RouterProvider router={router} />);
@@ -137,6 +137,24 @@ describe("customer storefront saved discovery", () => {
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
+
+  it.each(["/checkout", "/checkout/review"])(
+    "returns to the cart from the checkout header on %s",
+    async (path) => {
+      const checkout = await mountAt(path);
+      const exitButton = checkout.host.querySelector<HTMLButtonElement>(".sf-admin-btn");
+
+      expect(exitButton?.textContent).toContain("العودة إلى السلة");
+      expect(exitButton?.textContent).not.toContain("لوحة التحكم");
+
+      await act(async () => {
+        exitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(checkout.router.state.location.pathname).toBe("/cart");
+    },
+  );
 
   it("distinguishes an empty published catalog from a filtered empty result", async () => {
     mocks.products.splice(0, mocks.products.length);
