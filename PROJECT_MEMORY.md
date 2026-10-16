@@ -16,21 +16,17 @@
 **Public preview:** https://aghbari-commerce-evolved.lovable.app  
 **Canonical product name:** متجر الأغبري | Aghbari Commerce
 
-## Read these first at the start of every session
+## Session startup — minimum required reads
 
-1. `AGENTS.md` — permanent shared agent rules. GitHub Copilot also has the repository-wide entry point `.github/copilot-instructions.md`.
-2. `PROJECT_MEMORY.md` — concise product and architecture decisions.
-3. `ops/AGHBARI-SESSION-RESUME.md` — short resume procedure; do not require the owner to copy it when the repository is already available.
-4. `ops/AGHBARI-LATEST-EXECUTION-STATE.md` — current verified checkpoint and `next_task_id`.
-5. `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md` — the only requirement/gap ledger and stable IDs.
-6. `docs/canonical/AGHBARI-EXECUTION-MANDATE.md` — enduring execution/cost/safety rules.
-7. `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` — authoritative product acceptance criteria; consult only the portion required for the active task.
+1. Read root `AGENTS.md` and only the first/current pointer in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`.
+2. Match that task ID to its single row in `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+3. Read `ops/AGHBARI-SESSION-RESUME.md`, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`, `PROJECT_MEMORY.md`, or the relevant fragment of `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` only when needed to resolve a concrete task question. Do not reread all files by ritual or rescan the repository.
 
 ## Mandatory session-resume contract
 
 Run `git fetch origin`, inspect `git status --short --branch`, current branch, local `HEAD`, `origin/main`, latest commit, and GitHub Actions for that exact SHA once at session start. Match live remote state to the saved checkpoint, then execute `next_task_id`; do not repeat broad discovery or ask the owner to resend information already stored. Keep `DONE_VERIFIED` closed unless its exact-SHA proof is invalidated by a changed SHA/dependency/input, regression, security finding, or failed relevant test. If the execution host has no checkout, use available GitHub remote-ref/commit/Actions APIs to verify remote state, explicitly mark local `git fetch`/`git status`/local `HEAD` as unavailable, and never describe an API read as a successful local Git command.
 
-After each coherent batch, update the existing state, registry, and resume records with stable task ID, changed paths, real test commands/results, exact tested SHA, next task, and evidence-backed blocker. Commit and push safely to `main`, then independently verify the resulting remote SHA and its own CI. A prior SHA's PASS never transfers to a newer SHA. Lovable synchronization, Supabase production access, Onyx acceptance, AI-provider readiness and WhatsApp delivery each require separate direct evidence.
+After each coherent batch and before any run/session end, context limit, or pause, update the existing state and matching registry row with task ID, branch/PR/HEAD, changed paths, real test commands/results, exact tested SHA/CI, next task, and evidence-backed blocker. Commit and push safely to the active PR branch; integrate to `main` only after deliberate PR acceptance, then verify the resulting main SHA and its own CI. A prior SHA's PASS never transfers to a newer SHA. Lovable synchronization, Supabase production access, Onyx acceptance, AI-provider readiness and WhatsApp delivery each require separate direct evidence.
 
 The repository contains the shared root `AGENTS.md` policy and the GitHub Copilot auto-instruction file. Lovable's official documentation states that root-level `AGENTS.md` is always read by its agent regardless of session length (https://docs.lovable.dev/features/knowledge); this is the free persistent-instruction fallback. This does not prove that a particular newly pushed SHA has synchronized into the live Lovable project/editor, and it does not mean the separate Project Knowledge field was directly edited. The dynamic cursor belongs only in the latest execution-state file, not in this memory text.
 
@@ -46,12 +42,12 @@ Do not reread the repository broadly when these records answer the question. Ins
 - No simulated business success. Untested or unconfigured functions must show explicit honest states.
 
 ## Durable execution protocol
-`INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX → VERIFY → COMMIT → PUSH MAIN → SYNC LOVABLE`.
+`VERIFY ACTIVE PR/HEAD → RESUME CURRENT TASK → IMPLEMENT → TEST → FIX → CHECKPOINT → COMMIT/PUSH ACTIVE PR BRANCH → CONTINUE`.
 
 Use one requirement registry only. Classify items as COMPLETE/PROVEN, PARTIAL, WEAK, DISCONNECTED, MISSING—BACKEND EXISTS, MISSING—NO VERIFIED CONTRACT, or BLOCKED EXTERNALLY. A component, route, schema, local test, or push alone is not production completion evidence.
 
 ## Lovable budget
-The owner specified a hard budget of five Lovable points. Do not spend points on repository discovery or code generation. Finish and test source changes first, push main, then use a point only for a concrete blocker that cannot be resolved from Git/source. A Git push is not synchronization proof. Never invent sync status.
+The owner specified a hard budget of five Lovable points. Do not spend points on repository discovery or code generation. Finish and test source changes first, push the active PR branch, then use a point only for a concrete blocker that cannot be resolved from Git/source. A Git push is not synchronization proof. Never invent sync status.
 
 ## Safety and change rules
 - Never place real secrets in the repo; use environment/secrets settings. `.env` is ignored and `.env.example` has blank values.
