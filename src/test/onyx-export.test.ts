@@ -80,11 +80,19 @@ describe('Onyx order workbook draft', () => {
     expect(result.worksheetName).toBe('تفاصيل الأصناف');
     expect(result.rowCount).toBe(2);
     expect(rows[0]).toEqual([...ONYX_ORDER_COLUMNS]);
-    expect(rows[1]).toHaveLength(27);
-    expect(rows[1][0]).toBe('000125');
-    expect(rows[1][4]).toBe('3');
-    expect(rows[1][6]).toBe('12.5');
-    expect(rows[1][22]).toBe('ORD-000125');
+    // Sparse OOXML may omit trailing blank cells; normalize each record to its 27-column header.
+    expect(rows[1].length).toBeGreaterThan(22);
+    expect(rows[1].length).toBeLessThanOrEqual(ONYX_ORDER_COLUMNS.length);
+    const detailRow = Array.from(
+      { length: ONYX_ORDER_COLUMNS.length },
+      (_, index) => rows[1][index] ?? '',
+    );
+    expect(detailRow).toHaveLength(27);
+    expect(detailRow[0]).toBe('000125');
+    expect(detailRow[4]).toBe('3');
+    expect(detailRow[6]).toBe('12.5');
+    expect(detailRow[22]).toBe('ORD-000125');
+    expect(detailRow.slice(23)).toEqual(['', '', '', '']);
   });
 
   it('removes XML 1.0-forbidden control characters from dirty imported cells', () => {

@@ -103,3 +103,8 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - Existing `src/test/onyx-export.test.ts` checked 27 columns and package-token presence, but did not prove the generated workbook was readable by the production XLSX parser. Added a round-trip regression using `parseXlsxFirstWorksheet`; it verifies worksheet name, row count, exact headers, leading-zero item codes, approved quantity/price and order number.
 - Local `npx vitest run src/test/onyx-export.test.ts` NOT RUN because this runtime has no checkout and GitHub DNS resolution is blocked. Exact-SHA CI is pending. This proves internal parser interoperability only, not compatibility with the owner's Onyx version or browser-download completion.
 - Keep `AGH-ONYX-XLSX-001` active until exact-SHA CI passes or failures are corrected.
+
+## AGH-ONYX-XLSX-001 regression correction
+- First round-trip candidate `fd4bf79ae76ecd004a1a0c0748d3b9788455e32f`, Actions [38834535619](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834535619), FAILED one unit assertion: production XLSX parser returned 23 cells for the detail row because trailing blank cells are omitted in sparse OOXML. The package's header still defines 27 columns and the row's final non-empty order number is at index 22; no exporter corruption was proven.
+- Corrected the round-trip test to pad sparse cells to the declared 27-column header and assert all meaningful indices + the four trailing blanks. This verifies interoperability without requiring the generic import parser to materialize absent blank cells. New exact-SHA CI is pending.
+- Source task remains `AGH-ONYX-XLSX-001`; external Onyx import acceptance and browser download completion remain unproven.
