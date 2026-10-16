@@ -454,6 +454,17 @@ describe("customer storefront saved discovery", () => {
     expect(JSON.parse(window.localStorage.getItem("aghbari:cart:v1") || "null")).toEqual(savedCart);
   });
 
+  it("renders the guarded AI settings screen without a style crash", async () => {
+    mocks.user = { profileId: "admin-settings-profile", roles: ["staff"], name: "CI Staff" };
+
+    const settings = await mountAt("/admin/ai/settings");
+
+    expect(settings.host.textContent).toContain("إعدادات الذكاء");
+    expect(settings.host.textContent).toContain("BLOCKED / NOT CONFIGURED");
+    expect(settings.host.textContent).toContain("غير متصلة بعقد خادمي موثق");
+    expect(settings.host.textContent).toContain("مركز الذكاء");
+  });
+
   it("renders empty wishlist and comparison screens safely", async () => {
     mocks.user = { profileId: "empty-saved-lists-profile", roles: ["customer"], name: "CI Buyer" };
 
