@@ -611,6 +611,20 @@ export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
 
   async function save(key: string, value: unknown, category: string) { setSaving(true); try { await updateSetting(key, value, category); refetch(); onNotice('تم حفظ الإعداد'); } catch (e) { onNotice(e instanceof Error ? e.message : 'خطأ'); } finally { setSaving(false); } }
 
+  async function saveInvoiceMoneyDisplayPolicy(visible: boolean) {
+    setSaving(true);
+    try {
+      const result = await supabase.rpc('set_customer_invoice_amount_visibility', { p_visible: visible });
+      if (result.error) throw result.error;
+      await refetch();
+      onNotice('تم حفظ سياسة عرض مبالغ الفواتير عبر الخادم.');
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : 'تعذر حفظ سياسة عرض مبالغ الفواتير.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveMoneyDisplayPolicy(surface: 'cart' | 'order', visible: boolean) {
     setSaving(true);
     try {
@@ -629,7 +643,7 @@ export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
     {loading ? <Loading /> : <>
       <div className="settings-tabs"><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>عام</button><button className={tab === 'storefront' ? 'active' : ''} onClick={() => setTab('storefront')}>المتجر</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>المظهر</button>{canManageRoles && <button className={tab === 'access' ? 'active' : ''} onClick={() => setTab('access')}>المستخدمون والصلاحيات</button>}</div>
       {tab === 'general' && <SettingsPanel title="معلومات المتجر"><SettingInput label="اسم المتجر" value={(map.store_name as string) ?? ''} onSave={(v) => save('store_name', v, 'general')} saving={saving} /><SettingInput label="الوصف المختصر" value={(map.store_tagline as string) ?? ''} onSave={(v) => save('store_tagline', v, 'general')} saving={saving} /><SettingInput label="الهاتف" value={(map.store_phone as string) ?? ''} onSave={(v) => save('store_phone', v, 'general')} saving={saving} /><SettingInput label="البريد" value={(map.store_email as string) ?? ''} onSave={(v) => save('store_email', v, 'general')} saving={saving} /><SettingInput label="العنوان" value={(map.store_address as string) ?? ''} onSave={(v) => save('store_address', v, 'general')} saving={saving} /></SettingsPanel>}
-      {tab === 'storefront' && <SettingsPanel title="إعدادات المتجر"><SettingInput label="عنوان البانر" value={(map.hero_title as string) ?? ''} onSave={(v) => save('hero_title', v, 'storefront')} saving={saving} /><SettingInput label="نص البانر الفرعي" value={(map.hero_subtitle as string) ?? ''} onSave={(v) => save('hero_subtitle', v, 'storefront')} saving={saving} /><SettingToggle label="شريط العرض المتحرك" value={(map.ticker_enabled as boolean) ?? true} onSave={(v) => save('ticker_enabled', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار المنتجات النافدة" value={(map.show_out_of_stock as boolean) ?? true} onSave={(v) => save('show_out_of_stock', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار أسعار وإجماليات الفاتورة للعميل" value={(map.customer_invoice_amounts_visible as boolean) ?? false} onSave={(v) => save('customer_invoice_amounts_visible', v, 'privacy')} saving={saving} />{canManageMoneyDisplay && <><SettingToggle label="إظهار الأسعار والإجمالي التقديري في السلة وإتمام الطلب" value={(map.customer_cart_amounts_visible as boolean) ?? false} onSave={(v) => void saveMoneyDisplayPolicy('cart', v)} saving={saving} /><SettingToggle label="إظهار أسعار وإجمالي الطلب المسجّل للعميل" value={(map.customer_order_amounts_visible as boolean) ?? false} onSave={(v) => void saveMoneyDisplayPolicy('order', v)} saving={saving} /></>}</SettingsPanel>}
+      {tab === 'storefront' && <SettingsPanel title="إعدادات المتجر"><SettingInput label="عنوان البانر" value={(map.hero_title as string) ?? ''} onSave={(v) => save('hero_title', v, 'storefront')} saving={saving} /><SettingInput label="نص البانر الفرعي" value={(map.hero_subtitle as string) ?? ''} onSave={(v) => save('hero_subtitle', v, 'storefront')} saving={saving} /><SettingToggle label="شريط العرض المتحرك" value={(map.ticker_enabled as boolean) ?? true} onSave={(v) => save('ticker_enabled', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار المنتجات النافدة" value={(map.show_out_of_stock as boolean) ?? true} onSave={(v) => save('show_out_of_stock', v, 'storefront')} saving={saving} />{canManageMoneyDisplay && <><SettingToggle label="إظهار أسعار وإجماليات الفاتورة للعميل" value={(map.customer_invoice_amounts_visible as boolean) ?? false} onSave={(v) => void saveInvoiceMoneyDisplayPolicy(v)} saving={saving} /><SettingToggle label="إظهار الأسعار والإجمالي التقديري في السلة وإتمام الطلب" value={(map.customer_cart_amounts_visible as boolean) ?? false} onSave={(v) => void saveMoneyDisplayPolicy('cart', v)} saving={saving} /><SettingToggle label="إظهار أسعار وإجمالي الطلب المسجّل للعميل" value={(map.customer_order_amounts_visible as boolean) ?? false} onSave={(v) => void saveMoneyDisplayPolicy('order', v)} saving={saving} /></>}</SettingsPanel>}
       {tab === 'appearance' && <SettingsPanel title="ألوان النظام"><SettingColor label="اللون الأساسي" value={(map.theme_primary as string) ?? '#087f8d'} onSave={(v) => save('theme_primary', v, 'appearance')} saving={saving} /><SettingColor label="لون التمييز" value={(map.theme_accent as string) ?? '#0eaa97'} onSave={(v) => save('theme_accent', v, 'appearance')} saving={saving} /></SettingsPanel>}
       {tab === 'access' && canManageRoles && user && <OrganizationRoleManagement currentProfileId={user.profileId} onNotice={onNotice} />}
     </>}

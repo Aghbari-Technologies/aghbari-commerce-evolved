@@ -1210,12 +1210,20 @@ async function main() {
   assert.equal(hiddenInvoicePdf.lines[0].line_total, null, "hidden line total must not leak through JSON");
   assert.equal(hiddenInvoicePdf.customer.id, undefined, "PDF customer projection should not return an internal customer primary key");
 
-  // An explicit organization-level opt-in unlocks amounts for the authorized customer only.
-  await db.unsafe("reset role");
-  await db.unsafe(
-    "insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_invoice_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
-    [organizationId],
+  // The setting must be changed through the role-checked RPC, never a generic customer write.
+  await expectFailure(
+    "customer cannot change invoice amount visibility",
+    () => db.unsafe("select public.set_customer_invoice_amount_visibility(true)"),
+    /admin or manager/i,
   );
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const invoiceVisibilityEnabled = await db.unsafe(
+    "select public.set_customer_invoice_amount_visibility(true) as result",
+  );
+  assert.equal(invoiceVisibilityEnabled[0].result.visible, true, "admin can explicitly enable invoice amounts");
+  await db.unsafe("reset role");
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
   const visibleInvoicePdfResult = await db.unsafe(
@@ -1228,8 +1236,17 @@ async function main() {
   assert.equal(Number(visibleInvoicePdf.lines[0].unit_price), 37000);
   assert.equal(Number(visibleInvoicePdf.lines[0].line_total), 370000);
 
-  // A second customer in the same organization must never receive the first customer's statement.
+  // Restore the secure default through the same privileged contract to avoid fixture bleed.
   await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const invoiceVisibilityDisabled = await db.unsafe(
+    "select public.set_customer_invoice_amount_visibility(false) as result",
+  );
+  assert.equal(invoiceVisibilityDisabled[0].result.visible, false);
+  await db.unsafe("reset role");
+
+  // A second customer in the same organization must never receive the first customer's statement.
   await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
   await db.unsafe("set role authenticated");
   const otherStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
