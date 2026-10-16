@@ -827,7 +827,7 @@ function Checkout({ cart, onBack, onComplete }: { cart: CartItem[]; onBack: () =
           </fieldset>
           <label className="sf-form-field"><span>ملاحظات</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي ملاحظات على الطلب..." /></label>
           {previewError && <div className="sf-form-error" role="alert">{previewError} <button className="sf-link" type="button" onClick={() => setPreviewRetry((n) => n + 1)}>إعادة التحقق</button></div>}
-          {error && <div className="sf-form-error">{error}</div>}
+          {error && <div className="sf-form-error" role="alert" aria-live="assertive">{error}</div>}
           <div className="sf-checkout-actions"><button className="sf-btn-secondary" onClick={onBack}>رجوع</button><button className="sf-btn-primary" onClick={submit} disabled={submitting || previewLoading || deliveryAddressesLoading || !cartValidation}>{submitting ? 'جار الإرسال...' : previewLoading ? 'جارٍ التحقق من السلة...' : deliveryAddressesLoading ? 'جارٍ تحميل عناوين التوصيل...' : 'تأكيد الطلب'}</button></div>
         </div>
         <aside className="sf-checkout-summary">

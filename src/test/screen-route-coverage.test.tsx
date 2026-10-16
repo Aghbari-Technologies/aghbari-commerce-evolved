@@ -11,6 +11,12 @@ function makeRouter() {
 
 describe("new customer route coverage", () => {
   it.each([
+    ["/cart", "/cart"],
+    ["/checkout", "/checkout"],
+    ["/checkout/review", "/checkout_/review"],
+    ["/checkout/confirm", "/checkout_/confirm"],
+    ["/orders", "/orders"],
+    ["/orders/11111111-1111-4111-8111-111111111111", "/orders/$id"],
     ["/catalog", "/catalog"],
     ["/products", "/products"],
     ["/search", "/search"],

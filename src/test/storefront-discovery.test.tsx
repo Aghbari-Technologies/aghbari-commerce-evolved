@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
   ],
   fetchSettingsMap: vi.fn(),
   user: null as null | { profileId: string; roles: string[]; name: string },
-  rpc: vi.fn(async () => ({ data: null as unknown, error: null as unknown })),
+  rpc: vi.fn(async (_name?: string, _args?: Record<string, unknown>) => ({ data: null as unknown, error: null as unknown })),
   products: [
     { id: "product-1", name: "Rice", item_code: "SKU-001", barcode: null, description: null, unit: "carton", base_price: 1000, cost_price: 600, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1000, wholesale_price: 900, inventory: { id: "inv-1", product_id: "product-1", warehouse_id: "warehouse-1", quantity_on_hand: 20, quantity_reserved: 0, quantity_available: 20, reorder_point: 0 } },
     { id: "product-2", name: "Sugar", item_code: "SKU-002", barcode: null, description: null, unit: "carton", base_price: 1200, cost_price: 800, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1200, wholesale_price: 1100, inventory: { id: "inv-2", product_id: "product-2", warehouse_id: "warehouse-1", quantity_on_hand: 15, quantity_reserved: 0, quantity_available: 15, reorder_point: 0 } },
@@ -352,6 +352,80 @@ describe("customer storefront saved discovery", () => {
     const compareB = await mountAt("/compare");
     expect(compareB.host.textContent).toContain("Beans");
     expect(compareB.host.textContent).not.toContain("Sugar");
+  });
+
+  it("keeps failed checkout visible, preserves the cart, and reuses the idempotency key on retry", async () => {
+    mocks.user = { profileId: "checkout-retry-profile", roles: ["customer"], name: "CI Buyer" };
+    const savedCart = [{ product_id: "product-1", quantity: 2 }];
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify(savedCart));
+
+    const preview = {
+      valid: true,
+      pricing_verified: true,
+      item_count: 1,
+      currency: "YER",
+      amounts_visible: false,
+      items: [{ product_id: "product-1", name: "Rice", item_code: "SKU-001", unit: "carton", quantity: 2 }],
+    };
+    const attemptedKeys: string[] = [];
+    mocks.rpc.mockImplementation(async (name, args) => {
+      if (name === "get_customer_checkout_preview") return { data: preview, error: null };
+      if (name === "submit_customer_order") {
+        attemptedKeys.push(String(args?._idempotency_key ?? ""));
+        return { data: null, error: { message: "تعذر تسجيل الطلب" } };
+      }
+      return { data: null, error: null };
+    });
+
+    const checkout = await mountAt("/checkout");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    const nameInput = checkout.host.querySelector<HTMLInputElement>('input[placeholder="اسمك الكامل"]');
+    const phoneInput = checkout.host.querySelector<HTMLInputElement>('input[placeholder="7XX XXX XXX"]');
+    expect(nameInput).toBeTruthy();
+    expect(phoneInput).toBeTruthy();
+    await act(async () => {
+      const setValue = (element: HTMLInputElement, value: string) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        if (!setter) throw new Error("Native input setter is unavailable");
+        setter.call(element, value);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      setValue(nameInput!, "مشتري اختبار");
+      setValue(phoneInput!, "777123456");
+    });
+
+    const submitOnce = async () => {
+      const button = Array.from(checkout.host.querySelectorAll<HTMLButtonElement>("button"))
+        .find((candidate) => candidate.textContent?.includes("تأكيد الطلب"));
+      expect(button).toBeTruthy();
+      expect(button?.disabled).toBe(false);
+      await act(async () => {
+        button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    };
+    const assertSubmissionError = () => {
+      const error = Array.from(checkout.host.querySelectorAll<HTMLElement>('[role="alert"].sf-form-error'))
+        .find((element) => element.textContent?.includes("تعذر تسجيل الطلب"));
+      expect(error?.textContent).toContain("تعذر تسجيل الطلب");
+    };
+
+    await submitOnce();
+    assertSubmissionError();
+    expect(checkout.host.textContent).not.toContain("تم استلام طلبك بنجاح");
+    expect(checkout.host.textContent).toContain("Rice");
+    expect(JSON.parse(window.localStorage.getItem("aghbari:cart:v1") || "null")).toEqual(savedCart);
+    expect(attemptedKeys).toHaveLength(1);
+    expect(attemptedKeys[0]).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+
+    await submitOnce();
+    expect(attemptedKeys).toHaveLength(2);
+    expect(attemptedKeys[1]).toBe(attemptedKeys[0]);
+    assertSubmissionError();
+    expect(checkout.host.textContent).not.toContain("تم استلام طلبك بنجاح");
+    expect(JSON.parse(window.localStorage.getItem("aghbari:cart:v1") || "null")).toEqual(savedCart);
   });
 
   it("persists wishlist and caps comparison at three across direct route loads", async () => {
