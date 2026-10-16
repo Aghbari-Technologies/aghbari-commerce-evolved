@@ -15,7 +15,7 @@ describe("new customer route coverage", () => {
     ["/products", "/products"],
     ["/search", "/search"],
     ["/pricing", "/pricing"],
-    ["/company", "/company"],
+    ["/company", "/company_"],
     ["/financial-documents", "/financial-documents"],
     ["/payments", "/payments"],
     ["/receivables", "/receivables"],
