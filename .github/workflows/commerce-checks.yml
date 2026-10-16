@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Install Bun for frozen-lockfile verification
         uses: oven-sh/setup-bun@v2
       - name: Verify Bun lockfile matches package.json
@@ -47,6 +49,28 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Unit tests
         run: npm test
+      - name: Import streaming performance probe (run only when the latest PR commit changes import code)
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          target_sha="${PR_HEAD_SHA:-$GITHUB_SHA}"
+          if ! git cat-file -e "${target_sha}^{commit}" 2>/dev/null; then
+            echo "::notice::Import benchmark skipped because the exact PR commit is not available in the checkout."
+            exit 0
+          fi
+          parent_sha="$(git rev-parse "${target_sha}^" 2>/dev/null || true)"
+          if [[ -n "$parent_sha" ]] && git diff --quiet "$parent_sha" "$target_sha" -- \
+            src/lib/unified-import.ts \
+            src/components/UnifiedImportEngine.tsx \
+            src/lib/unified-import.test.ts \
+            src/test/commerce-utils.test.ts \
+            scripts/benchmark-import-streaming.ts; then
+            echo "Skipped import benchmark: the latest source commit does not change import processing or its benchmark."
+            exit 0
+          fi
+          bun run scripts/benchmark-import-streaming.ts
       - name: Apply all migrations to isolated PostgreSQL 17 and verify core workflows
         shell: bash
         run: |
