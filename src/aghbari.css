@@ -161,7 +161,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sf-header-links button, .sf-discovery-links button { border: 0; background: transparent; color: #47656c; display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .sf-header-links button:hover, .sf-discovery-links button:hover { color: #087f8e; }
 .sf-header-links b { min-width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; color: #087f8e; background: #e5f7f7; font-size: 9px; }
-.sf-product-img { position: relative; cursor: pointer; overflow: hidden; }
+.sf-product-img { position: relative; overflow: hidden; }
+.sf-product-image-open { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.sf-product-image-open:focus-visible { outline: 3px solid #087f8e; outline-offset: -3px; }
+.sf-product-card:focus-within .sf-card-actions { opacity: 1; transform: translateY(0); }
+.sf-card-actions { z-index: 2; }
 .sf-product-img img, .sf-detail-image img { width: 100%; height: 100%; object-fit: contain; }
 .sf-card-actions { position: absolute; top: 9px; left: 9px; display: flex; gap: 5px; opacity: 0; transform: translateY(-4px); transition: .2s; }
 .sf-product-card:hover .sf-card-actions { opacity: 1; transform: translateY(0); }

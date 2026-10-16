@@ -198,6 +198,26 @@ describe("customer storefront saved discovery", () => {
     },
   );
 
+  it("opens product details through a named, keyboard-focusable image button", async () => {
+    const catalog = await mountAt("/catalog");
+    const imageButton = catalog.host.querySelector<HTMLButtonElement>(".sf-product-image-open");
+
+    expect(imageButton?.tagName).toBe("BUTTON");
+    expect(imageButton?.getAttribute("aria-label")).toBe("عرض تفاصيل Rice");
+    imageButton?.focus();
+    expect(document.activeElement).toBe(imageButton);
+
+    await act(async () => {
+      imageButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(catalog.router.state.location.pathname).toBe("/product/product-1");
+    expect(Array.from(catalog.host.querySelectorAll<HTMLButtonElement>(".sf-card-actions button"))
+      .map((button) => button.getAttribute("aria-label")))
+      .toContain("إضافة Rice للمفضلة");
+  });
+
   it("distinguishes an empty published catalog from a filtered empty result", async () => {
     mocks.products.splice(0, mocks.products.length);
     const empty = await mountAt("/");
