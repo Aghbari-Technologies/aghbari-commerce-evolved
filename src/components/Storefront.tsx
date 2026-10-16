@@ -42,10 +42,11 @@ function readSavedProductIds(key: string, maxItems: number): string[] {
   }
 }
 
-export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
+export function Storefront({ onExit, initialView = 'shop', initialProductId, initialQuery }: {
   onExit: () => void;
   initialView?: StorefrontInitialView;
   initialProductId?: string;
+  initialQuery?: string;
 }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -78,7 +79,7 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
   const [cartRestoreError, setCartRestoreError] = useState('');
   const [cartHydrationRetry, setCartHydrationRetry] = useState(0);
   const cartRestored = cartRestoredScope === cartScopeKey;
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [activeCat, setActiveCat] = useState<string>('');
   const [matrixQuantities, setMatrixQuantities] = useState<Record<string, string>>({});
   const [matrixFeedback, setMatrixFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
@@ -121,6 +122,10 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
     if (initialView !== 'product' || !initialProductId || !products.length) return;
     setSelectedProduct(products.find((product) => product.id === initialProductId) ?? null);
   }, [initialView, initialProductId, products]);
+
+  useEffect(() => {
+    setQuery(initialQuery ?? '');
+  }, [initialQuery]);
 
   useEffect(() => {
     if (cachedCatalog.scopeKey === cartScopeKey || typeof window === 'undefined') return;
