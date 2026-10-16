@@ -47,6 +47,14 @@ jobs:
           node-version: 22
       - name: Install dependencies from verified Bun lockfile
         run: bun install --frozen-lockfile
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          SUPABASE_URL: https://ci-placeholder.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+        run: npm run build
+
       - name: Unit tests
         run: npm test
       - name: Import streaming performance probe (run only when the latest PR commit changes import code)
@@ -244,13 +252,6 @@ jobs:
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
       - name: Lint (excluding repository-wide Prettier formatting rule)
         run: npm run lint -- --rule=prettier/prettier:off
-      - name: Build
-        env:
-          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
-          SUPABASE_URL: https://ci-placeholder.supabase.co
-          SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
-        run: npm run build
 
       # The dev server compiles routes on demand and can hide missing production SSR/handler output.
       # Verify the actual built artifact separately before treating a green build as deployable.
