@@ -2,8 +2,8 @@
 
 ## Active workstream
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`.
-- Completed latest source SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. Finance membership-aware statement regression passed on this exact code SHA; current branch HEAD was verified at this SHA before this documentation checkpoint.
-- Latest source CI: exact SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS: 21/21 unit-test files, 249/249 tests, isolated PostgreSQL 17 migration/workflow tests including finance-member statement access and buyer denial, logical backup/restore, lint/build, preview smoke 4173 and dev smoke 5173.
+- Completed latest tested source SHA `96b064c9a772f2267e73e2ad41c0381593be4e05`, Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS. XLSX export-to-production-reader round-trip regression passes on this exact SHA; current branch HEAD was verified at this SHA before this checkpoint.
+- Latest source CI: exact SHA `96b064c9a772f2267e73e2ad41c0381593be4e05`, Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS: 21/21 unit-test files, 250/250 tests, PostgreSQL 17 migrations/workflows, logical backup/restore, lint/build, preview smoke 4173 and dev smoke 5173. Import streaming benchmark skipped because this was only an XLSX test/docs change.
 - Last previously verified baseline: exact source/workflow SHA `f71f3f70f0683685d7707b085e7ef63fa1ec89a5`, Actions [38829458881](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38829458881) PASS, including 21 test files, isolated PostgreSQL migration/workflow checks, RLS/policy/trigger/sequence/extension signatures, lint, production build, preview smoke 4173 and dev-server smoke 5173. Subsequent test-fixture and globals/ACL changes are evaluated only by current candidate CI above.
 
 ## Only next task
@@ -14,7 +14,7 @@
 - `AGH-OPS-DR-001` remains **PARTIAL** because production backup/restore, production failover, and live runtime proof are not available; do not close the umbrella requirement. Lovable/browser/prod access remains a separate gate.
 
 ## Evidence checkpoint
-- Last tested source SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795` / Actions `38834000106` SUCCESS. This next commit is a documentation checkpoint; no test evidence transfers to later code SHA.
+- Last tested source SHA `96b064c9a772f2267e73e2ad41c0381593be4e05` / Actions `38834690553` SUCCESS. This metadata checkpoint is based on the latest XLSX round-trip candidate and does not transfer proof to later source SHA.
 - Previously verified importer profile SHA: `c241970e648f7292178e0a9a88bdf4938a69ef2f` / Actions 38828317225.
 - Previously verified PWA source preview: `2ee243599c60054468f419c541f3d52ea7e2a111` / Actions 38825705008 and `cdfed3adb21ee881f85117e6f2f163a4c7cf0de2` / Actions 38825885494.
 - Recheck exact HEAD every resume. Isolated CI, live browser acceptance, and production database proof remain separate claims.
@@ -108,3 +108,10 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - First round-trip candidate `fd4bf79ae76ecd004a1a0c0748d3b9788455e32f`, Actions [38834535619](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834535619), FAILED one unit assertion: production XLSX parser returned 23 cells for the detail row because trailing blank cells are omitted in sparse OOXML. The package's header still defines 27 columns and the row's final non-empty order number is at index 22; no exporter corruption was proven.
 - Corrected the round-trip test to pad sparse cells to the declared 27-column header and assert all meaningful indices + the four trailing blanks. This verifies interoperability without requiring the generic import parser to materialize absent blank cells. New exact-SHA CI is pending.
 - Source task remains `AGH-ONYX-XLSX-001`; external Onyx import acceptance and browser download completion remain unproven.
+
+## AGH-ONYX-XLSX-001 acceptance checkpoint
+- Source test commit: `96b064c9a772f2267e73e2ad41c0381593be4e05`, exact GitHub Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS.
+- CI proves 21/21 test files and 250/250 tests. PostgreSQL 17 migrations/workflows, logical backup/restore drill, lint, build, preview smoke 4173 and dev smoke 5173 passed. Import streaming benchmark correctly skipped because this commit changed no import-processing file.
+- Round-trip builds the 27-column XLSX and reads it through production `parseXlsxFirstWorksheet`, validating sheet, row count, exact header, sparse detail normalization, SKU `000125`, quantity `3`, price `12.5`, order number `ORD-000125`, and four trailing blanks.
+- The initial candidate `fd4bf79ae76ecd004a1a0c0748d3b9788455e32f` failed only because its test assumed trailing blank cells were serialized explicitly. Normalizing sparse OOXML rows resolved it. No exporter code change required. Actual browser download and compatibility with target Onyx version remain unproven.
+- Next source task: `AGH-ASYNC-OUTBOX-001`.
