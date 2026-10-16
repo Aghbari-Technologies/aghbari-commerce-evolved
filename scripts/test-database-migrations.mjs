@@ -1212,9 +1212,17 @@ async function main() {
 
   // The setting must be changed through the role-checked RPC, never a generic customer write.
   await expectFailure(
-    "customer cannot change invoice amount visibility",
+    "customer cannot change invoice amount visibility through the RPC",
     () => db.unsafe("select public.set_customer_invoice_amount_visibility(true)"),
     /admin or manager/i,
+  );
+  await expectFailure(
+    "customer cannot write invoice visibility setting directly",
+    () => db.unsafe(
+      "insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_invoice_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+      [organizationId],
+    ),
+    /row-level security|permission denied/i,
   );
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
@@ -1223,6 +1231,30 @@ async function main() {
     "select public.set_customer_invoice_amount_visibility(true) as result",
   );
   assert.equal(invoiceVisibilityEnabled[0].result.visible, true, "admin can explicitly enable invoice amounts");
+  await db.unsafe("reset role");
+  await setIdentity(operationsStaffAuthUserId, "ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  const staffCanReadInvoicePolicy = await db.unsafe(
+    "select value from public.admin_settings where organization_id=$1 and key='customer_invoice_amounts_visible'",
+    [organizationId],
+  );
+  assert.equal(staffCanReadInvoicePolicy.length, 1, "staff can read the display policy needed to render settings");
+  assert.equal(staffCanReadInvoicePolicy[0].value, true);
+  for (const protectedKey of ["customer_invoice_amounts_visible", "customer_cart_amounts_visible", "customer_order_amounts_visible"]) {
+    await expectFailure(
+      "staff cannot write protected display setting directly: " + protectedKey,
+      () => db.unsafe(
+        "insert into public.admin_settings(organization_id,key,value,category) values ($1,$2,'true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+        [organizationId, protectedKey],
+      ),
+      /row-level security|permission denied/i,
+    );
+  }
+  await expectFailure(
+    "staff cannot change invoice amount visibility through the RPC",
+    () => db.unsafe("select public.set_customer_invoice_amount_visibility(false)"),
+    /admin or manager/i,
+  );
   await db.unsafe("reset role");
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");

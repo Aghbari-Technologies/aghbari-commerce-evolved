@@ -51,3 +51,38 @@ GRANT EXECUTE ON FUNCTION public.set_customer_invoice_amount_visibility(boolean)
 
 COMMENT ON FUNCTION public.set_customer_invoice_amount_visibility(boolean) IS
   'Admin/manager-only tenant-scoped invoice financial display policy. Missing or invalid setting values remain hidden in get_customer_invoice_pdf.';
+
+-- The original staff_all_admin_settings policy allowed every staff member to mutate any
+-- setting. High-impact customer money visibility keys are now read-only through PostgREST:
+-- only their dedicated SECURITY DEFINER RPCs may change them.
+DROP POLICY IF EXISTS "staff_all_admin_settings" ON public.admin_settings;
+CREATE POLICY "staff_all_admin_settings" ON public.admin_settings
+FOR ALL TO authenticated
+USING (
+  public.is_staff()
+  AND key NOT IN (
+    'customer_invoice_amounts_visible',
+    'customer_cart_amounts_visible',
+    'customer_order_amounts_visible'
+  )
+)
+WITH CHECK (
+  public.is_staff()
+  AND key NOT IN (
+    'customer_invoice_amounts_visible',
+    'customer_cart_amounts_visible',
+    'customer_order_amounts_visible'
+  )
+);
+
+DROP POLICY IF EXISTS "staff_read_customer_money_display_settings" ON public.admin_settings;
+CREATE POLICY "staff_read_customer_money_display_settings" ON public.admin_settings
+FOR SELECT TO authenticated
+USING (
+  public.is_staff()
+  AND key IN (
+    'customer_invoice_amounts_visible',
+    'customer_cart_amounts_visible',
+    'customer_order_amounts_visible'
+  )
+);
