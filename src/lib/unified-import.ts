@@ -10,6 +10,31 @@ export const UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export const PROCESSING_CHUNK_ROWS = 1_000;
 export const MAX_ARCHIVE_EXPANSION_FACTOR = 10;
 
+/** A shared guard used before hashing, parsing or resuming any selected import file. */
+export function isImportFileSizeAllowed(fileSize: number): boolean {
+  return Number.isSafeInteger(fileSize) && fileSize >= 1 && fileSize <= MAX_IMPORT_FILE_BYTES;
+}
+
+/** Hard ceiling for bytes inflated from an XLSX archive for this specific archive size. */
+export function getXlsxExpandedByteLimit(fileSize: number): number {
+  if (!isImportFileSizeAllowed(fileSize)) throw new Error('حجم ملف XLSX يجب أن يكون بين 1 بايت و100MB.');
+  return Math.min(MAX_IMPORT_FILE_BYTES, Math.max(fileSize * MAX_ARCHIVE_EXPANSION_FACTOR, 5 * 1024 * 1024));
+}
+
+/** Validate both the next ZIP member and the aggregate inflated-byte budget before retaining it. */
+export function assertXlsxExpandedBytesWithinLimit(
+  alreadyExpandedBytes: number,
+  nextEntryBytes: number,
+  expandedLimit: number,
+): void {
+  if (!Number.isSafeInteger(alreadyExpandedBytes) || alreadyExpandedBytes < 0 ||
+      !Number.isSafeInteger(nextEntryBytes) || nextEntryBytes < 0 ||
+      !Number.isSafeInteger(expandedLimit) || expandedLimit < 1 ||
+      nextEntryBytes > expandedLimit || alreadyExpandedBytes + nextEntryBytes > expandedLimit) {
+    throw new Error('محتوى XLSX بعد فك الضغط يتجاوز الحد الآمن؛ تم إيقاف القراءة قبل اعتماد أي لقطة.');
+  }
+}
+
 function sortJsonObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
   if (value && typeof value === 'object') {
@@ -175,9 +200,12 @@ export class IncrementalSha256 {
 }
 
 export async function hashFileSha256(file: Blob, onProgress?: (processedBytes: number) => void): Promise<string> {
+  if (!isImportFileSizeAllowed(file.size)) {
+    throw new Error('حجم ملف الاستيراد يجب أن يكون بين 1 بايت و100MB.');
+  }
   const digest = new IncrementalSha256();
   for (let offset = 0; offset < file.size; offset += UPLOAD_CHUNK_BYTES) {
-    const bytes = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+    const bytes = new Uint8Array(await readBlobArrayBuffer(file.slice(offset, Math.min(file.size, offset + UPLOAD_CHUNK_BYTES))));
     digest.update(bytes);
     onProgress?.(Math.min(file.size, offset + bytes.byteLength));
   }
@@ -401,6 +429,21 @@ export class StreamingCsvParser {
   private currentCellExceeded = false;
   private rowCount = 0;
 
+  /**
+   * Retain at most one overflow field for deterministic row rejection. Without this
+   * cap, a single comma-heavy line can allocate millions of array elements before
+   * validateCsvRow gets a chance to enforce MAX_IMPORT_COLUMNS.
+   */
+  private appendCurrentCell(): void {
+    if (this.currentRow.length <= MAX_IMPORT_COLUMNS) {
+      this.currentRow.push(
+        this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell,
+      );
+    }
+    this.currentCell = '';
+    this.currentCellExceeded = false;
+  }
+
   async push(chunk: string, onRow: (values: string[]) => void | Promise<void>, final = false): Promise<void> {
     this.pending += chunk;
     let cursor = 0;
@@ -424,16 +467,12 @@ export class StreamingCsvParser {
         continue;
       }
       if (char === ',' && !this.quoted) {
-        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
-        this.currentCell = '';
-        this.currentCellExceeded = false;
+        this.appendCurrentCell();
         continue;
       }
       if ((char === '\n' || char === '\r') && !this.quoted) {
         if (char === '\r' && next === '\n') cursor += 1;
-        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
-        this.currentCell = '';
-        this.currentCellExceeded = false;
+        this.appendCurrentCell();
         const values = this.currentRow;
         this.currentRow = [];
         if (values.some((part) => part.trim() !== '')) {
@@ -458,9 +497,7 @@ export class StreamingCsvParser {
       if (this.currentCell.length || this.currentCellExceeded || this.currentRow.length || this.pending.length) {
         this.currentCell += this.pending;
         this.pending = '';
-        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
-        this.currentCell = '';
-        this.currentCellExceeded = false;
+        this.appendCurrentCell();
         const values = this.currentRow;
         this.currentRow = [];
         if (values.some((part) => part.trim() !== '')) {
@@ -537,6 +574,7 @@ export function chooseImportStatus(score: number): 'completed' | 'manual_review'
 
 type XlsxZipEntry = {
   name: string;
+  flags: number;
   compressionMethod: number;
   compressedSize: number;
   uncompressedSize: number;
@@ -544,9 +582,8 @@ type XlsxZipEntry = {
 };
 
 const MAX_XLSX_ENTRY_COUNT = 10_000;
-const MAX_XLSX_EXPANDED_BYTES = MAX_IMPORT_FILE_BYTES;
 
-function decodeXlsxXmlText(value: string): string {
+function decodeXlsxXmlText(value: string) {
   return value
     .replace(/&#x([0-9a-f]+);/gi, (_whole, hex: string) => {
       const point = Number.parseInt(hex, 16);
@@ -660,7 +697,7 @@ function resolveXlsxSheetPath(target: string): string {
   return result;
 }
 
-async function readXlsxBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+async function readBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   const nativeArrayBuffer = (blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
   if (typeof nativeArrayBuffer === 'function') return nativeArrayBuffer.call(blob);
   if (typeof FileReader === 'undefined') throw new Error('المتصفح لا يوفر واجهة قراءة أجزاء ملف XLSX.');
@@ -681,7 +718,7 @@ function xlsxBlobStream(blob: Blob): ReadableStream<Uint8Array> {
   // Fallback is only for test/legacy Blob implementations. Modern browsers use Blob.stream().
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      void readXlsxBlobArrayBuffer(blob).then((buffer) => {
+      void readBlobArrayBuffer(blob).then((buffer) => {
         const bytes = new Uint8Array(buffer);
         const segmentBytes = 64 * 1024;
         for (let offset = 0; offset < bytes.length; offset += segmentBytes) {
@@ -696,7 +733,7 @@ function xlsxBlobStream(blob: Blob): ReadableStream<Uint8Array> {
 async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntry>> {
   if (file.size < 22) throw new Error('ملف XLSX تالف أو أقصر من ترويسة ZIP المطلوبة.');
   const tailStart = Math.max(0, file.size - 22 - 65_535);
-  const tail = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(tailStart)));
+  const tail = new Uint8Array(await readBlobArrayBuffer(file.slice(tailStart)));
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
   let endOffset = -1;
   for (let offset = tail.length - 22; offset >= Math.max(0, tail.length - 22 - 65_535); offset -= 1) {
@@ -718,7 +755,7 @@ async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntr
   if (entryCount < 1 || entryCount > MAX_XLSX_ENTRY_COUNT || directorySize > 8 * 1024 * 1024 ||
       directoryOffset + directorySize > eocdAbsolute) throw new Error('فهرس XLSX غير صالح أو يتجاوز الحدود الآمنة.');
 
-  const bytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(directoryOffset, directoryOffset + directorySize)));
+  const bytes = new Uint8Array(await readBlobArrayBuffer(file.slice(directoryOffset, directoryOffset + directorySize)));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const entries = new Map<string, XlsxZipEntry>();
@@ -744,7 +781,7 @@ async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntr
     if (name.startsWith('/') || name.split('/').includes('..') || entries.has(name)) {
       throw new Error('أسماء مسارات مكونات XLSX غير صالحة أو مكررة.');
     }
-    entries.set(name, { name, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
+    entries.set(name, { name, flags, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
     offset = nextOffset;
   }
   if (offset !== bytes.length) throw new Error('طول فهرس ZIP لا يطابق عدد سجلات XLSX.');
@@ -759,12 +796,12 @@ export async function parseXlsxFirstWorksheet(
   file: Blob,
   onRow: (values: string[]) => void | Promise<void>,
 ): Promise<{ rowCount: number; worksheetName: string }> {
-  if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_IMPORT_FILE_BYTES) {
+  if (!isImportFileSizeAllowed(file.size)) {
     throw new Error('حجم ملف XLSX يجب أن يكون بين 1 بايت و100MB.');
   }
   const entries = await readXlsxZipDirectory(file);
   let expandedBytes = 0;
-  const expandedLimit = Math.min(MAX_XLSX_EXPANDED_BYTES, Math.max(file.size * MAX_ARCHIVE_EXPANSION_FACTOR, 5 * 1024 * 1024));
+  const expandedLimit = getXlsxExpandedByteLimit(file.size);
 
   const readEntry = async (name: string, required: boolean): Promise<string | null> => {
     const entry = entries.get(name);
@@ -772,21 +809,33 @@ export async function parseXlsxFirstWorksheet(
       if (required) throw new Error('ملف XLSX يفتقد المكون المطلوب: ' + name);
       return null;
     }
-    if (entry.uncompressedSize > expandedLimit || expandedBytes + entry.uncompressedSize > expandedLimit) {
-      throw new Error('محتوى XLSX بعد فك الضغط يتجاوز الحد الآمن؛ تم إيقاف القراءة قبل اعتماد أي لقطة.');
-    }
-    const localBytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
+    assertXlsxExpandedBytesWithinLimit(expandedBytes, entry.uncompressedSize, expandedLimit);
+    const localBytes = new Uint8Array(await readBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
     if (localBytes.length !== 30) throw new Error('ترويسة مكون XLSX ناقصة.');
     const local = new DataView(localBytes.buffer, localBytes.byteOffset, localBytes.byteLength);
-    if (local.getUint32(0, true) !== 0x04034b50 || local.getUint16(8, true) !== entry.compressionMethod) {
+    const localFlags = local.getUint16(6, true);
+    const localNameLength = local.getUint16(26, true);
+    const localExtraLength = local.getUint16(28, true);
+    if (local.getUint32(0, true) !== 0x04034b50 ||
+        local.getUint16(8, true) !== entry.compressionMethod || localFlags !== entry.flags) {
       throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
     }
-    const dataStart = entry.localHeaderOffset + 30 + local.getUint16(26, true) + local.getUint16(28, true);
+    const localNameBytes = new Uint8Array(await readBlobArrayBuffer(
+      file.slice(entry.localHeaderOffset + 30, entry.localHeaderOffset + 30 + localNameLength),
+    ));
+    let localName: string;
+    try {
+      localName = new TextDecoder('utf-8', { fatal: true }).decode(localNameBytes);
+    } catch {
+      throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
+    }
+    if (localName !== entry.name) throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
+    const dataStart = entry.localHeaderOffset + 30 + localNameLength + localExtraLength;
     const dataEnd = dataStart + entry.compressedSize;
     if (dataStart < entry.localHeaderOffset + 30 || dataEnd > file.size) throw new Error('حدود بيانات مكون XLSX غير صالحة.');
     const member = file.slice(dataStart, dataEnd);
     if (entry.compressionMethod === 0) {
-      const plainBytes = new Uint8Array(await readXlsxBlobArrayBuffer(member));
+      const plainBytes = new Uint8Array(await readBlobArrayBuffer(member));
       if (plainBytes.byteLength !== entry.uncompressedSize ||
           expandedBytes + plainBytes.byteLength > expandedLimit) {
         throw new Error('حجم مكون XLSX المخزن لا يطابق الفهرس أو يتجاوز الحد الآمن.');
@@ -812,7 +861,13 @@ export async function parseXlsxFirstWorksheet(
         const result = await reader.read();
         if (result.done) break;
         actualBytes += result.value.byteLength;
-        if (actualBytes > entry.uncompressedSize || expandedBytes + actualBytes > expandedLimit) {
+        if (actualBytes > entry.uncompressedSize) {
+          await reader.cancel();
+          throw new Error('حجم مكون XLSX بعد فك الضغط تجاوز الحجم المعلن.');
+        }
+        try {
+          assertXlsxExpandedBytesWithinLimit(expandedBytes, actualBytes, expandedLimit);
+        } catch {
           await reader.cancel();
           throw new Error('محتوى XLSX بعد فك الضغط تجاوز الحجم المعلن أو الحد الآمن.');
         }
@@ -891,7 +946,11 @@ export async function parseXlsxFirstWorksheet(
         else if (kind === 'd') value = raw;
         else value = formatXlsxNumber(raw, Number.isInteger(styleIndex) ? styleIndex : 0, styles, date1904);
       }
-      values[column] = value;
+      // Match the CSV contract: preserve the rejected state without forwarding the
+      // full oversized string to downstream import stages.
+      values[column] = value.length > MAX_IMPORT_CELL_CHARS
+        ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1)
+        : value;
     }
     await onRow(Array.from({ length: values.length }, (_value, index) => values[index] ?? ''));
   }

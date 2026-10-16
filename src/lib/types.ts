@@ -12,6 +12,8 @@ export type Product = {
   category_id: string | null;
   image_url: string | null;
   created_at: string;
+  /** Editable by authorized staff; public clients only receive featured IDs from a server RPC. */
+  is_featured?: boolean;
   retail_price?: number;
   wholesale_price?: number;
   search_name_norm?: string;

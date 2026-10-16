@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Activity, Eye, EyeOff, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 type Mode = 'login' | 'register' | 'forgot';
 
-export function Login({ onDone }: { onDone?: () => void }) {
+export function Login({ onDone, initialMode = 'login' }: { onDone?: () => void; initialMode?: Mode }) {
   const { signIn, signUp, resetPassword, loading } = useAuth();
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode] = useState<Mode>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,7 +25,7 @@ export function Login({ onDone }: { onDone?: () => void }) {
       if (mode === 'register') {
         if (name.trim().length < 2) { setError('أدخل الاسم الكامل'); return; }
         const { needsConfirmation } = await signUp(email, password, name);
-        if (needsConfirmation) { setInfo('تم إنشاء الحساب. افتح بريدك واضغط رابط التفعيل ثم سجّل الدخول.'); setMode('login'); return; }
+        if (needsConfirmation) { setInfo('تم إنشاء الحساب. افتح بريدك واضغط رابط التفعيل ثم اتبع نتيجة التحقق.'); return; }
       } else {
         await signIn(email, password);
       }
@@ -54,9 +55,9 @@ export function Login({ onDone }: { onDone?: () => void }) {
           {info && <div className="login-hint" role="status">{info}</div>}
           <button className="login-submit" type="submit" disabled={loading}>{loading ? 'جارٍ المعالجة...' : mode === 'login' ? 'دخول' : mode === 'register' ? 'إنشاء الحساب' : 'إرسال الرابط'}</button>
           <div className="login-hint" style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            {mode !== 'login' && <button type="button" className="sf-link" onClick={() => setMode('login')}>لديك حساب؟ سجّل الدخول</button>}
-            {mode !== 'register' && <button type="button" className="sf-link" onClick={() => setMode('register')}>إنشاء حساب جديد</button>}
-            {mode === 'login' && <button type="button" className="sf-link" onClick={() => setMode('forgot')}>نسيت كلمة المرور؟</button>}
+            {mode !== 'login' && <Link className="sf-link" to="/login">لديك حساب؟ سجّل الدخول</Link>}
+            {mode !== 'register' && <Link className="sf-link" to="/register">إنشاء حساب جديد</Link>}
+            {mode === 'login' && <Link className="sf-link" to="/forgot-password">نسيت كلمة المرور؟</Link>}
           </div>
         </form>
       </div>

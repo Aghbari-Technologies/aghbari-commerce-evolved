@@ -1,6 +1,5 @@
 import fontkit from "@pdf-lib/fontkit";
 import { drawArabicText } from "naqqash/pdf-lib";
-import { isCustomerStatementPossiblyPartial } from "./commerce-utils";
 import {
   PDFDocument,
   rgb,
@@ -16,6 +15,8 @@ export type CustomerStatementInvoice = {
   due_at?: string | null;
   currency: string;
   total_amount: number | string;
+  paid_amount: number | string;
+  outstanding_amount: number | string;
 };
 
 export type CustomerStatementPayment = {
@@ -25,9 +26,24 @@ export type CustomerStatementPayment = {
   paid_at: string;
 };
 
+export type CustomerStatementCurrencyTotal = {
+  currency: string;
+  invoiced: number | string;
+  paid: number | string;
+  outstanding: number | string;
+  invoice_count: number;
+};
+
+export type CustomerStatementSummary = {
+  invoice_count: number;
+  payment_count: number;
+  totals_by_currency: CustomerStatementCurrencyTotal[];
+};
+
 export type CustomerStatementPayload = {
   invoices?: CustomerStatementInvoice[];
   payments?: CustomerStatementPayment[];
+  summary?: CustomerStatementSummary;
 };
 
 type CurrencyTotals = {
@@ -206,6 +222,7 @@ function appendPageNumber(page: PDFPage, index: number, count: number, font: PDF
 function validatePayload(payload: unknown): {
   invoices: CustomerStatementInvoice[];
   payments: CustomerStatementPayment[];
+  summary: CustomerStatementSummary;
 } {
   if (!payload || typeof payload !== "object") {
     throw new Error("Statement response is not an object.");
@@ -214,8 +231,35 @@ function validatePayload(payload: unknown): {
   const candidate = payload as CustomerStatementPayload;
   const invoices = Array.isArray(candidate.invoices) ? candidate.invoices : [];
   const payments = Array.isArray(candidate.payments) ? candidate.payments : [];
+  const summary = candidate.summary;
   if (invoices.length > 200 || payments.length > 500) {
     throw new Error("Statement exceeded the configured document size limit.");
+  }
+  if (
+    !summary ||
+    !Number.isSafeInteger(summary.invoice_count) ||
+    summary.invoice_count < invoices.length ||
+    !Number.isSafeInteger(summary.payment_count) ||
+    summary.payment_count < payments.length ||
+    !Array.isArray(summary.totals_by_currency)
+  ) {
+    throw new Error("Statement is missing a complete server ledger summary.");
+  }
+
+  const summaryCurrencies = new Set<string>();
+  for (const total of summary.totals_by_currency) {
+    if (!total || typeof total !== "object" || !Number.isSafeInteger(total.invoice_count) || total.invoice_count < 0) {
+      throw new Error("Statement contains an invalid full-ledger currency summary.");
+    }
+    const currency = normalizeCurrency(total.currency);
+    if (summaryCurrencies.has(currency)) {
+      throw new Error("Statement contains duplicate currency summaries.");
+    }
+    summaryCurrencies.add(currency);
+    for (const value of [total.invoiced, total.paid, total.outstanding]) {
+      const amount = moneyToMinorUnits(value);
+      if (amount < 0n) throw new Error("Statement contains a negative summary total.");
+    }
   }
 
   for (const invoice of invoices) {
@@ -229,7 +273,19 @@ function validatePayload(payload: unknown): {
       throw new Error("Statement contains an incomplete invoice record.");
     }
     normalizeCurrency(invoice.currency);
-    moneyToMinorUnits(invoice.total_amount);
+    const total = moneyToMinorUnits(invoice.total_amount);
+    const paid = moneyToMinorUnits(invoice.paid_amount);
+    const outstanding = moneyToMinorUnits(invoice.outstanding_amount);
+    if (total < 0n || paid < 0n || outstanding < 0n) {
+      throw new Error("Statement contains a negative invoice balance.");
+    }
+    if (invoice.status === "void") {
+      if (paid !== 0n || outstanding !== 0n) {
+        throw new Error("Void invoices must not have an outstanding account balance.");
+      }
+    } else if (outstanding !== (total > paid ? total - paid : 0n)) {
+      throw new Error("Invoice balance does not reconcile with the full-ledger payment sum.");
+    }
   }
   for (const payment of payments) {
     if (
@@ -239,47 +295,20 @@ function validatePayload(payload: unknown): {
     ) {
       throw new Error("Statement contains an incomplete payment record.");
     }
-    moneyToMinorUnits(payment.amount);
+    const amount = moneyToMinorUnits(payment.amount);
+    if (amount < 0n) throw new Error("Statement contains a negative payment.");
   }
 
-  return { invoices, payments };
+  return { invoices, payments, summary };
 }
 
-function buildCurrencyTotals(
-  invoices: CustomerStatementInvoice[],
-  payments: CustomerStatementPayment[],
-): CurrencyTotals[] {
-  const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
-  const paidByInvoice = new Map<string, bigint>();
-  for (const payment of payments) {
-    if (!invoiceById.has(payment.invoice_id)) continue;
-    paidByInvoice.set(
-      payment.invoice_id,
-      (paidByInvoice.get(payment.invoice_id) ?? 0n) + moneyToMinorUnits(payment.amount),
-    );
-  }
-
-  const totals = new Map<string, CurrencyTotals>();
-  const getTotals = (currency: string) => {
-    const existing = totals.get(currency);
-    if (existing) return existing;
-    const next: CurrencyTotals = { currency, invoiced: 0n, paid: 0n, outstanding: 0n };
-    totals.set(currency, next);
-    return next;
-  };
-
-  for (const invoice of invoices) {
-    const currency = normalizeCurrency(invoice.currency);
-    const total = moneyToMinorUnits(invoice.total_amount);
-    const paid = paidByInvoice.get(invoice.id) ?? 0n;
-    const current = getTotals(currency);
-    if (invoice.status !== "void") {
-      current.invoiced += total;
-      current.paid += paid;
-      current.outstanding += total > paid ? total - paid : 0n;
-    }
-  }
-  return [...totals.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+function buildCurrencyTotals(summary: CustomerStatementSummary): CurrencyTotals[] {
+  return summary.totals_by_currency.map((total) => ({
+    currency: normalizeCurrency(total.currency),
+    invoiced: moneyToMinorUnits(total.invoiced),
+    paid: moneyToMinorUnits(total.paid),
+    outstanding: moneyToMinorUnits(total.outstanding),
+  })).sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 export async function buildCustomerStatementPdf(
@@ -287,11 +316,11 @@ export async function buildCustomerStatementPdf(
   fontBytes: Uint8Array,
   generatedAt = new Date(),
 ): Promise<Uint8Array> {
-  const { invoices, payments } = validatePayload(response);
+  const { invoices, payments, summary } = validatePayload(response);
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const font = await pdf.embedFont(fontBytes, { subset: false });
-  const totalsByCurrency = buildCurrencyTotals(invoices, payments);
+  const totalsByCurrency = buildCurrencyTotals(summary);
   pdf.setTitle("كشف الحساب | متجر الأغبري");
   pdf.setAuthor("Aghbari Commerce");
   pdf.setSubject("Customer account statement");
@@ -301,14 +330,6 @@ export async function buildCustomerStatementPdf(
 
   const pages: PDFPage[] = [];
   const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
-  const paidByInvoice = new Map<string, bigint>();
-  for (const payment of payments) {
-    if (!invoiceById.has(payment.invoice_id)) continue;
-    paidByInvoice.set(
-      payment.invoice_id,
-      (paidByInvoice.get(payment.invoice_id) ?? 0n) + moneyToMinorUnits(payment.amount),
-    );
-  }
 
   let page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   pages.push(page);
@@ -345,8 +366,8 @@ export async function buildCustomerStatementPdf(
   const drawInvoiceRow = (invoice: CustomerStatementInvoice) => {
     const currency = normalizeCurrency(invoice.currency);
     const total = moneyToMinorUnits(invoice.total_amount);
-    const paid = paidByInvoice.get(invoice.id) ?? 0n;
-    const outstanding = invoice.status === "void" || total <= paid ? 0n : total - paid;
+    const paid = moneyToMinorUnits(invoice.paid_amount);
+    const outstanding = moneyToMinorUnits(invoice.outstanding_amount);
 
     drawArabic(page, font, statusLabel(invoice.status), PAGE_WIDTH - 43, y, 8, INK, 65);
     drawLtr(page, font, minorUnitsToText(outstanding), 420, y, 8, INK, 65);
@@ -416,7 +437,7 @@ export async function buildCustomerStatementPdf(
     drawArabic(page, font, "لا توجد دفعات مسجلة للفواتير المعروضة.", PAGE_WIDTH - 40, y, 8, MUTED, 250);
   }
 
-  if (isCustomerStatementPossiblyPartial(invoices.length, payments.length)) {
+  if (summary.invoice_count > invoices.length || summary.payment_count > payments.length) {
     if (y < 90) {
       page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
       pages.push(page);
@@ -426,7 +447,7 @@ export async function buildCustomerStatementPdf(
     drawArabic(
       page,
       font,
-      "ملاحظة: يعرض هذا المستند أحدث 200 فاتورة و500 دفعة كحد أقصى وفق حدود قراءة النظام.",
+      "ملخص الأرصدة محسوب من كامل الدفتر؛ تفاصيل المستند تقتصر على أحدث 200 فاتورة و500 دفعة.",
       PAGE_WIDTH - 40,
       y - 8,
       7.5,
@@ -447,9 +468,9 @@ export type CustomerInvoiceDocument = {
   issued_at: string;
   due_at?: string | null;
   currency: string;
-  subtotal: number | string;
-  tax_amount: number | string;
-  total_amount: number | string;
+  subtotal?: number | string | null;
+  tax_amount?: number | string | null;
+  total_amount?: number | string | null;
 };
 
 export type CustomerInvoiceLineDocument = {
@@ -458,8 +479,8 @@ export type CustomerInvoiceLineDocument = {
   description: string;
   unit?: string | null;
   quantity: number | string;
-  unit_price: number | string;
-  line_total: number | string;
+  unit_price?: number | string | null;
+  line_total?: number | string | null;
 };
 
 export type CustomerInvoiceCustomerDocument = {
@@ -500,6 +521,7 @@ export async function buildCustomerInvoicePdf(
   customerInput: unknown,
   fontBytes: Uint8Array,
   generatedAt = new Date(),
+  includeFinancialAmounts = true,
 ): Promise<Uint8Array> {
   if (!invoiceInput || typeof invoiceInput !== "object") {
     throw new Error("Invoice record is not an object.");
@@ -515,10 +537,10 @@ export async function buildCustomerInvoicePdf(
     throw new Error("Invoice record is incomplete.");
   }
   const currency = normalizeCurrency(invoice.currency);
-  const subtotal = normalizeInvoiceMoney(invoice.subtotal);
-  const taxAmount = normalizeInvoiceMoney(invoice.tax_amount);
-  const totalAmount = normalizeInvoiceMoney(invoice.total_amount);
-  if (subtotal + taxAmount !== totalAmount) {
+  const subtotal = includeFinancialAmounts ? normalizeInvoiceMoney(invoice.subtotal) : 0n;
+  const taxAmount = includeFinancialAmounts ? normalizeInvoiceMoney(invoice.tax_amount) : 0n;
+  const totalAmount = includeFinancialAmounts ? normalizeInvoiceMoney(invoice.total_amount) : 0n;
+  if (includeFinancialAmounts && subtotal + taxAmount !== totalAmount) {
     throw new Error("Invoice subtotal plus tax does not equal the invoice total.");
   }
   const lines = Array.isArray(linesInput) ? (linesInput as CustomerInvoiceLineDocument[]) : [];
@@ -532,22 +554,19 @@ export async function buildCustomerInvoicePdf(
       throw new Error("Invoice contains an incomplete line.");
     }
     normalizeQuantity(line.quantity);
-    normalizeInvoiceMoney(line.unit_price);
-    normalizeInvoiceMoney(line.line_total);
+    if (includeFinancialAmounts) {
+      normalizeInvoiceMoney(line.unit_price);
+      normalizeInvoiceMoney(line.line_total);
+    }
   }
-  const lineTotal = lines.reduce(
-    (sum, line) => sum + normalizeInvoiceMoney(line.line_total),
-    0n,
-  );
-  if (lineTotal !== subtotal) {
-    throw new Error("Invoice line totals do not equal the invoice subtotal.");
-  }
-  if (subtotal + taxAmount !== totalAmount) {
-    throw new Error("Invoice subtotal plus tax does not equal the invoice total.");
+  if (includeFinancialAmounts) {
+    const lineTotal = lines.reduce((sum, line) => sum + normalizeInvoiceMoney(line.line_total), 0n);
+    if (lineTotal !== subtotal) throw new Error("Invoice line totals do not equal the invoice subtotal.");
+    if (subtotal + taxAmount !== totalAmount) throw new Error("Invoice subtotal plus tax does not equal the invoice total.");
   }
   const lineAmounts = lines.map((line) => ({
-    unitPrice: minorUnitsToText(normalizeInvoiceMoney(line.unit_price)),
-    lineTotal: minorUnitsToText(normalizeInvoiceMoney(line.line_total)),
+    unitPrice: includeFinancialAmounts ? minorUnitsToText(normalizeInvoiceMoney(line.unit_price)) : "",
+    lineTotal: includeFinancialAmounts ? minorUnitsToText(normalizeInvoiceMoney(line.line_total)) : "",
   }));
   const customer =
     customerInput && typeof customerInput === "object"
@@ -559,7 +578,7 @@ export async function buildCustomerInvoicePdf(
   const font = await pdf.embedFont(fontBytes, { subset: false });
   pdf.setTitle(`فاتورة ${cleanLabel(invoice.invoice_number, 40)} | متجر الأغبري`);
   pdf.setAuthor("Aghbari Commerce");
-  pdf.setSubject("Customer invoice document with scoped financial totals");
+  pdf.setSubject(includeFinancialAmounts ? "Customer invoice document with scoped financial totals" : "Customer invoice document with financial amounts hidden by privacy policy");
   pdf.setCreator("Aghbari Commerce");
   pdf.setCreationDate(generatedAt);
   pdf.setModificationDate(generatedAt);
@@ -595,7 +614,7 @@ export async function buildCustomerInvoicePdf(
   drawArabic(page, font, "رمز العميل", PAGE_WIDTH - 40, PAGE_HEIGHT - 258, 8, MUTED, 85);
   drawLtr(page, font, cleanLabel(customer.customer_code, 32), PAGE_WIDTH - 145, PAGE_HEIGHT - 258, 9, INK, 120);
 
-  drawArabic(page, font, "تفاصيل الأصناف والمبالغ", PAGE_WIDTH - 40, PAGE_HEIGHT - 296, 10, BRAND, 190);
+  drawArabic(page, font, includeFinancialAmounts ? "تفاصيل الأصناف والمبالغ" : "تفاصيل الأصناف", PAGE_WIDTH - 40, PAGE_HEIGHT - 296, 10, BRAND, 190);
   const drawItemsHeader = (targetPage: PDFPage, y: number) => {
     targetPage.drawRectangle({
       x: 40,
@@ -608,8 +627,10 @@ export async function buildCustomerInvoicePdf(
     drawArabic(targetPage, font, "رمز الصنف", 370, y, 8, BRAND, 78);
     drawArabic(targetPage, font, "الوحدة", 282, y, 8, BRAND, 60);
     drawArabic(targetPage, font, "الكمية", 211, y, 8, BRAND, 55);
-    drawArabic(targetPage, font, "سعر الوحدة", 145, y, 7.5, BRAND, 70);
-    drawArabic(targetPage, font, "الإجمالي", 72, y, 7.5, BRAND, 58);
+    if (includeFinancialAmounts) {
+      drawArabic(targetPage, font, "سعر الوحدة", 145, y, 7.5, BRAND, 70);
+      drawArabic(targetPage, font, "الإجمالي", 72, y, 7.5, BRAND, 58);
+    }
     drawRule(targetPage, y - 8);
   };
 
@@ -627,8 +648,10 @@ export async function buildCustomerInvoicePdf(
     drawLtr(page, font, cleanLabel(line.item_code, 36), 370, y, 7.5, INK, 78);
     drawArabic(page, font, cleanLabel(line.unit, 24), 282, y, 7.5, INK, 60);
     drawLtr(page, font, normalizeQuantity(line.quantity), 211, y, 8, INK, 55);
-    drawLtr(page, font, lineAmounts[lineIndex].unitPrice, 145, y, 7.5, INK, 70);
-    drawLtr(page, font, lineAmounts[lineIndex].lineTotal, 72, y, 7.5, INK, 60);
+    if (includeFinancialAmounts) {
+      drawLtr(page, font, lineAmounts[lineIndex].unitPrice, 145, y, 7.5, INK, 70);
+      drawLtr(page, font, lineAmounts[lineIndex].lineTotal, 72, y, 7.5, INK, 60);
+    }
     drawRule(page, y - 7);
     y -= 23;
   }
@@ -648,23 +671,27 @@ export async function buildCustomerInvoicePdf(
       300,
     );
   }
-  if (y < 160) {
-    page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    pages.push(page);
-    drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية — ملخص المبالغ");
-    y = PAGE_HEIGHT - 135;
+  if (includeFinancialAmounts) {
+    if (y < 160) {
+      page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      pages.push(page);
+      drawDocumentHeader(page, font, generatedAt, "فاتورة تجارية — ملخص المبالغ");
+      y = PAGE_HEIGHT - 135;
+    }
+    drawRule(page, y - 4);
+    y -= 24;
+    drawArabic(page, font, "الإجمالي الفرعي", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
+    drawLtr(page, font, minorUnitsToText(subtotal) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
+    y -= 22;
+    drawArabic(page, font, "الضريبة", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
+    drawLtr(page, font, minorUnitsToText(taxAmount) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
+    y -= 24;
+    drawRule(page, y + 8);
+    drawArabic(page, font, "الإجمالي المستحق", PAGE_WIDTH - 47, y - 8, 10, BRAND, 125);
+    drawLtr(page, font, minorUnitsToText(totalAmount) + " " + currency, PAGE_WIDTH - 210, y - 8, 10, BRAND, 160);
+  } else {
+    drawArabic(page, font, "المبالغ المالية مخفية وفق إعدادات خصوصية الحساب.", PAGE_WIDTH - 47, Math.max(60, y - 4), 8, MUTED, 360);
   }
-  drawRule(page, y - 4);
-  y -= 24;
-  drawArabic(page, font, "الإجمالي الفرعي", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
-  drawLtr(page, font, minorUnitsToText(subtotal) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
-  y -= 22;
-  drawArabic(page, font, "الضريبة", PAGE_WIDTH - 47, y, 8.5, MUTED, 110);
-  drawLtr(page, font, minorUnitsToText(taxAmount) + " " + currency, PAGE_WIDTH - 210, y, 8.5, INK, 160);
-  y -= 24;
-  drawRule(page, y + 8);
-  drawArabic(page, font, "الإجمالي المستحق", PAGE_WIDTH - 47, y - 8, 10, BRAND, 125);
-  drawLtr(page, font, minorUnitsToText(totalAmount) + " " + currency, PAGE_WIDTH - 210, y - 8, 10, BRAND, 160);
 
   pages.forEach((current, index) => appendPageNumber(current, index, pages.length, font));
   return pdf.save({ useObjectStreams: false });

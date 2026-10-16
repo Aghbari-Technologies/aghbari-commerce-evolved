@@ -1,7 +1,12 @@
 # Aghbari Commerce — repository-wide Copilot instructions
 
-Read and obey the root `AGENTS.md` before acting. It is the shared agent rulebook; do not copy or fork its full content here. Lovable's official documentation confirms that root-level `AGENTS.md` is always read by its agent; this is the free persistent-instruction path: https://docs.lovable.dev/features/knowledge.
+Root `AGENTS.md` is authoritative. Do not duplicate a task ID here.
 
-At every task/session, verify the live repository state once (`git fetch origin`, `git status --short --branch`, branch, local HEAD, `origin/main`, latest commit, and exact-SHA GitHub Actions). Then read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, `ops/AGHBARI-LATEST-EXECUTION-STATE.md`, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, and `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. Use `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` as the authoritative product spec, consulting only the relevant acceptance criteria.
-
-Continue from the current `next_task_id`; do not ask the owner to repeat saved requirements, do broad rediscovery, or recreate progress ledgers. Preserve working code and existing history. Treat `DONE_VERIFIED` as closed unless exact-SHA evidence, a dependency/input change, regression, security finding, or invalidated test reopens it. Implement and test one coherent batch, record real commands/results/changed paths/exact SHA/blocker/next task, update the existing canonical records, then push safely to `main` and verify Actions for the resulting SHA. Never transfer CI proof between SHAs, claim production connectivity or Lovable sync without direct evidence, or spend Lovable points on discovery/speculative prompts.
+## Resume and execute
+- Verify the active PR/branch/HEAD and exact-head CI once. Preserve in-flight work on `fix/acceptance-hardening-cart-finance-20261015` while PR #72 is open; do not push directly to `main`.
+- Read only the first/current task pointer in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`. That file is the sole authority for the current task. Ignore any task ID mentioned elsewhere except the matching requirement row.
+- Read only the matching row in `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md` and relevant source/spec clauses. Do not reread every instruction file, scan the whole repository, recreate plans, or ask the owner to resend saved context.
+- Implement the task, run the relevant real tests, inspect failures, fix them, and continue. A failed exact-head CI blocks task closure; fix it before advancing. Do not transfer PASS across SHAs.
+- After every coherent batch and **before each response, pause, timeout, context limit or session end**, update the existing state file and matching registry row: current branch/PR/HEAD, files changed, commands and results, tested SHA/CI, current/next task and evidence-backed blocker. Mark NOT RUN/UNPUSHED honestly.
+- Push checkpoints to the active PR branch, not `main` while the PR is open. Never claim Lovable sync, production access or browser E2E without direct evidence.
+- Preserve Lovable's free points for actual live database/editor/browser integration and publication after source CI is ready.

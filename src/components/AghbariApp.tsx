@@ -23,8 +23,10 @@ import { Login } from '@/components/Login';
 import {
   AiCenter, Devices, Field, Loading, ErrorBox, Empty, Button,
   TableWrap, Modal, Notifications, OrderDetail, SettingsPage, Suppliers,
+  type AiCenterTab,
+  type SettingsPageTab,
 } from '@/components/AdminPages';
-import { OperationsCenter } from '@/components/OperationsCenter';
+import { OperationsCenter, type OperationTab } from '@/components/OperationsCenter';
 import { StaffQuotesPage, StaffFinancePage } from '@/components/CustomerWorkflows';
 import {
   CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
@@ -61,20 +63,24 @@ const adminPaths: Record<View, string> = {
   quotes: '/admin/quotes', finance: '/admin/finance',
 };
 
-function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
+function AppContent({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId, initialSettingsTab }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string; initialSettingsTab?: SettingsPageTab }) {
   const { user, ready, signOut } = useAuth();
   const canOperateAdmin = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'staff'));
   const canManageFinance = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'accountant'));
   const isFinanceOnly = canManageFinance && !canOperateAdmin;
   const visibleNav = nav.filter(({ id }) => isFinanceOnly ? id === 'finance' : id !== 'finance' || canManageFinance);
   const navigate = useNavigate();
-  const [view, setView] = useState<View>(initialView);
+  const [view, setView] = useState<View>(initialOrderDetailId ? 'orders' : initialView);
   const [mobileNav, setMobileNav] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
+  const [orderDetailId, setOrderDetailId] = useState<string | null>(initialOrderDetailId ?? null);
   const [navigationBlocked, setNavigationBlocked] = useState(false);
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(null), 2800); };
+  useEffect(() => {
+    setView(initialOrderDetailId ? 'orders' : initialView);
+    setOrderDetailId(initialOrderDetailId ?? null);
+  }, [initialView, initialOrderDetailId]);
   const setMode = (_m: 'storefront') => {
     if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل مغادرة مراجعة الطلب.'); return; }
     void navigate({ to: '/' });
@@ -145,17 +151,17 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
           {view === 'products' && <Products onNotice={showNotice} />}
           {view === 'customers' && <Customers onNotice={showNotice} />}
           {view === 'orders' && !orderDetailId && <Orders onViewDetail={setOrderDetailId} />}
-          {view === 'orders' && orderDetailId && <OrderDetail orderId={orderDetailId} onBack={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الرجوع.'); return; } setOrderDetailId(null); }} onNotice={showNotice} onBlockedChange={setNavigationBlocked} />}
+          {view === 'orders' && orderDetailId && <OrderDetail orderId={orderDetailId} onBack={() => { if (navigationBlocked) { showNotice('اعتمد كميات وأسعار الطلب أو ألغِ المسودة قبل الرجوع.'); return; } if (initialOrderDetailId) { void navigate({ to: adminPaths.orders as never }); } else { setOrderDetailId(null); } }} onNotice={showNotice} onBlockedChange={setNavigationBlocked} />}
           {view === 'pricing' && <Pricing onNotice={showNotice} />}
           {view === 'offers' && <Offers onNotice={showNotice} />}
           {view === 'suppliers' && <Suppliers onNotice={showNotice} />}
           {view === 'devices' && <Devices onNotice={showNotice} />}
           {view === 'reports' && <Reports />}
-          {view === 'ai' && <AiCenter onNotice={showNotice} />}
+          {view === 'ai' && <AiCenter onNotice={showNotice} initialTab={initialAiTab} />}
           {view === 'notifications' && <Notifications onNotice={showNotice} />}
           {view === 'data' && <DataCenter onNotice={showNotice} />}
-          {view === 'operations' && <OperationsCenter onNotice={showNotice} />}
-          {view === 'settings' && <SettingsPage onNotice={showNotice} />}
+          {view === 'operations' && <OperationsCenter onNotice={showNotice} initialTab={initialOperationTab} />}
+          {view === 'settings' && <SettingsPage onNotice={showNotice} initialTab={initialSettingsTab} />}
           {view === 'quotes' && <StaffQuotesPage />}
           {view === 'finance' && <StaffFinancePage />}
             </>
@@ -190,8 +196,8 @@ function AppContent({ initialView = 'dashboard' }: { initialView?: View }) {
   );
 }
 
-export function AdminApp({ initialView = 'dashboard' }: { initialView?: View }) {
-  return <AppContent initialView={initialView} />;
+export function AdminApp({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId, initialSettingsTab }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string; initialSettingsTab?: SettingsPageTab }) {
+  return <AppContent initialView={initialView} initialOperationTab={initialOperationTab} initialAiTab={initialAiTab} initialOrderDetailId={initialOrderDetailId} initialSettingsTab={initialSettingsTab} />;
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
@@ -227,12 +233,12 @@ function Products({ onNotice }: { onNotice: (m: string) => void }) {
   const [query, setQuery] = useState(''); const [modal, setModal] = useState(false); const [editing, setEditing] = useState<ProductWithInventory | null>(null);
   const rows = (data ?? []).filter((p) => `${p.name} ${p.item_code} ${p.barcode ?? ''}`.toLowerCase().includes(query.toLowerCase()));
   async function remove(product: ProductWithInventory) { if (!window.confirm(`حذف ${product.name}؟`)) return; try { await deleteProduct(product.id); onNotice('تم حذف المنتج'); refetch(); } catch (e) { onNotice(e instanceof Error ? e.message : 'تعذر حذف المنتج'); } }
-  return <><Heading eyebrow="الأصناف والمخزون" title="إدارة المنتجات" description="تحكم كامل في الكتالوج والأسعار وحدود المخزون" icon={Box} /><div className="toolbar"><span className="toolbar-note">{data?.length ?? 0} منتج في الكتالوج</span><div className="toolbar-actions"><Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button><Button onClick={() => { setEditing(null); setModal(true); }}><Plus size={17} /> إضافة منتج</Button></div></div><section className="panel table-panel"><div className="table-head"><h2>كتالوج المنتجات</h2><label className="search-field"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث بالاسم أو الرمز..." /></label></div>{loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>التصنيف</th><th>السعر</th><th>المتاح</th><th>الحالة</th><th /></tr></thead><tbody>{rows.map((p) => { const qty = p.inventory?.quantity_available ?? 0; const low = qty <= (p.inventory?.reorder_point ?? p.min_stock); return <tr key={p.id}><td><strong>{p.name}</strong><small>{p.description ?? 'بدون وصف'}</small></td><td><code>{p.item_code}</code></td><td>{p.category?.name ?? 'غير مصنف'}</td><td>{formatCurrency(p.base_price)}</td><td>{formatNumber(qty)} {p.unit}</td><td><span className={`badge ${low ? 'warning' : 'success'}`}>{low ? 'منخفض' : 'متوفر'}</span></td><td><div className="row-actions"><button onClick={() => { setEditing(p); setModal(true); }}><Pencil size={15} /></button><button onClick={() => remove(p)}><Trash2 size={15} /></button></div></td></tr>; })}</tbody></table>{!rows.length && <Empty text="لا توجد منتجات مطابقة" />}</TableWrap>}</section>{modal && <ProductModal product={editing} onClose={() => setModal(false)} onSaved={() => { setModal(false); refetch(); onNotice(editing ? 'تم تحديث المنتج' : 'تمت إضافة المنتج'); }} />}</>;
+  return <><Heading eyebrow="الأصناف والمخزون" title="إدارة المنتجات" description="تحكم كامل في الكتالوج والأسعار وحدود المخزون" icon={Box} /><div className="toolbar"><span className="toolbar-note">{data?.length ?? 0} منتج في الكتالوج</span><div className="toolbar-actions"><Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button><Button onClick={() => { setEditing(null); setModal(true); }}><Plus size={17} /> إضافة منتج</Button></div></div><section className="panel table-panel"><div className="table-head"><h2>كتالوج المنتجات</h2><label className="search-field"><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث بالاسم أو الرمز..." /></label></div>{loading ? <Loading /> : error ? <ErrorBox message={error} /> : <TableWrap><table><thead><tr><th>المنتج</th><th>الرمز</th><th>التصنيف</th><th>السعر</th><th>المتاح</th><th>الحالة</th><th>الواجهة</th><th /></tr></thead><tbody>{rows.map((p) => { const qty = p.inventory?.quantity_available ?? 0; const low = qty <= (p.inventory?.reorder_point ?? p.min_stock); return <tr key={p.id}><td><strong>{p.name}</strong><small>{p.description ?? 'بدون وصف'}</small></td><td><code>{p.item_code}</code></td><td>{p.category?.name ?? 'غير مصنف'}</td><td>{formatCurrency(p.base_price)}</td><td>{formatNumber(qty)} {p.unit}</td><td><span className={`badge ${low ? 'warning' : 'success'}`}>{low ? 'منخفض' : 'متوفر'}</span></td><td><span className={`badge ${p.is_featured ? 'success' : ''}`}>{p.is_featured ? 'مميز للواجهة' : 'عادي'}</span></td><td><div className="row-actions"><button onClick={() => { setEditing(p); setModal(true); }}><Pencil size={15} /></button><button onClick={() => remove(p)}><Trash2 size={15} /></button></div></td></tr>; })}</tbody></table>{!rows.length && <Empty text="لا توجد منتجات مطابقة" />}</TableWrap>}</section>{modal && <ProductModal product={editing} onClose={() => setModal(false)} onSaved={() => { setModal(false); refetch(); onNotice(editing ? 'تم تحديث المنتج' : 'تمت إضافة المنتج'); }} />}</>;
 }
 function ProductModal({ product, onClose, onSaved }: { product: ProductWithInventory | null; onClose: () => void; onSaved: () => void }) {
-  const { data: categories } = useFetch(fetchCategories); const [name, setName] = useState(product?.name ?? ''); const [code, setCode] = useState(product?.item_code ?? ''); const [price, setPrice] = useState(String(product?.base_price ?? '')); const [category, setCategory] = useState(product?.category_id ?? ''); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
-  async function save() { if (!name.trim() || !code.trim() || !price) { setError('أكمل الحقول المطلوبة'); return; } setSaving(true); setError(''); try { const payload = { name, item_code: code, base_price: Number(price), category_id: category || null, unit: product?.unit ?? 'كرتون', status: product?.status ?? 'active' }; if (product) await updateProduct(product.id, payload); else await createProduct(payload); onSaved(); } catch (e) { setError(e instanceof Error ? e.message : 'تعذر الحفظ'); } finally { setSaving(false); } }
-  return <Modal title={product ? 'تعديل المنتج' : 'إضافة منتج'} onClose={onClose}><Field label="اسم المنتج"><input value={name} onChange={(e) => setName(e.target.value)} /></Field><div className="form-grid"><Field label="رمز المنتج"><input value={code} onChange={(e) => setCode(e.target.value)} /></Field><Field label="السعر الأساسي"><input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} /></Field></div><Field label="التصنيف"><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="">غير مصنف</option>{categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={save} disabled={saving}>{saving ? 'جار الحفظ...' : 'حفظ المنتج'}</Button></div></Modal>;
+  const { data: categories } = useFetch(fetchCategories); const [name, setName] = useState(product?.name ?? ''); const [code, setCode] = useState(product?.item_code ?? ''); const [price, setPrice] = useState(String(product?.base_price ?? '')); const [category, setCategory] = useState(product?.category_id ?? ''); const [featured, setFeatured] = useState(product?.is_featured ?? false); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  async function save() { if (!name.trim() || !code.trim() || !price) { setError('أكمل الحقول المطلوبة'); return; } setSaving(true); setError(''); try { const payload = { name, item_code: code, base_price: Number(price), category_id: category || null, is_featured: featured, unit: product?.unit ?? 'كرتون', status: product?.status ?? 'active' }; if (product) await updateProduct(product.id, payload); else await createProduct(payload); onSaved(); } catch (e) { setError(e instanceof Error ? e.message : 'تعذر الحفظ'); } finally { setSaving(false); } }
+  return <Modal title={product ? 'تعديل المنتج' : 'إضافة منتج'} onClose={onClose}><Field label="اسم المنتج"><input value={name} onChange={(e) => setName(e.target.value)} /></Field><div className="form-grid"><Field label="رمز المنتج"><input value={code} onChange={(e) => setCode(e.target.value)} /></Field><Field label="السعر الأساسي"><input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} /></Field></div><Field label="التصنيف"><select value={category} onChange={(e) => setCategory(e.target.value)}><option value="">غير مصنف</option>{categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><Field label="ظهور المنتج"><span style={{ display: "flex", alignItems: "center", gap: 9, minHeight: 36 }}><input aria-label="عرض المنتج في المنتجات المميزة" type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />عرض هذا المنتج في قسم المنتجات المميزة</span></Field>{error && <div className="form-error">{error}</div>}<div className="modal-actions"><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={save} disabled={saving}>{saving ? 'جار الحفظ...' : 'حفظ المنتج'}</Button></div></Modal>;
 }
 
 function Customers({ onNotice }: { onNotice: (m: string) => void }) {

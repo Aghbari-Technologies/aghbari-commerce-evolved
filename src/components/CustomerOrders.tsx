@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useFetch } from '@/lib/useFetch';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatNumber } from '@/lib/format';
+import { parseCustomerOrderFinancials, type CustomerOrderFinancials } from '@/lib/customer-money-policy';
 import type { Order, OrderItem } from '@/lib/types';
 
 type CustomerOrderSummary = Pick<Order, 'id' | 'order_number' | 'status' | 'total_items' | 'created_at'> & {
@@ -96,27 +97,39 @@ export function OrderInvoice({ id }: { id: string }) {
 function OrderInvoiceInner({ id }: { id: string }) {
   const { user } = useAuth();
   const { data, loading, error } = useFetch(async () => {
-    const [o, i, h] = await Promise.all([
+    const [o, i, h, financialResult] = await Promise.all([
       supabase.from('orders').select('id,order_number,customer_id,status,total_items,notes,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,customer_confirmed_at,payment_request_status,delivery_address_snapshot').eq('id', id).maybeSingle(),
       supabase.from('order_items').select('id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity').eq('order_id', id),
       supabase.from('order_status_history').select('id,to_status,created_at,notes').eq('order_id', id).order('created_at'),
+      supabase.rpc('get_customer_order_financials', { p_order_id: id }),
     ]);
     if (o.error || i.error || h.error) throw new Error('تعذر تحميل الطلب');
-    if (!o.data) return { order: null, items: [] as CustomerOrderLine[], history: [] as { id: string; to_status: string; created_at: string; notes: string | null }[], customer: null as { customer_code: string; business_name: string; contact_name: string | null } | null };
+    if (!o.data) return { order: null, items: [] as CustomerOrderLine[], history: [] as { id: string; to_status: string; created_at: string; notes: string | null }[], customer: null as { customer_code: string; business_name: string; contact_name: string | null } | null, financials: null as CustomerOrderFinancials | null };
     const customer = await supabase.from('customers').select('customer_code,business_name,contact_name').eq('id', o.data.customer_id).maybeSingle();
     if (customer.error) throw new Error('تعذر تحميل بيانات العميل');
+    let financials: CustomerOrderFinancials | null = null;
+    if (!financialResult.error) {
+      try {
+        const candidate = parseCustomerOrderFinancials(financialResult.data);
+        const detailIds = new Set(((i.data ?? []) as Array<{ id: string }>).map((row) => row.id));
+        if (candidate.items.length === detailIds.size && candidate.items.every((row) => detailIds.has(row.id))) financials = candidate;
+      } catch {
+        // Privacy fails closed: an older migration or incomplete RPC response never reveals money.
+      }
+    }
     return {
       order: o.data as CustomerOrderDocument,
       items: (i.data ?? []) as CustomerOrderLine[],
       history: (h.data ?? []) as { id: string; to_status: string; created_at: string; notes: string | null }[],
       customer: customer.data as { customer_code: string; business_name: string; contact_name: string | null } | null,
+      financials,
     };
   }, [id]);
 
   if (loading) return <Shell><p role="status">جارٍ تحميل الطلب...</p></Shell>;
   if (error) return <Shell><div style={card} role="alert">{error}</div></Shell>;
   if (!data?.order) return <Shell><div style={card}>الطلب غير موجود أو لا تملك صلاحية عرضه. <Link to="/orders" className="sf-link">طلباتي</Link></div></Shell>;
-  const { order, items, history, customer } = data;
+  const { order, items, history, customer, financials } = data;
 
   return (
     <Shell>
@@ -142,20 +155,26 @@ function OrderInvoiceInner({ id }: { id: string }) {
         </section>}
 
         <div style={{ margin: '16px 0', padding: 12, borderRadius: 10, background: '#f4f8f9', color: '#536b70' }}>
-          تفاصيل الكميات المطلوبة للمتابعة. لا تُعرض الأسعار أو الإجماليات في مستند العميل.
+          {financials?.amounts_visible ? 'تعرض المبالغ وفق سياسة المؤسسة من بيانات الخادم المسجلة.' : 'تفاصيل الكميات للمتابعة. المبالغ غير معروضة لأن سياسة العرض غير مفعلة أو تعذر التحقق الخادمي منها.'}
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead><tr style={{ background: '#f4f8f9', textAlign: 'right' }}><th style={{ padding: 8 }}>الصنف</th><th>الرمز</th><th>الوحدة</th><th>الكمية</th><th>حالة الكمية</th></tr></thead>
+          <thead><tr style={{ background: '#f4f8f9', textAlign: 'right' }}><th style={{ padding: 8 }}>الصنف</th><th>الرمز</th><th>الوحدة</th><th>الكمية</th>{financials?.amounts_visible && <><th>سعر الوحدة</th><th>الإجمالي</th></>}<th>حالة الكمية</th></tr></thead>
           <tbody>{items.map((it) => {
             const requested = Number(it.requested_quantity ?? it.quantity);
             const approved = Number(it.approved_quantity ?? it.quantity);
             const adjusted = it.approved_quantity != null && requested !== approved;
             return <tr key={it.id} style={{ borderTop: '1px solid #edf2f3' }}>
               <td style={{ padding: 8 }}>{it.product_name_snapshot}</td><td>{it.item_code}</td><td>{it.unit_snapshot}</td><td>{formatNumber(approved)}</td>
+              {financials?.amounts_visible && (() => {
+                const amountLine = financials.items.find((line) => line.id === it.id);
+                const formatMoney = (value: number | null) => value == null ? 'غير متاح' : financials.currency === 'YER' ? formatNumber(value) + ' ر.ي' : new Intl.NumberFormat('ar', { maximumFractionDigits: 2 }).format(value) + ' ' + financials.currency;
+                return <><td>{formatMoney(amountLine?.unit_price ?? null)}</td><td>{formatMoney(amountLine?.line_total ?? null)}</td></>;
+              })()}
               <td>{adjusted ? <strong style={{ color: '#9a5b13' }}>عُدّلت من {formatNumber(requested)}</strong> : 'كما طُلب'}</td>
             </tr>;
           })}</tbody>
         </table>
+        {financials?.amounts_visible && financials.total_amount != null && <div style={{ marginTop: 14, padding: 14, border: '1px solid #d8e8e8', borderRadius: 10, display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong>الإجمالي المسجل للطلب</strong><strong>{financials.currency === 'YER' ? formatNumber(financials.total_amount) + ' ر.ي' : new Intl.NumberFormat('ar', { maximumFractionDigits: 2 }).format(financials.total_amount) + ' ' + financials.currency}</strong></div>}
         {order.quantity_review_required && <p role="alert" style={{ marginTop: 14, fontWeight: 800, color: '#9a5b13' }}>تنبيه: تم تعديل الأصناف/الكميات بحسب الكميات المتوفرة.</p>}
         {order.customer_adjustment_note && <p role="status" style={{ marginTop: 8, fontWeight: 700 }}>{order.customer_adjustment_note}</p>}
         {order.customer_payment_requested_at && order.payment_request_status === 'requested' && <p role="status" style={{ marginTop: 14, padding: 12, borderRadius: 10, background: '#edf9f2', color: '#17684d', fontWeight: 800 }}>تم تأكيد الطلب من جهة الإدارة. يرجى إرسال المبلغ وفق تعليمات الشركة؛ هذا ليس إشعارًا باستلام الدفع.</p>}

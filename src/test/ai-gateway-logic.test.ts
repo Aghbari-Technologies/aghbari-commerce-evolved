@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { readBoundedRequestBody } from "../../supabase/functions/_shared/bounded-request";
 import {
   buildGeminiRequestConfig,
   estimateCost,
@@ -43,6 +45,22 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
     expect(sanitizeAiQuestion("  ")).toEqual({ ok: false, reason: "question_required" });
     expect(sanitizeAiQuestion("x".repeat(1201))).toEqual({ ok: false, reason: "question_too_long" });
     expect(estimateInputTokens("سؤال قصير", 10)).toBe(13);
+  });
+
+  it("enforces the AI request limit in UTF-8 bytes, not JavaScript characters", async () => {
+    const body = JSON.stringify({ action: "ask", question: "س".repeat(2100) });
+    expect(body.length).toBeLessThan(4096);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(4096);
+
+    const request = new Request("https://unit.test/ai-gateway", { method: "POST", body });
+    expect(await readBoundedRequestBody(request, 4096)).toEqual({ ok: false, reason: "too_large" });
+  });
+
+  it("pins the Edge handler to bounded body reads before JSON parsing", async () => {
+    const handler = await readFile("supabase/functions/ai-gateway/index.ts", "utf8");
+    expect(handler).toContain('readBoundedRequestBody(request,4096)');
+    expect(handler).toContain('if(boundedBody.reason==="too_large")return reply({error:"request_too_large"},413)');
+    expect(handler).not.toContain("request.text()");
   });
 
   it("sends Gemini API keys in a header and never in the request URL", () => {

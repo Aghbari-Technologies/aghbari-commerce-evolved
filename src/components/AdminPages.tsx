@@ -56,12 +56,15 @@ const defaultAiGatewayDraft: AiGatewayDraft = {
   daily_cost_limit: '1', monthly_cost_limit: '20', daily_token_limit: '50000', monthly_token_limit: '1000000', per_request_cost_limit: '0.05',
 };
 
-export function AiCenter({ onNotice }: { onNotice: (m: string) => void }) {
+export type AiCenterTab = 'alerts' | 'tasks';
+
+export function AiCenter({ onNotice, initialTab = 'alerts' }: { onNotice: (m: string) => void; initialTab?: AiCenterTab }) {
   const { user } = useAuth();
   const canManageGateway = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
   const { data: alerts, loading: aLoading, refetch: rAlerts } = useFetch(fetchAiAlerts);
   const { data: tasks, loading: tLoading, refetch: rTasks } = useFetch(fetchAiTasks);
-  const [tab, setTab] = useState<'alerts' | 'tasks'>('alerts');
+  const [tab, setTab] = useState<AiCenterTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const [gateway, setGateway] = useState<AiGatewayBudget | null>(null);
   const [draft, setDraft] = useState<AiGatewayDraft>(defaultAiGatewayDraft);
   const [gatewayLoading, setGatewayLoading] = useState(false);
@@ -600,21 +603,52 @@ export function Devices({ onNotice }: { onNotice: (m: string) => void }) {
   </AdminPage>;
 }
 
-export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
+export type SettingsPageTab = 'general' | 'storefront' | 'appearance' | 'access';
+export function SettingsPage({ onNotice, initialTab = 'general' }: { onNotice: (m: string) => void; initialTab?: SettingsPageTab }) {
   const { user } = useAuth();
   const canManageRoles = Boolean(user?.roles.includes('admin'));
+  const canManageMoneyDisplay = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
   const { data: settings, loading, refetch } = useFetch(fetchSettings);
-  const [tab, setTab] = useState<'general' | 'storefront' | 'appearance' | 'access'>('general');
+  const [tab, setTab] = useState<SettingsPageTab>(initialTab);
+  useEffect(() => { setTab(initialTab === 'access' && !canManageRoles ? 'general' : initialTab); }, [initialTab, canManageRoles]);
   const [saving, setSaving] = useState(false);
   const map = useMemo(() => { const m: Record<string, unknown> = {}; settings?.forEach((s: AdminSetting) => m[s.key] = s.value); return m; }, [settings]);
 
   async function save(key: string, value: unknown, category: string) { setSaving(true); try { await updateSetting(key, value, category); refetch(); onNotice('تم حفظ الإعداد'); } catch (e) { onNotice(e instanceof Error ? e.message : 'خطأ'); } finally { setSaving(false); } }
 
+  async function saveInvoiceMoneyDisplayPolicy(visible: boolean) {
+    setSaving(true);
+    try {
+      const result = await supabase.rpc('set_customer_invoice_amount_visibility', { p_visible: visible });
+      if (result.error) throw result.error;
+      await refetch();
+      onNotice('تم حفظ سياسة عرض مبالغ الفواتير عبر الخادم.');
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : 'تعذر حفظ سياسة عرض مبالغ الفواتير.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveMoneyDisplayPolicy(surface: 'cart' | 'order', visible: boolean) {
+    setSaving(true);
+    try {
+      const result = await supabase.rpc('set_customer_money_display_policy', { p_surface: surface, p_visible: visible });
+      if (result.error) throw result.error;
+      await refetch();
+      onNotice('تم حفظ سياسة عرض المبالغ والتحقق من صلاحية التغيير.');
+    } catch (error) {
+      onNotice(error instanceof Error ? error.message : 'تعذر حفظ سياسة عرض المبالغ.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return <AdminPage eyebrow="النظام" title="الإعدادات العامة" description="تحكم كامل في إعدادات المتجر والمظهر" icon={Settings} note="" toolbar={<Button variant="secondary" onClick={refetch}><RefreshCw size={16} /> تحديث</Button>}>
     {loading ? <Loading /> : <>
       <div className="settings-tabs"><button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>عام</button><button className={tab === 'storefront' ? 'active' : ''} onClick={() => setTab('storefront')}>المتجر</button><button className={tab === 'appearance' ? 'active' : ''} onClick={() => setTab('appearance')}>المظهر</button>{canManageRoles && <button className={tab === 'access' ? 'active' : ''} onClick={() => setTab('access')}>المستخدمون والصلاحيات</button>}</div>
       {tab === 'general' && <SettingsPanel title="معلومات المتجر"><SettingInput label="اسم المتجر" value={(map.store_name as string) ?? ''} onSave={(v) => save('store_name', v, 'general')} saving={saving} /><SettingInput label="الوصف المختصر" value={(map.store_tagline as string) ?? ''} onSave={(v) => save('store_tagline', v, 'general')} saving={saving} /><SettingInput label="الهاتف" value={(map.store_phone as string) ?? ''} onSave={(v) => save('store_phone', v, 'general')} saving={saving} /><SettingInput label="البريد" value={(map.store_email as string) ?? ''} onSave={(v) => save('store_email', v, 'general')} saving={saving} /><SettingInput label="العنوان" value={(map.store_address as string) ?? ''} onSave={(v) => save('store_address', v, 'general')} saving={saving} /></SettingsPanel>}
-      {tab === 'storefront' && <SettingsPanel title="إعدادات المتجر"><SettingInput label="عنوان البانر" value={(map.hero_title as string) ?? ''} onSave={(v) => save('hero_title', v, 'storefront')} saving={saving} /><SettingInput label="نص البانر الفرعي" value={(map.hero_subtitle as string) ?? ''} onSave={(v) => save('hero_subtitle', v, 'storefront')} saving={saving} /><SettingToggle label="شريط العرض المتحرك" value={(map.ticker_enabled as boolean) ?? true} onSave={(v) => save('ticker_enabled', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار المنتجات النافدة" value={(map.show_out_of_stock as boolean) ?? true} onSave={(v) => save('show_out_of_stock', v, 'storefront')} saving={saving} /></SettingsPanel>}
+      {tab === 'storefront' && <SettingsPanel title="إعدادات المتجر"><SettingInput label="عنوان البانر" value={(map.hero_title as string) ?? ''} onSave={(v) => save('hero_title', v, 'storefront')} saving={saving} /><SettingInput label="نص البانر الفرعي" value={(map.hero_subtitle as string) ?? ''} onSave={(v) => save('hero_subtitle', v, 'storefront')} saving={saving} /><SettingToggle label="شريط العرض المتحرك" value={(map.ticker_enabled as boolean) ?? true} onSave={(v) => save('ticker_enabled', v, 'storefront')} saving={saving} /><SettingToggle label="إظهار المنتجات النافدة" value={(map.show_out_of_stock as boolean) ?? true} onSave={(v) => save('show_out_of_stock', v, 'storefront')} saving={saving} />{canManageMoneyDisplay && <><SettingToggle label="إظهار أسعار وإجماليات الفاتورة للعميل" value={(map.customer_invoice_amounts_visible as boolean) ?? false} onSave={(v) => void saveInvoiceMoneyDisplayPolicy(v)} saving={saving} /><SettingToggle label="إظهار الأسعار والإجمالي التقديري في السلة وإتمام الطلب" value={(map.customer_cart_amounts_visible as boolean) ?? false} onSave={(v) => void saveMoneyDisplayPolicy('cart', v)} saving={saving} /><SettingToggle label="إظهار أسعار وإجمالي الطلب المسجّل للعميل" value={(map.customer_order_amounts_visible as boolean) ?? false} onSave={(v) => void saveMoneyDisplayPolicy('order', v)} saving={saving} /></>}</SettingsPanel>}
       {tab === 'appearance' && <SettingsPanel title="ألوان النظام"><SettingColor label="اللون الأساسي" value={(map.theme_primary as string) ?? '#087f8d'} onSave={(v) => save('theme_primary', v, 'appearance')} saving={saving} /><SettingColor label="لون التمييز" value={(map.theme_accent as string) ?? '#0eaa97'} onSave={(v) => save('theme_accent', v, 'appearance')} saving={saving} /></SettingsPanel>}
       {tab === 'access' && canManageRoles && user && <OrganizationRoleManagement currentProfileId={user.profileId} onNotice={onNotice} />}
     </>}

@@ -1,6 +1,48 @@
-import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
+import { applyImportProfileRules, DataQualityAccumulator, IncrementalSha256, StreamingCsvParser, chooseImportStatus, MAX_IMPORT_FILE_BYTES, hashFileSha256, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix } from '@/lib/unified-import';
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantIntent, isCustomerStatementPossiblyPartial, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeInvoiceAmounts, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+import { classifyAssistantIntent, isCustomerStatementPossiblyPartial, matchesArabicCatalogSearch, normalizeArabicSearchText, normalizeCartDraft, normalizeSavedProductIds, sanitizePublicCatalogCache, summarizeAccount, summarizeCartCounts, summarizeInvoiceAmounts, summarizeCustomerInvoiceStatuses, summarizeCustomerOrderStatuses, validateQuickOrderLines } from '@/lib/commerce-utils';
+
+
+async function forgeCentralDirectoryUncompressedSize(
+  blob: Blob,
+  targetName: string,
+  claimedSize: number,
+): Promise<Blob> {
+  const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error('Unable to read ZIP test fixture bytes.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read ZIP test fixture bytes.'));
+    reader.readAsArrayBuffer(blob);
+  });
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  let offset = 0;
+  while (offset + 46 <= bytes.length) {
+    if (view.getUint32(offset, true) !== 0x02014b50) {
+      offset += 1;
+      continue;
+    }
+    const fileNameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + fileNameLength;
+    if (nameEnd > bytes.length) break;
+    const name = decoder.decode(bytes.subarray(nameStart, nameEnd));
+    if (name === targetName) {
+      view.setUint32(offset + 24, claimedSize, true);
+      return new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+    }
+    offset = nameEnd + extraLength + commentLength;
+  }
+  throw new Error(`ZIP central directory entry not found: ${targetName}`);
+}
 
 function makeStoredZip(files: Record<string, string>): Blob {
   const encoder = new TextEncoder();
@@ -65,6 +107,24 @@ function makeStoredZip(files: Record<string, string>): Blob {
 }
 
 describe('commerce completion utilities', () => {
+  it('marks account statements as possibly partial at or above either row cap', () => {
+    expect(isCustomerStatementPossiblyPartial(0, 0)).toBe(false);
+    expect(isCustomerStatementPossiblyPartial(199, 499)).toBe(false);
+    expect(isCustomerStatementPossiblyPartial(200, 0)).toBe(true);
+    expect(isCustomerStatementPossiblyPartial(201, 0)).toBe(true);
+    expect(isCustomerStatementPossiblyPartial(0, 500)).toBe(true);
+    expect(isCustomerStatementPossiblyPartial(0, 501)).toBe(true);
+  });
+
+  it('fails closed when statement row counts are invalid', () => {
+    expect(isCustomerStatementPossiblyPartial(-1, 0)).toBe(true);
+    expect(isCustomerStatementPossiblyPartial(0, Number.NaN)).toBe(true);
+  });
+  it('counts unique cart lines separately from total units and ignores invalid lines', () => {
+    expect(summarizeCartCounts([{ quantity: 2 }, { quantity: 1 }, { quantity: 4 }])).toEqual({ uniqueItems: 3, totalUnits: 7 });
+    expect(summarizeCartCounts([{ quantity: 0 }, { quantity: -2 }, { quantity: Number.NaN }, { quantity: Number.POSITIVE_INFINITY }])).toEqual({ uniqueItems: 0, totalUnits: 0 });
+  });
+
   it('marks account statements as possibly partial at or above either row cap', () => {
     expect(isCustomerStatementPossiblyPartial(0, 0)).toBe(false);
     expect(isCustomerStatementPossiblyPartial(199, 499)).toBe(false);
@@ -308,6 +368,23 @@ describe('commerce completion utilities', () => {
   it('rejects malformed XLSX archives rather than treating them as empty tables', async () => {
     await expect(parseXlsxFirstWorksheet(new Blob(['not a zip file']), () => undefined))
       .rejects.toThrow('ترويسة ZIP');
+  });
+
+  it('rejects an XLSX archive member declaring inflated size above its budget before reading bytes', async () => {
+    const file = makeStoredZip({
+      'xl/workbook.xml': '<workbook xmlns:r="urn:relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      'xl/sharedStrings.xml': '<sst><si><t>item_code</t></si></sst>',
+      'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>',
+    });
+    const forged = await forgeCentralDirectoryUncompressedSize(file, 'xl/sharedStrings.xml', 5 * 1024 * 1024 + 1);
+    await expect(parseXlsxFirstWorksheet(forged, () => undefined)).rejects.toThrow('الحد الآمن');
+  });
+
+  it('rejects oversized CSV and XLSX files before reading file contents', async () => {
+    const oversized = { size: MAX_IMPORT_FILE_BYTES + 1 } as unknown as Blob;
+    await expect(hashFileSha256(oversized)).rejects.toThrow('100MB');
+    await expect(parseXlsxFirstWorksheet(oversized, () => undefined)).rejects.toThrow('100MB');
   });
 
   it('parses CSV quotes, CRLF, and escaped quotes across chunk boundaries', async () => {

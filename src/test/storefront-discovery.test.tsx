@@ -8,7 +8,19 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   fetchCategories: vi.fn(),
   fetchPromotions: vi.fn(),
+  fetchPopularProductRanking: vi.fn(),
+  fetchFeaturedProductRanking: vi.fn(),
+  featuredRanking: [
+    { product_id: "product-1", ranking_position: 1 },
+    { product_id: "product-3", ranking_position: 2 },
+  ],
+  popularRanking: [
+    { product_id: "product-3", ranking_position: 1 },
+    { product_id: "product-1", ranking_position: 2 },
+  ],
   fetchSettingsMap: vi.fn(),
+  user: null as null | { profileId: string; roles: string[]; name: string },
+  rpc: vi.fn(async () => ({ data: null as unknown, error: null as unknown })),
   products: [
     { id: "product-1", name: "Rice", item_code: "SKU-001", barcode: null, description: null, unit: "carton", base_price: 1000, cost_price: 600, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1000, wholesale_price: 900, inventory: { id: "inv-1", product_id: "product-1", warehouse_id: "warehouse-1", quantity_on_hand: 20, quantity_reserved: 0, quantity_available: 20, reorder_point: 0 } },
     { id: "product-2", name: "Sugar", item_code: "SKU-002", barcode: null, description: null, unit: "carton", base_price: 1200, cost_price: 800, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1200, wholesale_price: 1100, inventory: { id: "inv-2", product_id: "product-2", warehouse_id: "warehouse-1", quantity_on_hand: 15, quantity_reserved: 0, quantity_available: 15, reorder_point: 0 } },
@@ -18,11 +30,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const initialProducts = [...mocks.products];
+const initialPopularRanking = [...mocks.popularRanking];
+const initialFeaturedRanking = [...mocks.featuredRanking];
 
 vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCategories: mocks.fetchCategories,
   fetchPromotions: mocks.fetchPromotions,
+  fetchPopularProductRanking: mocks.fetchPopularProductRanking,
+  fetchFeaturedProductRanking: mocks.fetchFeaturedProductRanking,
   fetchSettingsMap: mocks.fetchSettingsMap,
 }));
 
@@ -31,24 +47,31 @@ vi.mock("@/lib/useFetch", () => ({
     if (fetcher === mocks.fetchProducts) return { data: mocks.products, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchCategories) return { data: [], loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchPromotions) return { data: [], loading: false, error: null, refetch: vi.fn() };
+    if (fetcher === mocks.fetchPopularProductRanking) return { data: mocks.popularRanking, loading: false, error: null, refetch: vi.fn() };
+    if (fetcher === mocks.fetchFeaturedProductRanking) return { data: mocks.featuredRanking, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchSettingsMap) return { data: {}, loading: false, error: null, refetch: vi.fn() };
     return { data: null, loading: false, error: null, refetch: vi.fn() };
   },
 }));
 
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ user: null, configurationError: null, ready: true }),
+  useAuth: () => ({ user: mocks.user, configurationError: null, ready: true }),
   AuthProvider: ({ children }: { children: unknown }) => children,
 }));
 
 vi.mock("@/lib/supabase", () => ({
-  supabase: { rpc: vi.fn(async () => ({ data: null, error: null })) },
+  supabase: { rpc: mocks.rpc },
   ORG_ID: "test-organization",
   ADMIN_PROFILE_ID: "test-admin-profile",
   WAREHOUSE_ID: "test-warehouse",
 }));
 
 import { routeTree } from "@/routeTree.gen";
+import {
+  appendOfflineCartMutation,
+  createOfflineCartScopeKey,
+  readOfflineCartLedger,
+} from "@/lib/offline-cart-ledger";
 
 type Mount = { root: Root; host: HTMLDivElement; active: boolean };
 const mounts: Mount[] = [];
@@ -95,6 +118,11 @@ describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
     mocks.products.splice(0, mocks.products.length, ...initialProducts);
+    mocks.popularRanking.splice(0, mocks.popularRanking.length, ...initialPopularRanking);
+    mocks.featuredRanking.splice(0, mocks.featuredRanking.length, ...initialFeaturedRanking);
+    mocks.user = null;
+    mocks.rpc.mockReset();
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
   });
 
   afterEach(async () => {
@@ -111,17 +139,233 @@ describe("customer storefront saved discovery", () => {
     expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
   });
 
+  it("renders the correct active product details from a direct dynamic URL without leaking base price", async () => {
+    const detail = await mountAt("/product/product-3");
+    expect(detail.host.querySelector(".sf-product-detail h2")?.textContent).toBe("Oil");
+    expect(detail.host.textContent).toContain("SKU: SKU-003");
+    expect(detail.host.querySelector(".sf-btn-primary")?.textContent).toContain("إضافة إلى السلة");
+    expect(detail.host.textContent).toContain("أضف للمفضلة");
+    expect(detail.host.textContent).not.toContain("1500");
+  });
+
+  it("renders an explicit unavailable state for an unknown product identifier", async () => {
+    const detail = await mountAt("/product/not-a-real-product");
+    expect(detail.host.textContent).toContain("المنتج غير متاح");
+    expect(detail.host.textContent).toContain("تعذر العثور على المنتج ضمن الكتالوج الحالي");
+    expect(detail.host.querySelector(".sf-product-detail")).toBeNull();
+  });
+
+  it("renders the featured storefront using only server-selected catalog items", async () => {
+    const featured = await mountAt("/featured");
+    const names = Array.from(featured.host.querySelectorAll("article h3")).map((node) => node.textContent);
+    expect(featured.host.textContent).toContain("المنتجات المميزة");
+    expect(names).toEqual(["Rice", "Oil"]);
+    expect(featured.host.textContent).toContain("الترتيب ضمن المنتجات المميزة");
+    expect(featured.host.textContent).not.toContain("Sugar");
+  });
+
+  it("fails closed if a featured server id no longer exists in the active catalog", async () => {
+    mocks.featuredRanking.splice(0, mocks.featuredRanking.length,
+      { product_id: "missing-featured-product", ranking_position: 1 },
+      { product_id: "product-1", ranking_position: 2 },
+    );
+    const featured = await mountAt("/featured");
+    expect(featured.host.textContent).toContain("أُخفيت القائمة كاملة");
+    expect(featured.host.querySelector("article h3")).toBeNull();
+  });
+
+  it("shows a deliberate empty state before an administrator selects featured products", async () => {
+    mocks.featuredRanking.splice(0, mocks.featuredRanking.length);
+    const featured = await mountAt("/featured");
+    expect(featured.host.textContent).toContain("لم يحدد فريق الكتالوج منتجات مميزة");
+    expect(featured.host.querySelector("article h3")).toBeNull();
+  });
+
+  it("orders the popular route by the server ranking and hides raw sales totals", async () => {
+    const popular = await mountAt("/popular");
+    const names = Array.from(popular.host.querySelectorAll("article h3")).map((node) => node.textContent);
+    expect(popular.host.textContent).toContain("الأكثر طلبًا");
+    expect(names).toEqual(["Oil", "Rice"]);
+    expect(popular.host.textContent).toContain("الترتيب حسب الطلبات المعتمدة");
+    expect(popular.host.textContent).toContain("لا تُعرض إجماليات المبيعات");
+    expect(popular.host.textContent).not.toContain("Unknown product");
+  });
+
+  it("fails closed when server rankings cannot be matched to the active catalog", async () => {
+    mocks.popularRanking.splice(0, mocks.popularRanking.length,
+      { product_id: "missing-product", ranking_position: 1 },
+      { product_id: "product-3", ranking_position: 2 },
+    );
+    const popular = await mountAt("/popular");
+    expect(popular.host.textContent).toContain("أُخفي الترتيب كاملًا");
+    expect(popular.host.querySelector("article h3")).toBeNull();
+  });
+
+  it("shows an explicit empty state when no server-backed popularity ranking exists", async () => {
+    mocks.popularRanking.splice(0, mocks.popularRanking.length);
+    const popular = await mountAt("/popular");
+    expect(popular.host.textContent).toContain("لا توجد طلبات مؤهلة كافية");
+    expect(popular.host.querySelector("article h3")).toBeNull();
+  });
+
+  it("isolates durable cart drafts by profile after the legacy cart is claimed", async () => {
+    mocks.user = { profileId: "profile-a", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    const first = await mountAt("/cart");
+    expect(first.host.textContent).toContain("Rice");
+    const owner = window.localStorage.getItem("aghbari:cart-owner:v1");
+    expect(owner).toContain("profile-a");
+    await unmount(first);
+
+    mocks.user = { profileId: "profile-b", roles: ["customer"], name: "Other Buyer" };
+    const second = await mountAt("/cart");
+    expect(second.host.textContent).not.toContain("Rice");
+    expect(second.host.textContent).toContain("سلتك فارغة");
+  });
+
+  it("keeps unavailable scoped draft lines visible and blocks checkout instead of silently dropping them", async () => {
+    mocks.user = { profileId: "profile-a", roles: ["customer"], name: "CI Buyer" };
+    const scope = createOfflineCartScopeKey("profile-a", window.location.origin);
+    readOfflineCartLedger(window.localStorage, scope, []);
+    appendOfflineCartMutation(window.localStorage, scope, {
+      id: "known-and-unresolved",
+      kind: "merge",
+      lines: [
+        { product_id: "product-1", quantity: 2 },
+        { product_id: "missing-offline-product", quantity: 3 },
+      ],
+    });
+    const cart = await mountAt("/cart");
+    expect(cart.host.textContent).toContain("صنف محفوظ غير متاح");
+    expect(cart.host.textContent).toContain("missing-offline-product");
+    expect(cart.host.textContent).toContain("لن يُرسل طلب جزئي");
+    const checkoutButton = Array.from(cart.host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("راجع الأصناف غير المتاحة"));
+    expect(checkoutButton).toBeDefined();
+    expect(checkoutButton?.disabled).toBe(true);
+  });
+
+  it("blocks checkout and never submits an order when the server price preview is unavailable", async () => {
+    mocks.user = { profileId: "checkout-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "RPC unavailable" } });
+
+    const checkout = await mountAt("/checkout");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(checkout.host.textContent).toContain("RPC unavailable");
+    const submitButton = Array.from(checkout.host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("تأكيد الطلب"));
+    expect(submitButton).toBeDefined();
+    expect(submitButton?.disabled).toBe(true);
+    expect(mocks.rpc.mock.calls.some(([name]) => name === "submit_customer_order")).toBe(false);
+  });
+
+  it("keeps cart amounts hidden when the server policy is off", async () => {
+    mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({
+      data: {
+        valid: true,
+        pricing_verified: true,
+        item_count: 1,
+        currency: "YER",
+        amounts_visible: false,
+        items: [{ product_id: "product-1", name: "Rice", item_code: "SKU-001", unit: "carton", quantity: 2 }],
+      },
+      error: null,
+    });
+
+    const cart = await mountAt("/cart");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(mocks.rpc).toHaveBeenCalledWith("get_customer_checkout_preview", {
+      p_items: [{ product_id: "product-1", quantity: 2 }],
+    });
+    expect(cart.host.textContent).toContain("سلة المشتريات");
+    expect(cart.host.textContent).not.toContain("ملخص المبالغ التقديري");
+    expect(cart.host.textContent).not.toContain("الإجمالي التقديري");
+    expect(cart.host.textContent).not.toContain("سعر الوحدة");
+  });
+
+  it("shows only the server-authorized cart amount preview when the policy is on", async () => {
+    mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({
+      data: {
+        valid: true,
+        pricing_verified: true,
+        item_count: 1,
+        currency: "YER",
+        amounts_visible: true,
+        total_amount: 40,
+        items: [{ product_id: "product-1", name: "Rice", item_code: "SKU-001", unit: "carton", quantity: 2, unit_price: 20, line_total: 40 }],
+      },
+      error: null,
+    });
+
+    const cart = await mountAt("/cart");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(cart.host.textContent).toContain("ملخص المبالغ التقديري");
+    expect(cart.host.textContent).toContain("الإجمالي التقديري");
+    expect(cart.host.textContent).toContain("ر.ي");
+    expect(cart.host.textContent).toContain("المبلغ تقديري للمعاينة");
+  });
+
+  it("fails closed when the cart financial RPC is unavailable", async () => {
+    mocks.user = { profileId: "customer-profile", roles: ["customer"], name: "CI Buyer" };
+    window.localStorage.setItem("aghbari:cart:v1", JSON.stringify([{ product_id: "product-1", quantity: 2 }]));
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "RPC unavailable" } });
+
+    const cart = await mountAt("/cart");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(cart.host.textContent).toContain("تعذر التحقق من ملخص مالي موثوق");
+    expect(cart.host.textContent).not.toContain("ملخص المبالغ التقديري");
+    expect(cart.host.textContent).not.toContain("الإجمالي التقديري");
+  });
+
+  it("isolates saved wishlist and comparison records between signed-in profiles", async () => {
+    window.localStorage.setItem("aghbari:wishlist:v2:profile:customer-a", JSON.stringify(["product-1"]));
+    window.localStorage.setItem("aghbari:wishlist:v2:profile:customer-b", JSON.stringify(["product-3"]));
+    window.localStorage.setItem("aghbari:compare:v2:profile:customer-a", JSON.stringify(["product-2"]));
+    window.localStorage.setItem("aghbari:compare:v2:profile:customer-b", JSON.stringify(["product-4"]));
+
+    mocks.user = { profileId: "customer-a", roles: ["customer"], name: "Buyer A" };
+    const wishlistA = await mountAt("/wishlist");
+    expect(wishlistA.host.textContent).toContain("Rice");
+    expect(wishlistA.host.textContent).not.toContain("Oil");
+    await unmount(wishlistA);
+
+    const compareA = await mountAt("/compare");
+    expect(compareA.host.textContent).toContain("Sugar");
+    expect(compareA.host.textContent).not.toContain("Beans");
+    await unmount(compareA);
+
+    mocks.user = { profileId: "customer-b", roles: ["customer"], name: "Buyer B" };
+    const wishlistB = await mountAt("/wishlist");
+    expect(wishlistB.host.textContent).toContain("Oil");
+    expect(wishlistB.host.textContent).not.toContain("Rice");
+    await unmount(wishlistB);
+
+    const compareB = await mountAt("/compare");
+    expect(compareB.host.textContent).toContain("Beans");
+    expect(compareB.host.textContent).not.toContain("Sugar");
+  });
+
   it("persists wishlist and caps comparison at three across direct route loads", async () => {
+    mocks.user = { profileId: "saved-list-profile", roles: ["customer"], name: "CI Buyer" };
     const first = await mountAt("/");
     expect(first.host.textContent).toContain("المنتجات");
 
     clickButton(first.host, 'button[aria-label="إضافة للمفضلة"]', 0);
-    await waitForStorage("aghbari:wishlist:v1", ["product-1"]);
+    await waitForStorage("aghbari:wishlist:v2:profile:saved-list-profile", ["product-1"]);
 
     for (let index = 0; index < 4; index++) {
       clickButton(first.host, 'button[aria-label="إضافة للمقارنة"]', index);
     }
-    await waitForStorage("aghbari:compare:v1", ["product-1", "product-2", "product-3"]);
+    await waitForStorage("aghbari:compare:v2:profile:saved-list-profile", ["product-1", "product-2", "product-3"]);
     expect(first.host.textContent).toContain("يمكن مقارنة ثلاثة أصناف فقط");
 
     await unmount(first);

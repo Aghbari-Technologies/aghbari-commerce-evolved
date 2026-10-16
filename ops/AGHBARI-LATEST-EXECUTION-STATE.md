@@ -1,272 +1,264 @@
-# Aghbari Commerce — Latest Execution State
+# CURRENT EXECUTION POINTER — 2026-10-16
 
-## Current implementation pointer — 2026-10-15 (storefront empty-catalog truth state)
+## LATEST EXECUTION POINTER — 2026-10-16 (storefront routes and saved-list privacy verified)
 
-- **Latest source change:** PR [#50](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/50) merged to `main` at `fffa5035f6b3ee3f55f4a2456b515aa0814e4899`, tested PR head `ced57138b68515b581fcc988271a1b9a1c847ed9`. Exact PR-head CI [38776511699](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776511699) **SUCCESS**. The separate main merge-SHA run is [38776814715](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38776814715); read its live conclusion before transferring the PR-head result.
-- **Storefront behavior:** when the live/cached catalog has zero products, the page now says no active products are published; when products exist but search/category filters match none, it retains the filter-specific empty message. Regression test lives in `src/test/storefront-discovery.test.tsx`. No sample products were inserted.
-- **Live-data limitation:** read-only published homepage still displayed zero products. This source change fixes the misleading empty state only; it does not prove or repair production catalog data. Published `/invoices`, `/statement` and `/manifest.webmanifest` still returned 404 on the checked snapshot.
-- **Prior security batch:** PR [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49) moved Gemini API keys from URL query strings to `x-goog-api-key`; exact PR-head CI [38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** and main merge-SHA CI [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) **SUCCESS**.
-- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Real authenticated browser journey, live Lovable deploy-SHA readback and correction of published deep routes remain unverified. The separate Lovable sign-in profile was created, but its signed-in-site list remains empty until the owner finishes setup.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001` — EXTERNAL.** Intended production project ref `ffxxjaolfntzbapmfbuv` remains permission-denied. Do not substitute `mrcyqezbhpncuvaehwgf`; no production database writes or migrations were performed.
-- **Persistent instructions:** `AGENTS.md` and `.github/copilot-instructions.md` remain present in remote `main`; repository auto-load rules are separate from live Lovable deployment synchronization.
-- **Execution host:** no checkout is mounted, so local `git fetch/status/HEAD` remain unavailable; remote state and Actions were read through GitHub APIs.
-
----
-
-## Previous verified implementation pointer — 2026-10-15 (Gemini API-key transport hardening)
-
-- **Merged source:** PR [#49](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/49) merged to `main` at `4787f806aa59ffb9ae5edaf219b201ef4a6d81f3` from the tested PR head `664d7b361f1ed8f001ef8bb5b53f8c307d5eb361`.
-- **Exact PR-head CI:** [run 38775258588](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775258588) **SUCCESS** for the exact PR-head SHA, including unit tests, isolated PostgreSQL 17 migration/workflow assertions, lint, build, production-artifact smoke and dev-server smoke. Main merge-SHA Actions run [38775736464](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38775736464) was still running at the time of this checkpoint; verify its final conclusion and do not transfer PR-head CI to the merge SHA.
-- **Security change:** Gemini requests now send credentials in `x-goog-api-key`, not the URL query; `buildGeminiRequestConfig` validates the approved Gemini HTTPS host and the model/key, and regression tests assert that no credential appears in URL/search. No real provider key was added or changed.
-- **Changed source paths:** `supabase/functions/ai-gateway/logic.ts`, `supabase/functions/ai-gateway/index.ts`, `src/test/ai-gateway-logic.test.ts`.
-- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Read-only published preview check: the homepage returned the Arabic storefront but showed zero available products; `/invoices`, `/statement` and `/manifest.webmanifest` returned 404. Source/CI success does not prove the live Lovable snapshot has been published. Interactive Lovable session is still needed to publish and read back the deployed SHA; no login credentials are stored in Git or chat.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001` — EXTERNAL.** The intended production ref `ffxxjaolfntzbapmfbuv` remains permission-denied in the available integration. Do not substitute `mrcyqezbhpncuvaehwgf`; no production migrations or writes were performed.
-- **Persistent instructions:** root `AGENTS.md` and `.github/copilot-instructions.md` remain present on the remote branch. They document the repository-level resume contract; live editor/deployment SHA sync is separate and unverified.
-- **Execution host:** no checkout is mounted. The remote ref/files/Actions were read through GitHub APIs; local `git fetch`, `git status`, local branch and local `HEAD` were not executed and remain unavailable.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this docs update: `812ca4e816c2becbf061a1a9554a2adc83f35eee`.
+- Completed cursor: `AGH-STOREFRONT-DISCOVERY-PRIVACY-001`.
+- Exact-head source CI [38854760631](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38854760631) on `812ca4e816c2becbf061a1a9554a2adc83f35eee` PASS: build, official generated route tree, unit tests, PostgreSQL 17 migrations/workflows, isolated logical backup/restore, lint, preview smoke 4173 and dev smoke 5173.
+- Verified work includes: 22 direct admin route modules with route-ID assertions; official TanStack tree sync; server-ranked `/popular`; database-backed/admin-editable `/featured`; `/product/:id` detail and unknown-ID tests; `/wishlist` and `/compare` profile/origin-scoped storage with a two-profile isolation regression.
+- Source-inventory convention remains 77/109; route presence does not mean every business action or live integration is complete. Some administration functions remain explicitly `BLOCKED / NOT CONFIGURED` when verified backend contracts do not exist.
+- External gates remain unproven: sync/publish to Lovable, target Supabase project `ffxxjaolfntzbapmfbuv`, and authenticated live-browser E2E. No production migration, mutation, deployment or Lovable publish was performed. Legacy v1 saved lists are not imported automatically into profile-scoped v2 keys, to avoid cross-profile disclosure.
+- Next cursor: `AGH-STOREFRONT-ROUTE-ACCEPTANCE-002` — continue source-backed customer journey testing around cart/checkout/order history and explicit authorization/error states; preserve server-authoritative prices, atomic order creation, and tenant isolation. Do not simulate success when backend contracts are absent.
+- This documentation-only commit needs its own exact-head CI before its HEAD can be marked PASS.
 
 ---
 
-## Current implementation pointer — 2026-10-15 (pricing boundary and XLSX integrity)
+## LATEST EXECUTION POINTER — 2026-10-16 (official route-tree sync)
 
-- **Latest verified product-code SHA:** `8e5b706f0f3b17bbef2e5fd62aa96af823bd3b64`; exact main CI [38771897585](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38771897585) **SUCCESS**. Prior state-only HEAD `7585fd02e394fe6db464e3aa2f83303c8ed939c8` also passed exact CI [38772980004](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38772980004). The present state correction creates a new SHA and must be checked separately.
-- **Raw product-price boundary:** `20261015210000_product_price_column_boundary.sql` adds safe catalog column grants and a server-derived, staff-role/tenant-bounded `fetch_staff_products(uuid)` RPC. Direct browser-role SELECT of `base_price`, `cost_price` and other private product columns is denied; staff product reads/writes use the guarded RPC projection.
-- **Accountant tier boundary:** `20261015220000_accountant_storefront_price_tier_boundary.sql` corrects the earlier malformed/stale migration variant and removes finance-only accountants from the operational staff pricing branch. Exact isolated DB assertions set base price 99,000 versus retail price 1,234 and prove the accountant receives 1,234.
-- **Onyx XLSX integrity:** PR [#46](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/46) merged at `41f2419545a70822b85a1ce2ab8faff212e520d8`; exact PR-head CI [38771084892](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38771084892) **SUCCESS**. Export generation strips XML 1.0-forbidden control characters from business fields before OOXML escaping. Target-version Onyx compatibility is still unproven.
-- **`next_task_id = AGH-SEC-BROWSER-E2E-001` — OPEN.** Source-level API/RPC/export review is complete for catalog, quote, reorder, barcode, assistant, offline cache, customer finance PDFs and Onyx workbook export. Exact main CI [38771897585](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38771897585) passed the price-column/accountant boundary. Remaining proof is actual authenticated browser navigation/download and the live deployment SHA; public route readback still 404s for finance/PWA deep routes.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001` — EXTERNAL.** Rechecked via Supabase integration: project listing exposes `aghbari-commerce` only at ref `mrcyqezbhpncuvaehwgf`; `get_project(ffxxjaolfntzbapmfbuv)` remains permission-denied. Do not substitute the other project. No production migrations/writes were performed.
-- **Published/browser evidence:** fresh read-only fetch of `/login` returned the Arabic login page; `/invoices`, `/statement`, both PDF routes, and `/manifest.webmanifest` returned 404. Lovable's official publish documentation says live hosting is a snapshot and source/editor changes only reach visitors after selecting **Publish → Publish changes**: https://docs.lovable.dev/features/publish and https://docs.lovable.dev/features/hosting. The available browser profile has no sign-in for Lovable; publishing is therefore NOT performed/verified. Do not ask the owner to paste credentials; request approval for an interactive sign-in setup if this external action is required.
-- **Lovable / persistent rules:** root `AGENTS.md` and `.github/copilot-instructions.md` are present remotely. Lovable documents that root `AGENTS.md` is always loaded: https://docs.lovable.dev/features/knowledge (FAQ lines 330–334). This confirms the loader mechanism, **not** live editor/deployment SHA sync. No Lovable credits were spent.
-- **Execution host:** no repository checkout is mounted. Remote refs/files/actions were verified using GitHub APIs; local `git fetch`, `git status`, local branch and local `HEAD` were not executed and are explicitly **UNAVAILABLE**, not PASS.
-
----
-
-## Verified merged batch — AGH-CUSTOMER-360-001: company-member invitations and identity scope
-
-- **Current main SHA:** 68365d5dd87e9f00eff6bd68c6ad7d517e9cb567; PR [#33](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/33) merged successfully from tested PR SHA ecf6412a93d8350eb40de97b995e43f1e84b309e.
-- **Exact PR CI:** [run 38708641537](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38708641537) **SUCCESS** on the exact PR SHA.
-- **Exact main CI:** [run 38708849372](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38708849372) **SUCCESS** on the exact merged main SHA; unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke all passed.
-- Added customer_company_memberships and customer_company_invitations, hashed one-time invitation tokens (7-day expiry), verified-email + matching-email acceptance, owner-side list/revoke, audit events, and buyer / finance / viewer capability boundaries. Existing order, quote, reorder, statement, address and contact RPC/RLS paths resolve the invited profile to its explicitly linked customer rather than reassigning customer history.
-- Frontend: /company/members to create/copy invitations and revoke members; /company/accept-invitation to accept them. Sending mail is not wired; the owner shares the returned link manually. The feature does not create a staff-role account.
-- CI also covers collision-free membership fixtures and checkout JSONB payload typing. Do not remove tenant checks to get tests to pass.
-- **Evidence limit:** no production migration was applied. Expected Supabase ref ffxxjaolfntzbapmfbuv remains inaccessible; do not substitute mrcyqezbhpncuvaehwgf. Real authenticated-browser E2E and production DB proof remain OPEN under AGH-SEC-BROWSER-E2E-001; live Lovable-editor SHA sync remains unproven.
-- AGH-CUSTOMER-360-001 was **PARTIAL** at the historical PR #33 checkpoint; finance PDFs were implemented later in PR #35. The sole current cursor is `next_task_id = AGH-SEC-BROWSER-E2E-001 — OPEN` in the current state section above.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this sync commit: `3b748d041cf47def279b033850e87e39fd397168`.
+- Added the remaining 22 admin screen modules and exact-route-ID assertions in the preceding source commit `3b748d041cf47def279b033850e87e39fd397168`.
+- Exact-head CI run [38852692602](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852692602) on that preceding SHA: dependency/lockfile verification PASS; **build PASS**; route-tree drift guard FAIL because the generated output was not yet committed; unit tests, migration/restore, lint and smoke tests were skipped by the guard failure. Do not treat this as a full CI pass.
+- Updated `src/routeTree.gen.ts` using the exact file diff emitted by the official TanStack build generator in that run. Blob prefix is expected to match generated index `241f0f8`; the next exact-head run must prove the drift guard.
+- Updated screen-action matrix and requirement registry to record the source-backed screens and explicit unavailable contracts. No production database writes, deployment, or Lovable publishing.
+- Next task: `AGH-ADMIN-ROUTE-ACCEPTANCE-001` — verify the generated-tree guard and run unit tests, PostgreSQL 17 migrations/workflows, lint, build, and both smoke checks on the synchronized current head. Fix any source failure before advancing.
+- Local commands remain NOT RUN because there is no local checkout. Live authenticated browser, intended Supabase, and Lovable publish gates remain separately blocked.
 
 ---
 
 
-## Verified offline catalog cache privacy subgate
+## LATEST EXECUTION POINTER — 2026-10-16 (administration route slice)
 
-- **Code SHA:** `fc7e44c9fc55b191ea4b9aad5ca9b5063ca51be1`.
-- **Exact-SHA CI:** [run 38698194334](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38698194334) **SUCCESS**, including unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
-- `OfflineWorkspacePage` now runs `sanitizePublicCatalogCache()` both when loading/re-writing an existing `aghbari:catalog:v1` cache and before saving fresh `fetchProducts()` sync results. The new route regression seeds unsafe legacy staff cache data and a fresh broad staff product response, then verifies cost/tier prices, reserved/threshold stock fields and internal notes are absent from localStorage.
-- This is cache route/jsdom + exact-SHA CI evidence; not production/live-browser proof. Keep `AGH-SEC-BROWSER-E2E-001` OPEN and `AGH-PRICE-PRIVACY-001` PARTIAL pending real-browser and complete channel proof.
-
----
-## Active subgate — sanitize the offline catalog cache on read and write
-
-- At verified base SHA `950174047f0ef34f53cd7cc4ccec0f0599bade46`, exact-SHA CI [38697641746](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697641746) passed all gates.
-- Source review found `sanitizePublicCatalogCache()` already strips purchase cost, tier prices, inventory reservations/thresholds and internal notes, with an existing unit test; however, `OfflineWorkspacePage` was writing raw `fetchProducts()` rows directly to `aghbari:catalog:v1` and reading prior contents without applying the sanitizer. Since staff queries intentionally return broader fields, this could persist private values locally.
-- This batch applies the existing allowlist when hydrating/re-writing legacy cache contents and when storing fresh catalog sync results. `src/test/customer-workflow-tenant.test.tsx` adds route-level regression for both stale cache migration and fresh sync from a staff payload. Exact-SHA CI is pending; no production DB or user data was touched.
-
----
-## Verified pricing-privacy RPC subgate
-
-- **Code SHA:** `fe6a993e8ba809d6117c553314ddbc49b9c256db`.
-- **Exact-SHA CI:** [run 38697134660](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697134660) **SUCCESS** for unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
-- `scripts/test-database-migrations.mjs` now verifies authenticated customers cannot directly SELECT tier rows in `public.product_prices`, cannot execute `public.customer_product_unit_price(...)`, and cannot call `public.preview_order_pricing(jsonb)`. Existing checkout validation still omits line prices and order totals. The direct table read regression initially exposed a real defect; `20261015120000_customer_tier_price_read_boundary.sql` fixes it by revoking table SELECT from `PUBLIC, anon, authenticated` and checking for effective column/table privileges.
-- The actual `/admin/quotes` route tests also pass: a customer is denied before tenant/table/RPC reads; active staff can load the staff quote workspace. These remain mocked jsdom tests and isolated database evidence, not a live browser or production deployment.
-- **Remaining gate:** `AGH-SEC-BROWSER-E2E-001` OPEN and `AGH-PRICE-PRIVACY-001` PARTIAL pending full API/RPC/cache/export channel coverage and live authenticated browser proof. Intended production Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible in the connected integration; no production migration was applied.
-
----
-## Latest verified route-role subgate — customer denied, staff allowed
-
-- Exact-SHA CI at `c19c0b0516194d309fdf183690b8ceb1ee7a595f` [run 38696894239](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696894239) **SUCCESS** across unit tests, isolated PostgreSQL 17, lint, build and port-5173 smoke.
-- The actual `/admin/quotes` route now has a passing customer-denial test (zero tenant/table/RPC calls) and a passing active-staff test (staff quote workspace loads with the explicit non-financial column projection). These are jsdom route tests, not live browser auth.
-- Exact-SHA CI for the raw RPC denial tests passed at `fe6a993e8ba809d6117c553314ddbc49b9c256db` ([run 38697134660](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38697134660)) **SUCCESS**. Authenticated customers are denied direct calls to `customer_product_unit_price(...)` and `preview_order_pricing(jsonb)`; table SELECT denial and price-free customer checkout response assertions also pass.
-- `AGH-SEC-BROWSER-E2E-001` and `AGH-PRICE-PRIVACY-001` remain OPEN/PARTIAL respectively; production Supabase and live browser evidence remain unavailable.
-
----
-## Latest verified admin-role boundary — customer denial
-
-- Exact-SHA CI at `aff2a30dadf5d977a82f2c8b5458da46f100cc98` [run 38696635586](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696635586) **SUCCESS**. The customer identity visiting `/admin/quotes` is rejected with `لا تملك صلاحية الإدارة` before `getCurrentTenantScope`, `supabase.from`, or `supabase.rpc` is called.
-- New complementary case in `src/test/customer-workflow-tenant.test.tsx` exercises the same actual route with an active `staff` identity, expecting the staff quote workspace to load only the explicit non-financial quote columns. The new exact-SHA CI is pending.
-- The tier-price table leak is fixed and isolated-CI-proven at SHA `8f1a7ec7b6f85a280da66e183bfd130996902edb` / run `38696292337`. Production DB and live-authenticated browser proof remain unavailable; `AGH-SEC-BROWSER-E2E-001` remains OPEN.
-
----
-## Active subgate — customer denial on the actual admin quotes route
-
-- The direct tier-table access fix at SHA `8f1a7ec7b6f85a280da66e183bfd130996902ed` passed exact-SHA CI [38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337), including unit, isolated PostgreSQL, lint, build and port-5173 smoke.
-- Extends `src/test/customer-workflow-tenant.test.tsx` to mount the actual `/admin/quotes` route with a customer identity and assert the application denies administration before any tenant/data/RPC access. This is route/jsdom acceptance, not a real browser authentication session. New exact-SHA CI is pending.
-- `AGH-SEC-BROWSER-E2E-001` remains OPEN for live authenticated customer/staff browser acceptance and all-channel price tier verification; production Supabase is still externally inaccessible.
-
----
-## Verified security fix — authenticated tier-price enumeration closed in isolated CI
-
-- **Code SHA:** `8f1a7ec7b6f85a280da66e183bfd130996902edb`.
-- **Exact-SHA CI:** [run 38696292337](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38696292337) **SUCCESS** across unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build and port-5173 smoke.
-- CI run `38695976338` on parent SHA `700fef00cd26bc022b2f8837236530195951db19` exposed the actual defect: an authenticated customer could enumerate `public.product_prices`, because the public storefront migration revoked direct SELECT from `PUBLIC, anon` but omitted `authenticated`.
-- New migration `supabase/migrations/20261015120000_customer_tier_price_read_boundary.sql` revokes direct table SELECT from `PUBLIC, anon, authenticated` and aborts if table-level or any column-level SELECT remains available to `authenticated`. The new database regression now passes and order pricing still works through the server-owned pricing workflow on isolated CI.
-- **Proof boundary:** production Supabase ref `ffxxjaolfntzbapmfbuv` is still inaccessible; no production migration was applied. This closes the direct-table leak in repository migration tests, not all pricing transports. `AGH-PRICE-PRIVACY-001` remains PARTIAL; `AGH-SEC-BROWSER-E2E-001` remains OPEN.
-
----
-## Security finding — authenticated tier prices were directly readable
-
-- Exact CI run [38695976338](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695976338) failed `Apply all migrations to isolated PostgreSQL 17 and verify core workflows` at SHA `700fef00cd26bc022b2f8837236530195951db19`. The new assertion proved that an authenticated customer could directly enumerate `public.product_prices`; this is a real isolated-DB security defect, not a browser-test harness issue.
-- Root cause: `20261015110000_public_storefront_tenant_scope.sql` revoked table SELECT from `PUBLIC, anon` but omitted `authenticated`. The tenant restrictive policy only scoped rows by organization; it did not restrict this sensitive table to staff.
-- Fix under test: new additive migration `20261015120000_customer_tier_price_read_boundary.sql` revokes direct SELECT from `PUBLIC, anon, authenticated` and aborts if table-level or any column-level SELECT remains for `authenticated`. The existing CI regression test requires customer direct reads to be denied or filtered to zero rows. The fix is not considered proven until exact-SHA CI passes.
-- No production database was touched. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN pending CI, full-channel checks, and actual browser/production evidence.
-
----
-## Active security subgate — authenticated customer tier-price non-enumeration
-
-- Adds a targeted assertion to `scripts/test-database-migrations.mjs`: under the CI `authenticated` role for a customer identity, querying `public.product_prices` directly must either be denied by SQL privileges or return zero visible rows. Returning any tier rows fails the test. Existing checkout tests still verify the customer cart endpoint does not return unit prices or order totals.
-- This closes a specific gap not previously asserted directly for authenticated customers (anonymous direct access was already tested). Exact-SHA CI for this new assertion is pending. Keep `AGH-PRICE-PRIVACY-001` PARTIAL and `AGH-SEC-BROWSER-E2E-001` OPEN until complete channel and real-browser evidence exists.
-
----
-## Latest verified subgate — customer quote workflow route acceptance
-
-- **Current source SHA:** `6a4b68acc8a9295f508d4301cce754cf826e7f3d`.
-- **Exact-SHA CI:** [run 38695532757](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695532757) **SUCCESS**; unit tests, isolated PostgreSQL 17 migration/workflow acceptance, lint, build, and port-5173 dev-server smoke all passed.
-- `src/test/customer-workflow-tenant.test.tsx` mounts the actual `/quotes` route through the generated route tree and checks unauthenticated login gating/no data reads; authenticated customer scope resolution and organization-filtered least-privilege catalog query; and fail-closed behavior when the authenticated scope RPC fails. The test also supplies the root `AuthProvider` context needed by the actual route tree.
-- This is jsdom route/component evidence with mocked auth/data calls; it is **not** a live authenticated browser session, production database, or proof for every pricing channel. `AGH-SEC-BROWSER-E2E-001` remains **OPEN**.
-
----
-## Latest CI correction — root authentication wrapper in route acceptance
-
-- Follow-up SHA `94f2d8a02628443522dfe7fcad1b398bdb62d5e0` failed its unit-test gate in Actions [38695284952](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38695284952): **94 tests passed, 3 failed** in the new customer workflow test. The `/quotes` page rendered the root generic error because the mocked `@/lib/auth` module omitted `AuthProvider`, which the actual root route requires.
-- Follow-up adds an `AuthProvider` pass-through to the test mock, consistent with existing route tests. This is test harness correction only; exact-SHA CI for the fix is pending. Preserve the task as OPEN.
-
----
-## Latest CI correction — customer workflow router context
-
-- Test attempt SHA `d02e3f5408e67729a619616fcb56c03bca702b17` failed in two component cases with `TypeError: Cannot read properties of null (reading 'isServer')` from TanStack Router `useLinkProps`: the real `QuoteWorkspacePage` was mounted without router context. Aggregate unit result: 95 passed, 2 failed; no DB/lint/build gates ran after the unit failure.
-- Follow-up edits `src/test/customer-workflow-tenant.test.tsx` to mount the `/quotes` route via the actual generated `routeTree`, `RouterProvider`, memory history, and a `QueryClient`, so the page's real links have router context. This fixes the test harness, not product source behavior; the follow-up exact-SHA CI is pending.
-- Preserve the claim boundary: the test remains jsdom component/route acceptance, not live authenticated browser E2E or production DB proof. `AGH-SEC-BROWSER-E2E-001` remains OPEN.
-
----
-## Active subgate — customer workflow auth and tenant acceptance
-
-- The preceding tenant-scope resolver source tests at SHA `fe4440cd8a34c61facc06425abce7916dbd52fb1` passed exact-SHA CI [38694500854](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694500854). The follow-up state/blocker documentation at SHA `d5b404235f0b97347b4140281dbb44850e05d341` also passed exact-SHA CI [38694768595](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694768595).
-- This batch adds `src/test/customer-workflow-tenant.test.tsx`, which mounts the actual `QuoteWorkspacePage` component and verifies unauthenticated users cause no tenant or database read, authenticated customers load products only after tenant scope resolution and query by the resolved organization, and scope failure stops data reads.
-- This is component-level jsdom acceptance, not a live browser session, real auth-provider integration or production database proof. Keep `AGH-SEC-BROWSER-E2E-001` OPEN until live authenticated customer/staff browser acceptance and full pricing privacy channels are proven.
-
----
-## Latest verification — tenant-scope tests and exact-SHA CI
-
-- Remote `main` is `fe4440cd8a34c61facc06425abce7916dbd52fb1`; exact-head Actions [38694500854](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694500854) completed **SUCCESS**.
-- Actual CI steps on that SHA passed: unit tests (including `src/test/tenant-scope.test.ts`), all migrations and workflows on isolated PostgreSQL 17, lint, build, and port-5173 dev-server smoke.
-- The new resolver tests cover authenticated tenant mapping/cache, missing session, malformed scope denial, retry after RPC failure, anonymous public binding/fail-closed behavior, signed-in tenant selection, and auth-event cache invalidation.
-- **Scope boundary:** this is source-level/unit and isolated database evidence, not authenticated end-to-end browser proof or production database proof. `AGH-SEC-BROWSER-E2E-001` remains OPEN.
-
----
-## Active subgate — authenticated tenant-scope resolver regression tests
-
-- Previous source privacy test fix SHA `127fb2b001c1ae4414cd8ee8baf9864cdd8fac12` is now **CI SUCCESS**: [run 38694129297](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38694129297); unit tests, isolated PostgreSQL 17 workflows, lint, build and port-5173 smoke all passed on that exact SHA.
-- This batch adds `src/test/tenant-scope.test.ts` against the real `src/lib/supabase.ts` resolver to cover signed-in context mapping/cache, missing session, malformed server scope, retry after RPC failure, anonymous public binding/fail-closed behavior, signed-in scope selection, and auth-event cache invalidation.
-- These are isolated unit tests, not authenticated browser E2E or production Supabase proof. The task remains OPEN; this commit's exact-SHA CI must pass before recording the subgate.
-
----
-## Latest result — AGH-SEC-BROWSER-E2E-001 lint fix
-
-- First source-test SHA `e26e71e4ec05ef90e42da922bdf513cff43c22ed`: Actions [38693899113](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38693899113) showed **unit tests PASS** and **isolated PostgreSQL acceptance PASS**, then Lint failed only on `prefer-const` at `src/test/public-catalog-privacy.test.ts:44` (`builder` never reassigned). Build and server smoke were skipped by workflow dependency.
-- The fix changes the query-builder declaration from `let` plus assignment to one `const` declaration. This follow-up SHA's exact CI is pending; don't infer a pass from the previous unit/DB successes.
-- Once CI passes, the source-level query-contract subgate may be recorded as passing. `AGH-SEC-BROWSER-E2E-001` remains OPEN for real authenticated browser E2E and full price-tier privacy across API/RPC/cache/export.
-
----
-## Active task — AGH-SEC-BROWSER-E2E-001 (source-runnable subgate)
-
-- Remote `main` baseline before this batch: `85dab55ec8e9ca903fe54b5f9845abe409037fad`, exact-SHA CI [38693335507](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38693335507) **SUCCESS**.
-- This batch adds `src/test/public-catalog-privacy.test.ts` to exercise the actual `fetchProducts()` query contract: anonymous least-privilege projections, organization/warehouse filters sourced from resolved scope, fail-closed behavior when public scope resolution fails, and staff-only broad projection under the authenticated scope.
-- This is **source-level Vitest coverage**, not authenticated browser E2E or production DB proof. Keep `AGH-SEC-BROWSER-E2E-001` **OPEN** until real customer/staff browser acceptance and all API/RPC/cache/export price-tier privacy channels are proven.
-- Expected Supabase project `ffxxjaolfntzbapmfbuv` remains the last-recorded external blocker. No production migration or data mutation is performed.
-- A mounted local checkout is unavailable in this execution host; source changes are prepared against the verified remote tree. Verify the new commit's own CI before closing this subgate.
-
----
-## Free Lovable persistence path verified from official documentation — 2026-10-15
-
-- **Official contract:** Lovable docs state that root-level `AGENTS.md` files are always read by the Lovable agent regardless of session length: https://docs.lovable.dev/features/knowledge. The existing root `AGENTS.md` on this repository is therefore the free persistent-instruction fallback; the separate Project Knowledge text field need not be directly edited just to make resume rules durable.
-- **Live repository baseline before this clarification:** `main` SHA `8729fdd39158ab562d5833d4dbdcf76856d83d47`; exact-SHA CI [run 38692662830](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692662830) completed **SUCCESS**. This is baseline evidence, not proof for the clarification commit that follows.
-- **Scope boundary:** the documented AGENTS loader is verified from official docs; the actual active branch/editor sync for any new commit and direct edit of Project settings → Knowledge remain **UNVERIFIED** because the free browser route did not provide an authenticated editor session. Do not spend wallet/credits or claim editor sync without direct evidence.
-- **Next code task remains** `AGH-SEC-BROWSER-E2E-001`; the last recorded external blocker to production DB work is `AGH-EXT-SUPABASE-001` for intended project `ffxxjaolfntzbapmfbuv`.
-
----
-## Verified protocol implementation checkpoint — 2026-10-15
-
-- **Implementation SHA on remote `main`:** `90602f6deeba79a5d80efad38d83efec64be5173` — https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/90602f6deeba79a5d80efad38d83efec64be5173.
-- **Exact-SHA CI:** [run 38692264543](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38692264543) completed **SUCCESS** for the implementation SHA above. The job's unit tests, isolated PostgreSQL 17 migration/core workflow acceptance, lint, build, port 5173 dev-server smoke and cleanup steps all concluded success.
-- **Protocol files changed in this batch:** `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, `ops/AGHBARI-LATEST-EXECUTION-STATE.md`, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. Root `AGENTS.md` and `.github/copilot-instructions.md` were already committed and were verified present; no duplicate instruction system was created.
-- **Protocol task:** `AGH-OPS-RESUME-001` is `DONE_VERIFIED` for repository persistence and exact-SHA CI. Official Lovable docs establish that root `AGENTS.md` is always read, providing the free persistent-instruction fallback; this does **not** prove a particular new SHA synchronized into the live editor or that Project Knowledge was directly edited.
-- **Remote ref safety:** GitHub reports branch protection disabled. Any direct `main` update must use an expected-SHA lease with `force=false`; abort on SHA mismatch.
-- **Local Git limitation:** this execution host has no mounted checkout. The remote branch, commit and Actions were verified by GitHub API; local `git fetch`, `git status`, local branch and local `HEAD` were not run. Working-tree state remains **UNKNOWN**.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001` — external, rechecked 2026-10-15.** `get_project(ffxxjaolfntzbapmfbuv)` returns permission denied in the connected Supabase integration. The only visible project with the matching name `aghbari-commerce` is ref `mrcyqezbhpncuvaehwgf`, ACTIVE_HEALTHY; its migration history has 133 rows and ends at `20260925040254`, behind current repository migrations. Similar name is not proof of identical project; do not apply migrations to `mrcyq...` as a substitute. No production mutation occurred; keep production isolation unproven until intended project identity/access is confirmed.
-- **Lovable persistence/sync:** root `AGENTS.md` auto-reading is documented by Lovable's official docs (https://docs.lovable.dev/features/knowledge), so it is the no-cost instruction mechanism. Synchronization of the newest SHA into the live editor remains unverified; do not spend credits on discovery or claim sync based on Git push alone.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) remains OPEN; target branch: `fix/acceptance-hardening-cart-finance-20261015` → `main`.
+- Parent HEAD verified immediately before the source write: `23040bcdd461ef915aab490c282e92c5aafa79bf`. No new branch and no main-branch writes.
+- Source scope: add 22 route modules for remaining administration destinations; reuse existing tenant-aware screen components and explicitly disclose unavailable backend contracts; add exact route-ID regression cases and update the screen-action matrix/requirement registry.
+- Changed screen behavior: `src/components/AdminOperationalScreens.tsx` identifies the unsupported AI-settings contract explicitly. No production Supabase write or Lovable publish occurred.
+- Verification: official TanStack generation and exact-head CI are pending. Do not claim build, lint, tests, route registration, or deployed behavior PASS until the new SHA has current-head Actions evidence. Local commands are not run because this context has no local checkout.
+- Next task (single cursor): `AGH-ADMIN-ROUTE-TREE-SYNC-001` — commit official generated `src/routeTree.gen.ts`, verify every route ID and run exact-head CI; fix failures before advancing.
+- Lovable/Supabase/authenticated-browser acceptance remains a separate existing gate; this batch does not change production or assert those gates passed.
 
 ---
 
-## Historical checkpoints
 
-## Historical checkpoint before protocol setup (preserved; latest proof is above)
-
-- **Remote branch:** `main`; the source baseline checked immediately before this protocol-only batch was `8324f22419a967fc86f20dddc3b8650a6fd89390` ([commit](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/commit/8324f22419a967fc86f20dddc3b8650a6fd89390)). Its commit date was 2026-10-15 06:10:49 UTC.
-- **Exact-SHA CI:** [run 38690894558](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38690894558) for that exact SHA completed **SUCCESS**; workflow job `test-and-build` concluded success. This evidence applies to `8324f224...` only, not to any later documentation commit.
-- **Persisted protocol commit verified:** `e34dfebc44a7ec72dfed5bc3475e82aa4898a651` passed [CI run 38691694726](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38691694726) **SUCCESS**. A follow-up documentation correction normalizes the tenant-isolation registry row; verify the exact resulting HEAD/CI and never inherit this PASS.
-- **Source evidence in that baseline:** public storefront reads resolve scope from server-side publication configuration; isolated PostgreSQL migration tests assert tenant-scoped anonymous product/inventory visibility and deny direct reads of purchase cost, customer price tiers, reserved inventory fields, and private admin settings. Public catalog cache sanitization was added. This does not prove production Supabase or authenticated browser E2E.
-- **Repository/session instruction entry points:** root `AGENTS.md`; GitHub Copilot repository instructions `.github/copilot-instructions.md`; canonical references below. GitHub documents repository-wide Copilot instructions under that exact path. Whether Lovable automatically loads these files remains **UNVERIFIED** and must be confirmed in that host rather than assumed.
-- **`blocked_task_id = AGH-EXT-SUPABASE-001`:** last-known external blocker is access to the intended project `ffxxjaolfntzbapmfbuv`. This batch did not access or mutate any production Supabase project; re-verify the same intended project before declaring the blocker current or trying a migration.
-- **Local Git note for this execution environment:** no repository checkout was mounted; the shell clone attempt failed because it could not resolve `github.com`. Therefore no local `git status`/local `git fetch origin` result is claimed. Remote branch/commit/Actions were checked through the GitHub integration. The next agent with a checkout must run commands in `AGENTS.md`; working-tree cleanliness is **UNKNOWN**, not inferred clean.
-- **Exact-SHA rule:** after this documentation commit is pushed, fetch the resulting remote `main` and its own Actions run. Never transfer the parent SHA's PASS to the new documentation SHA. The next session must read live HEAD first; the SHA above is a baseline, not an assumed future HEAD.
-
+## Active workstream
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`
-- Branch: `main`
-- Main SHA before this documentation-pointer update: `fe22af0424947b56ae80e0679621cf0df333e284`
-- Full owner-supplied spec: `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md`
-- Enduring mandate: `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`
-- Single requirement registry: `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`
-- Session recovery/startup prompt: `ops/AGHBARI-SESSION-RESUME.md`
-- Root project memory: `PROJECT_MEMORY.md`
+- Active PR: [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) — OPEN
+- Work branch: `fix/acceptance-hardening-cart-finance-20261015` → `main`
+- Preserve this branch while the PR is open. Do not push directly to `main`.
 
-## CI evidence
-- [Run 38687301037](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687301037), SHA `f75dcb7fd3f4a598b2acf6db6d649e0f54c92fac`: **PASS**, including unit, isolated PostgreSQL 17 acceptance, lint, build and port 5173 smoke.
-- [Run 38687685412](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687685412), SHA `05fcacbf4ddb6bfd025ab4b1fee7c144a44d4459`: **PASS**, including expanded route and PWA asset smoke tests.
-- [Run 38687897943](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38687897943), SHA `971a49d75b546ccba0a05d8829c8d9c38cae085a`: **IN PROGRESS at last observation**. Confirm latest `main` and CI after the current documentation commit; do not transfer prior PASS status to a new SHA.
+## CURRENT PARALLEL WORK CHECKPOINT — customer route expansion (2026-10-16)
+- **Current verified PR HEAD before this state-file update:** f79f5af154d0567b2892ffebb8f9775989264f58; PR #72 remains OPEN on fix/acceptance-hardening-cart-finance-20261015. Do not create another branch and do not merge.
+- Source batch: commit a95c134639d9f3db4b0224ccb3e5cd3fde025d7b adds optional initialQuery support in the existing Storefront; direct route files src/routes/search.tsx, catalog.tsx, products.tsx, pricing.tsx, company.tsx, financial-documents.tsx, payments.tsx and receivables.tsx; regression test src/test/screen-route-coverage.test.tsx; updated docs/canonical/AGHBARI-SCREEN-ACTION-COVERAGE.md and docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md.
+- Coverage matrix now lists **41/109 (37.6%) direct source routes**. This is route-source coverage only. /payments and /receivables reuse the verified statement workspace; they do not claim payment posting or a specialized aging module. /pricing shows current account-authorized storefront pricing and is not the staff tariff editor. /company remains read-only until an approved mutation contract exists. These routes remain PARTIAL pending behavior and acceptance proof.
+- **Exact-head verification:** the newest customer batch plus route-tree sync passed exact-head GitHub Actions run [38849443632](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38849443632) on SHA f79f5af154d0567b2892ffebb8f9775989264f58: build PASS; official TanStack route-tree drift check PASS; unit tests PASS; isolated PostgreSQL migrations/core workflows PASS; logical backup/restore PASS; lint PASS; production-preview smoke 4173 PASS; dev smoke 5173 PASS. Exact unit-test count not independently extracted in this checkpoint. Local commands remain NOT RUN because no local checkout. This is source/CI proof only, not live Lovable publish, production Supabase or authenticated-browser proof.
+- **Generated route tree:** synced src/routeTree.gen.ts from the official TanStack generator diff emitted by CI run 38849293551; follow-up exact-head CI run 38849443632 verified committed generated-tree equality. The route /company is represented by the non-nesting file src/routes/company_.tsx so that existing /company/details, /company/users, /company/contacts and invitation routes remain siblings rather than being swallowed by a parent without Outlet. Never hand-edit generated output; repeat the build/generator check after further route changes.
+- **Lovable sync:** no direct Lovable project/editor/publish access is confirmed in this context, and no sync/publish is claimed. An official Lovable connection has been surfaced for user authorization; continue source work in this PR while access remains external. Do not promise a sub-hour sync without a verified project connection and published-SHA readback.
+- Next executable steps: continue remaining catalogue routes using real category/promotion/product evidence; do not invent popularity/featured/collection semantics without a verified data contract. Implement remaining admin/source-feasible routes and action contracts. Keep live Lovable/Supabase/browser gates distinct.
 
-## Changes already pushed
-- Fixed preview-auth timeout lint blocker and preserved the two-second timeout semantics.
-- Operations Center refresh re-fetches active data rather than displaying an unsupported success toast.
-- Onyx workspace wording matches the integrated Aghbari product direction; reconciliation stays read-only pending an approved adjustment contract.
-- Offer creation is explicitly disabled until an actual create operation exists.
-- Data-center connectivity status reflects an actual category query instead of a hard-coded success label.
-- Root `.env` removed from the current tree and `.env.example` added with empty values.
-- The full uploaded master specification, requirement registry, execution mandate, project memory, session resume prompt, state and progress ledger are persisted on main.
+## Exact-SHA evidence and latest-head discipline
+- **Latest known source CI success (historical, not current-head proof):** `8764ba6f3ff24a148f89641d6ebd6ab30202d04b`, [Actions 38837050093](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38837050093) **SUCCESS**: 21/21 test files, 252/252 tests, isolated PostgreSQL 17 migration/workflow acceptance, logical backup/restore, lint, build, production preview smoke 4173 and dev smoke 5173. This exact SHA validates its own changes only; it does not prove live browser, intended-production database, Lovable sync or deployment.
+- Previous accepted source checkpoint: `c7902dec892ea50da72b6c241a3c5386bd76a806`, exact-head [Actions 38844964777](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38844964777) **SUCCESS**: 25/25 test files, 278/278 tests, PostgreSQL 17 migration/workflow suite, logical backup/restore, lint/build, production preview 4173 and dev smoke 5173. The route slice also verifies `/store`, `/statements` title `كشوف الحساب`, and `/company/users` on both applicable route checks.
+- No local checkout is mounted in this execution context; no local `git fetch/status/HEAD` command was run. GitHub remote refs/files/Actions are the evidence source.
 
-## Remaining blockers / high-priority gaps
-1. Supabase project `ffxxjaolfntzbapmfbuv` is not accessible via the currently connected Supabase integration. Do not apply migrations to a different project.
-2. Fixed browser organization/warehouse constants have been removed from the scoped API and customer/admin consumers. A server-derived tenant-context RPC and restrictive policies for authenticated users are merged and pass isolated PostgreSQL CI. Production isolation remains **unproven** until the correct Supabase project is accessible, its migration is authorized/applied, authenticated browser E2E passes, and anonymous storefront tenant routing is verified.
-3. Authenticated customer/staff browser E2E, three-tier price privacy over API/RPC/cache/export, production migrations, server-generated invoice PDF and Onyx workbook compatibility are not proven.
-4. AI provider registry/secret-backed test connection/budgeting/privacy sanitization, deployed workers and official WhatsApp delivery remain partial or externally blocked.
-5. Public preview loads home/login/admin/order pages but external extraction returned 404 for several deep route/PWA URLs; reproduce in an authenticated real browser. Lovable editor returned 403 through external inspection. Exact sync is not proven.
-6. Production restore drill, measured P95/large import profile and responsive RTL UAT remain open.
+## Only task cursor
+- **`next_task_id = AGH-PRODUCT-SCREEN-COVERAGE-001` — active product-completion work.** The full product specification sections 1–22 are binding. Completion of invoice privacy source checks does not demonstrate completion of all storefront/admin sections, screens, routes, controls, and user workflows. Do not treat the external browser gate as the only remaining task.
+- **Current PR HEAD before this checkpoint metadata write:** `5464f587465047915aebd96e2e888ae823377bfa`, PR #72 OPEN on `fix/acceptance-hardening-cart-finance-20261015`. The remote workflow lookup returned no run for the new head; current-head CI is **NOT AVAILABLE / NOT PROVEN**. Earlier exact-head PASS links below remain historical and do not transfer.
+- **Coverage deliverable:** `docs/canonical/AGHBARI-SCREEN-ACTION-COVERAGE.md` maps 64 customer + 45 admin = 109 required routes. Checkout step routes remain implemented with fail-closed confirmation. This batch added `src/routes/templates.tsx`, reusing the existing `ReorderWorkspacePage` for saved purchase templates, and added `/templates` + `/addresses` route-match assertions in `src/test/app-routing.test.tsx`. Coverage matrix records 33/109 exact route modules; the addresses route already existed and is not counted as a new route.
+- **Required product slices:** customer storefront/search/catalog/product/collections; cart/checkout/reorder/templates; account/company/addresses/contacts/users; pricing/invoices/statements/payments/receivables; admin dashboard/orders/customers/invitations/devices; products/categories/units/brands/prices/pricing rules/inventory/warehouses/stock movements; import profiles/upload/mapping/preview/data quality/deduplication/approval/job logs/rollback/export; Onyx import/reconciliation/XLSX with explicit unverified integration status where vendor access is missing; AI dashboard/reports/alerts/tasks/assistant/governance/insights/prompts/models/providers/settings/usage/audit; executive reports/recommendations; notifications/integration hub; role/permission/session/device/audit/error/health/queue screens; branding/appearance/currency/invoice/order/stock/integration settings; PWA/offline/performance; backup/restore/release/operations.
+- **Every screen has a behavior contract:** real data, not mock/placeholder content; every visible button/control performs its named action; forms validate; writes have success/failure feedback and read-after-write; lists provide applicable search/filter/sort/pagination; destructive actions confirm; role/capability is enforced server-side and by RLS; screen states cover loading, empty, error, retry, forbidden and offline wherever applicable. No blank-route, decorative button, fake success or unconnected form counts as completion.
+- **External gate remains distinct and OPEN:** `AGH-SEC-BROWSER-E2E-001` and `AGH-EXT-SUPABASE-001` stay blocked until correct authorized access, actual signed-in browser, and published SHA readback exist. Existing failures remain evidence-backed; do not repeat the same access attempts and never substitute `mrcyqezbhpncuvaehwgf` for `ffxxjaolfntzbapmfbuv`. These blockers do not excuse unimplemented code, route, screen, validation, tests or source-feasible flows.
+- **Current batch (checkout route contracts):** adds `src/routes/checkout_.review.tsx` and `src/routes/checkout_.confirm.tsx`; the review path reuses the existing `Storefront` checkout state machine, and confirmed orders navigate to `/checkout/confirm?orderId=<server order UUID>` only after server order creation and successful local cart clear. Direct/invalid confirmation URLs show a non-success state and link to `/orders`/`/cart`; a valid UUID renders the existing RLS-governed `OrderInvoice`. Adds component regression tests, route tests, and HTTP/title smoke checks for production 4173 and dev 5173. Exact-head CI is pending.
+- Keep the active branch and PR. Do not merge/push to `main`; do not create a replacement branch. Do not claim full product completion until the coverage matrix has no unexplained missing/disconnected paths and required tests/evidence exist.
 
-## Safe next step
-Read `PROJECT_MEMORY.md` and `ops/AGHBARI-SESSION-RESUME.md`; then verify live `main` HEAD and latest CI once, and continue from the first open security/release gate in the requirement registry. No broad rediscovery, no fake success, no production mutation without verified access.
+## 2026-10-16 — product screen coverage batch checkpoint
+- Active task remains `AGH-PRODUCT-SCREEN-COVERAGE-001`; active PR #72 / branch `fix/acceptance-hardening-cart-finance-20261015`; no local checkout is mounted, so local test/lint/build commands were not run.
+- Source changes pushed through GitHub contents API: `src/routes/templates.tsx` (new route backed by the existing saved reorder-template workflow); `src/test/app-routing.test.tsx` (route-match assertions for `/templates` and `/addresses`); `docs/canonical/AGHBARI-SCREEN-ACTION-COVERAGE.md` (template route status and corrected 33/109 exact route count); `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md` (active task checkpoint).
+- Latest known pre-state-update commit: `5464f587465047915aebd96e2e888ae823377bfa`. Exact-head CI lookup returned no workflow run; current tests/build/route smoke = **NOT RUN / NOT PROVEN**, not PASS. Earlier CI on `c7902dec892ea50da72b6c241a3c5386bd76a806` does not transfer.
+- Next executable action: continue the customer account route slice from verified existing auth/profile contracts, then update route tests and this pointer. Do not create placeholder onboarding success or claim template write/read-after-write coverage beyond the existing component's tested contract.
+
+## Mandatory end-of-run checkpoint
+After every coherent batch and **before every response, pause, timeout, context limit or session end**, update this file and the matching row in `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`. Record actual branch/PR/HEAD; changed paths; commands and test results; exact tested SHA and exact CI link/status; current/next task ID; and each evidenced blocker. Mark `NOT RUN` and `UNPUSHED` honestly. If current-head CI fails, keep the failed task open and fix the cause before advancing. A fresh session must begin from this pointer without asking the owner to repeat context.
 
 
-## XLSX export implementation — tested code SHA `6112b24c2807fbb013b9fcd2d38c889631286a7c`
-- Added `src/lib/onyx-export.ts`: a dependency-free OOXML/ZIP workbook generator, exact 27-column item sheet using the uploaded section-21 headers, plus separate order/customer metadata sheet. Unavailable mapping values are deliberately blank, and SKU/customer code cells are inline strings so leading zeroes survive.
-- Added an order-detail download action in `src/components/AdminPages.tsx`. It is enabled only for confirmed/processing/shipped/delivered orders with no pending review. UI explicitly says actual Onyx-version acceptance and centralized export auditing are not proven.
-- Added `src/test/onyx-export.test.ts` for exact columns, row mapping, leading-zero identifiers, ZIP/OOXML structure and filename handling.
-- Exact-head CI run [38688167670](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38688167670) completed **SUCCESS**: unit tests, isolated PostgreSQL migration/workflow acceptance, ESLint, build, and expanded customer/admin/PWA smoke tests.
-- Important limit: no XLSX viewer or actual Onyx sandbox was accessible; this is a code-verified workbook draft, not a certified Onyx import template. Central audit logging for exports is still open.
-- Release blockers unchanged: intended Supabase ref `ffxxjaolfntzbapmfbuv` unavailable through current connection; public Lovable preview still returns 404 for several deep routes and `/manifest.webmanifest`; Lovable editor probe is 403 and exact deployed SHA remains unproven.
+## AGH-SEC-BROWSER-E2E-001 — external-gate evidence (2026-10-16; remains OPEN)
+- Work target remains PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72), branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Remote PR HEAD observed before this documentation checkpoint: `37f8941a1c34d8fed8835bd394fb6d479ad06190`; parent tree: `b52b2d52103e6a7259426f52570b9ad4244f03d1`.
+- Exact-head CI for `37f8941a1c34d8fed8835bd394fb6d479ad06190`: [Actions run 38837454663](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38837454663) **SUCCESS**. Run log directly reports Vitest **21/21 files, 252/252 tests**; isolated PostgreSQL 17 migration/workflow and logical backup/restore assertions passed; lint/build and the preview/dev smoke steps report successful completion. The same log contains repeated missing-runtime warnings for `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`; therefore this is source/isolated-test evidence only, not proof of connection to the intended live backend or deployed browser behavior.
+- **Lovable — BLOCKED EXTERNALLY:** a direct read of expected project ID `851f6f5c-d23d-45a6-9568-1452d5cfdd73` returned `404 project_not_found`. Searching projects for `Aghbari Commerce` in both currently visible Lovable workspaces returned zero results. No editor/source SHA, published URL/deployment SHA, or publishing action was available from those reads. Do not publish or target a similarly named project.
+- **Intended Supabase — BLOCKED EXTERNALLY:** one direct read of project ref `ffxxjaolfntzbapmfbuv` returned `MCP error -32600: You do not have permission to perform this action`. No production query, SQL write, migration, or alternate-project substitution was performed. Required unblock: grant/refresh authorized read access to this exact ref, then confirm project identity and migration lineage before any production mutation.
+- **Authenticated browser — BLOCKED EXTERNALLY / NOT RUN:** the browser-profile listing returned two profiles with empty `signed_in_sites` arrays. No authenticated session was available, so the customer/staff/admin acceptance journeys were not run and no live deployment SHA was read back. Required unblock: authorize/sign in a browser profile to the confirmed intended deployment; never request or store passwords in chat.
+- Per-case result at this checkpoint: (1) customer invoice/cart/order amounts hidden in UI + network/RPC: **NOT RUN**; (2) staff denied policy change through UI/direct RPC/database: **NOT RUN**; (3) authorized admin policy change constrained to its organization, with repeat UI/network/PDF checks: **NOT RUN**; (4) production cross-tenant read/write denial: **NOT RUN**; (5) published invoice/statement/PDF/PWA route and asset checks: **NOT RUN in this checkpoint**. The registry preserves an earlier read-only public check reporting Arabic content on `/` and `/login`, with `/manifest.webmanifest`, `/aghbari-192.png`, `/aghbari-512.png`, `/invoices`, and `/statement` returning `page_not_found`/404; this is historical evidence, not a fresh retest here.
+- No source change or production mutation was justified or made. Keep `AGH-SEC-BROWSER-E2E-001` active and all external gates open until direct live evidence exists. Next action is to unblock the exact Lovable project, authenticated browser session, and authorized intended Supabase ref; do not repeat identical access attempts.
 
-## 2026-10-15 — Server-derived tenant scope and restrictive RLS
+## Prior exact-SHA checkpoint — superseded by current pointer
+- Branch/PR remained `fix/acceptance-hardening-cart-finance-20261015` / PR #72 → `main`. Prior documentation HEAD `5040d08e2fa3271f753ccf43c83cb15d5a93cc0c` passed exact CI [38838964429](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38838964429): 21/21 test files, isolated PostgreSQL 17 migration/workflow, logical backup/restore, lint/build and preview/dev smoke steps. Current remote HEAD before this checkpoint write: `6950d1e39ceb59f8d0d7723d85e579154fd1a48b`; exact-head run [38839968012](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38839968012) was **IN PROGRESS** at last direct readback. CI logs show missing Supabase runtime environment variables, so these are not production/runtime acceptance results.
+- No application source changed in this batch. `AGH-SEC-BROWSER-E2E-001` remains externally blocked: Lovable project ID `851f6f5c-d23d-45a6-9568-1452d5cfdd73` returned `404 project_not_found`; intended Supabase project `ffxxjaolfntzbapmfbuv` returned permission denied; both browser profiles reported no signed-in sites. Do not retry these identical access calls. Customer/staff/admin finance privacy E2E, live tenant isolation, published PDF/routes, and PWA checks remain `NOT RUN`.
+- Current next task remains `AGH-SEC-BROWSER-E2E-001`, with the existing unblocking conditions stated above. This documentation-only checkpoint still requires its own exact-head CI.
+## History
+Detailed prior implementation evidence is kept below as **historical batch records only**. The task IDs in those sections are not current pointers and must never override the section above.
 
-- **PR #26 merged to main:** https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/26
-- Merge SHA: `fe22af0424947b56ae80e0679621cf0df333e284`.
-- Tested PR head: `c117b0eee5b19411c1fa3bf5162dbef1e939455f`; exact-head CI [run 38689077672](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689077672) = **PASS**.
-- Merge commit CI [run 38689238295](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38689238295) on exact SHA `fe22af0424947b56ae80e0679621cf0df333e284` = **PASS**.
-- Files: `src/lib/supabase.ts`, `src/lib/api.ts`, `src/components/CustomerWorkflows.tsx`, `src/components/AdminPages.tsx`, `supabase/migrations/20261015090000_server_derived_tenant_context.sql`, `scripts/test-database-migrations.mjs`.
-- CI gates actually passed: `npm test`; `npm run test:db` against isolated PostgreSQL 17 applying all migrations; `npm run lint -- --rule=prettier/prettier:off`; `npm run build`; dev-server smoke on port 5173 including customer/admin routes and PWA assets.
-- New isolated DB checks verify `get_current_tenant_context()` resolves the authenticated profile/organization, foreign-organization products/customers are not visible to staff, and a foreign-organization product insert is denied by restrictive RLS. An earlier exact-head build failed because two components still imported `ORG_ID`; those consumers were corrected and the subsequent exact-head and main CI runs passed.
-- **Scope of proof:** these results prove the migration and denial cases in CI’s isolated PostgreSQL 17 environment. No migration was applied to production. The expected Supabase ref `ffxxjaolfntzbapmfbuv` remains inaccessible in the current integration; authenticated real-browser E2E, comprehensive price-tier channel privacy, and public/anonymous storefront tenant routing are not certified.
-- Lovable sync remains unverified; do not spend Lovable points or assert deployment based solely on a Git merge/green CI.
+---
+
+## AGH-OPS-DR-001 source batch checkpoint
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; base HEAD `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`.
+- Files in the source batch: `src/lib/unified-import.ts`, `src/lib/unified-import.test.ts`, this state file, and the matching registry row.
+- Existing boundary tests cover positive file sizes through 100 MiB, 100/101 columns, 4,000/4,001-character cells, declared archive expansion, and aggregate expansion budgets. Added a regression for a central-directory record redirected to a different local ZIP member; production parser now checks local flags and decoded local path before consuming member bytes.
+- Local test command: `npx vitest run src/lib/unified-import.test.ts` — NOT RUN locally; no local checkout because shallow clone failed with `Could not resolve host: github.com`. Exact-SHA GitHub Actions 38832196621 on candidate `3420307d1d54a46a4f2f48a8bfc68a5b50ba494b` SUCCESS (21/21 files, 249/249 tests and all listed build/DB/runtime smoke gates).
+- No deployment, production restore, failover, PR merge, or Lovable publishing was attempted.
+- Local network limitation evidenced by `git clone --depth 1 --single-branch --branch fix/acceptance-hardening-cart-finance-20261015 https://github.com/Aghbari-Technologies/aghbari-commerce-evolved.git /tmp/aghbari-commerce-evolved` failing with `Could not resolve host: github.com`; use GitHub Actions/connector evidence, not local-test claims.
+
+## Known external blocker — not a reason to stop source work
+- `AGH-SEC-BROWSER-E2E-001` remains externally blocked until authenticated Lovable/browser access is available.
+- The intended production Supabase project ref `ffxxjaolfntzbapmfbuv` was previously permission-denied. Do not substitute `mrcyqezbhpncuvaehwgf` or apply production migrations without verified project identity and authorization.
+- Lovable's live-editor sync and production publish are separate from Git push and CI; claim them only after direct readback evidence. Keep free Lovable points for necessary integration/publish work, not code discovery.
+
+## Mandatory save before every run boundary
+After each coherent batch and **before any response, pause, timeout/context limit, or session end**, update this file and the existing registry row. Record active branch/PR/HEAD, changed files, actual test commands/results, tested SHA and matching CI, next task ID, and evidence-backed blockers. Use `NOT RUN` for tests not executed and `UNPUSHED` for uncommitted/unpushed checkpoints. Continue on the next session from this cursor without asking the owner to repeat context.
+
+## History location
+Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGRESS.md` and the existing requirement rows. This file is intentionally a **single live cursor**, not a second historical ledger.
+
+
+## AGH-SEC-TENANT-001 source batch checkpoint
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72. Batch parent: `a95e0d40d47590bb18e07a4c057c44900928b07e`; no branch switch or main update.
+- Changed paths: `supabase/migrations/20261016140000_public_storefront_warehouse_scope_guard.sql`, `scripts/test-database-migrations.mjs`, this state file and `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+- Defect: the public warehouse getter and `get_public_storefront_context()` could return a configured warehouse ID without confirming its `organization_id` matched the published organization. Public inventory RLS uses the warehouse getter, so malformed configuration could mis-scope anonymous stock reads.
+- Fix: a BEFORE INSERT/UPDATE trigger rejects cross-organization warehouse bindings; both public resolvers now return a warehouse only when it belongs to the configured organization and is active. The SQL regression tests reject the bad write and simulates legacy corruption in isolated CI to require a NULL warehouse and zero anonymous inventory rows.
+- Local commands `node scripts/test-database-migrations.mjs` and `npx vitest run src/test/tenant-scope.test.ts`: NOT RUN locally because this runtime cannot resolve GitHub and has no checkout. Exact-SHA CI `38832735509` passed all migration/security assertions and 21 test files / 249 tests.
+- Next task: `AGH-ORDERS-001`. Inspect order creation, server pricing, idempotency replay, state transitions and stock safeguards only for evidence-backed gaps. Do not claim production tenant isolation until intended production project access and authenticated browser E2E are available.
+
+
+## AGH-ORDERS-001 source acceptance checkpoint
+- Active workstream: PR #72, branch `fix/acceptance-hardening-cart-finance-20261015`; source-tested code SHA `064f3e4d7e84e53c2b1a4aaf88553f709637bb37`, Actions [38832735509](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38832735509) SUCCESS. Documentation-only branch HEAD before this checkpoint: `3ae048b80f5dd742a159308ca13575525630a1e5`; current docs checkpoint will get a new SHA and must not inherit code CI as an exact-SHA claim.
+- Focused source reviewed: `supabase/migrations/20261009150000_atomic_staff_order_creation.sql`, `supabase/migrations/20261009040000_checkout_integrity.sql`, `supabase/migrations/20261009050000_order_transition_integrity.sql`, `supabase/migrations/20261015140000_checkout_delivery_address_snapshot.sql`, `src/lib/api.ts`, and order assertions in `scripts/test-database-migrations.mjs`.
+- Code outcomes proven by exact-SHA CI: atomic staff/customer order commands, server-authoritative price calculation, normalized idempotency + conflicting-payload rejection, direct financial write denial, rollback of all writes after invalid later line, tenant scoping, frozen delivery-address snapshot and address-aware retries, single transactional `OrderCreated` outbox event, credit checks, inventory reservation/settlement/release and legal status transitions.
+- Defect decision: no additional source defect was established by the focused review, so no speculative order code was changed. Existing umbrella remains **PARTIAL** because authenticated customer/staff browser E2E and intended-production database validation remain unproven.
+- Local commands `node scripts/test-database-migrations.mjs` and `npx vitest run`: NOT RUN locally (this runtime has no checkout and GitHub DNS resolution fails). Evidence is exact-source GitHub Actions only, not local execution.
+- Next task: `AGH-PRICE-PRIVACY-001`; reuse registry evidence and do not re-run passed broad tests unless a relevant code change or concrete defect requires it.
+
+
+## AGH-PRICE-PRIVACY-001 source acceptance checkpoint
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72. Source acceptance revalidated by full exact-SHA CI `064f3e4d7e84e53c2b1a4aaf88553f709637bb37`, Actions [38832735509](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38832735509) SUCCESS; this commit is a docs checkpoint at parent `095b9490f203c0acca378ff6be45caa5e436bce5` and does not inherit exact-SHA test status.
+- Focused review: `supabase/migrations/20261015260000_customer_cart_order_money_visibility.sql`, `20261015210000_product_price_column_boundary.sql`, `20261015180000_storefront_customer_tier_prices.sql`, `20261015220000_accountant_storefront_price_tier_boundary.sql`, `src/lib/customer-money-policy.ts`, its tests, and corresponding PostgreSQL assertions.
+- Proven behavior: cart/order money display is opt-in per surface and defaults hidden; only admin/manager can change policy; checkout uses the server-side tier+quantity resolver; order financials are scoped to the active customer's own tenant/order and return NULL amounts when hidden; raw product/tier finance columns are not granted directly to anon/customer roles; accountant is excluded from the operational base-price branch. Unit and isolated PostgreSQL tests are included in exact SHA `064f3e4d...` CI.
+- No additional source leak or policy bypass was established by this focused review; no speculative source change made. Requirement remains PARTIAL until authenticated browser testing and intended-production behavior are proven, including separate invoice-amount policy.
+- Local commands for this task: NOT RUN locally (no checkout; GitHub hostname resolution blocked). Next: `AGH-CUSTOMER-360-001`.
+
+
+## AGH-CUSTOMER-360-001 source/test hardening batch
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; parent source/doc SHA `b5bd4233078fe481d54afe3003fe604f652067cb`. No branch switch or main update.
+- Changed paths: `scripts/test-database-migrations.mjs`, this state file, and `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`.
+- Added focused isolated-PostgreSQL assertions for capability alignment: invited buyer can create an address/contact under the invited company; finance member cannot mutate either surface despite read-only contact capability; after revocation the former buyer cannot read the member-created address/contact. Existing assertions continue to validate tenant scoping, order creation, one-time invitation acceptance, and revocation.
+- Test execution: `node scripts/test-database-migrations.mjs` NOT RUN locally because the container has no repo checkout and `git clone` failed with `Could not resolve host: github.com`. Exact-SHA Actions [38833494937](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38833494937) on `c0365bafe6f8cf98692f2fbde44c8494b3b618a9` **SUCCESS**. Unit tests 21/21 files, 249/249 tests; isolated PostgreSQL 17 migration/workflow suite, logical backup/restore, lint, build, preview 4173 and dev smoke 5173 all passed.
+- `AGH-CUSTOMER-360-001` source/test acceptance is PASS for code SHA `c0365bafe6f8cf98692f2fbde44c8494b3b618a9`; remaining browser/prod proof is externally gated. Next source task is `AGH-FINANCE-DOCS-001`.
+
+
+## AGH-FINANCE-DOCS-001 source fix batch
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72. Parent SHA `ddf6939adf9c3a91bd501ad107cff0982a4f1bde`; no branch switch or main update.
+- Changed paths: `supabase/migrations/20261015250000_customer_statement_full_ledger_summary.sql`, `scripts/test-database-migrations.mjs`, this state file and the requirement registry. First candidate `0fccfa2ee1d5d0bed4015f237afcf8e6ff09b8f8`, Actions [38833767047](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38833767047), **FAILED** in DB test harness: `financeAuthUserId` was used before its later declaration (JavaScript temporal-dead-zone). Unit tests were green; migration test stopped before evaluating this new member assertion. The finance-success regression is now moved after fixture declaration and invitation acceptance.
+- Root defect: the full-ledger summary migration replaced the membership-aware `get_customer_account_statement()` from `20261015160000_customer_company_memberships.sql` and reverted scope to `customers.profile_id = current_profile_id()`, dropping `current_customer_can('statement.read')`. This broke statement access for invited finance members even though the capability matrix grants it, and did not consistently deny a buyer by explicit capability.
+- Fix: resolve `current_customer_id()` + `current_organization_id()`, require active profile/org context and `current_customer_can('statement.read')`, verify the customer/organization pair before running the complete-ledger aggregates. Preserve all existing summary counts, per-currency amounts, bounded detail arrays and payment sums.
+- Regression coverage: buyer member is explicitly denied statement access; finance member gets the linked company statement and full-ledger totals for an existing invoice. Local `node scripts/test-database-migrations.mjs` NOT RUN (no local checkout; GitHub DNS blocked). New exact-SHA CI is PENDING for this candidate.
+- Next: run exact-SHA CI, repair failures before advancing cursor. Intended-production migration/readback and authenticated published PDF/browser evidence remain external gates.
+
+
+## AGH-FINANCE-DOCS-001 acceptance checkpoint
+- Source fix PASS on exact SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. Unit tests: 21/21 files, 249/249 tests. PostgreSQL 17 migration/workflow suite passed, including finance-member statement access and buyer-member denial. Logical backup/restore, lint, build, preview smoke 4173 and dev smoke 5173 also passed.
+- The first candidate `0fccfa2ee1d5d0bed4015f237afcf8e6ff09b8f8` failed only in JS test-fixture ordering because `financeAuthUserId` was referenced before its declaration. The assertion was moved after finance invitation acceptance and rerun successfully.
+- Next source task: `AGH-ONYX-INTEGRATION-001`. Published browser routes remain blocked pending access to the intended project and authorized signed-in browser; do not spend Lovable credits on exploratory messages.
+
+
+## AGH-ONYX-INTEGRATION-001 source review checkpoint
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72. Last tested source SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. Current pre-checkpoint HEAD `e6b2642db386a5b4ac241f7f7e5b66ed54e649ea`; this checkpoint is documentation-only.
+- Inspected `ops/AGHBARI-LIVE-SCHEMA-RECONCILIATION-20261015.md`, `src/lib/onyx-export.ts`, `src/test/onyx-export.test.ts`, `src/components/UnifiedImportEngine.tsx`, `supabase/migrations/20261009090000_onyx_deterministic_analytics.sql`, `20261015170000_onyx_order_export_audit.sql`, and `20261015235900_onyx_null_unknown_metric_semantics.sql`.
+- Source evidence: current flow is imported snapshots + deterministic PostgreSQL analytics + comparison-only reconciliation + client-built 27-column XLSX export/audit. Export audit explicitly records `compatibility_verified=false` and `download_completion_verified=false`. No verified external Onyx endpoint/credential adapter or target-version import contract was found in repository references.
+- Live reconciliation checkpoint says intended Supabase ref `ffxxjaolfntzbapmfbuv` is absent from the connected project list; similarly named `mrcyqezbhpncuvaehwgf` has materially different schema. Do not redirect migrations/functions or invent API/field contracts. No source change is justified without the vendor contract and intended target access.
+- Task disposition: PARTIAL / BLOCKED EXTERNALLY. Continue to `AGH-ONYX-XLSX-001` for source-testable package hardening; production/browser acceptance remains a separate gate.
+
+
+## AGH-ONYX-XLSX-001 source-test batch
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; parent `bdd80d2c5ad7802e8a2218cf11afc6041853e243`.
+- Last full exact-SHA CI: `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. This new test SHA must pass its own CI.
+- Existing `src/test/onyx-export.test.ts` checked 27 columns and package-token presence, but did not prove the generated workbook was readable by the production XLSX parser. Added a round-trip regression using `parseXlsxFirstWorksheet`; it verifies worksheet name, row count, exact headers, leading-zero item codes, approved quantity/price and order number.
+- Local `npx vitest run src/test/onyx-export.test.ts` NOT RUN because this runtime has no checkout and GitHub DNS resolution is blocked. Exact-SHA CI is pending. This proves internal parser interoperability only, not compatibility with the owner's Onyx version or browser-download completion.
+- Keep `AGH-ONYX-XLSX-001` active until exact-SHA CI passes or failures are corrected.
+
+## AGH-ONYX-XLSX-001 regression correction
+- First round-trip candidate `fd4bf79ae76ecd004a1a0c0748d3b9788455e32f`, Actions [38834535619](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834535619), FAILED one unit assertion: production XLSX parser returned 23 cells for the detail row because trailing blank cells are omitted in sparse OOXML. The package's header still defines 27 columns and the row's final non-empty order number is at index 22; no exporter corruption was proven.
+- Corrected the round-trip test to pad sparse cells to the declared 27-column header and assert all meaningful indices + the four trailing blanks. This verifies interoperability without requiring the generic import parser to materialize absent blank cells. New exact-SHA CI is pending.
+- Source task remains `AGH-ONYX-XLSX-001`; external Onyx import acceptance and browser download completion remain unproven.
+
+## AGH-ONYX-XLSX-001 acceptance checkpoint
+- Source test commit: `96b064c9a772f2267e73e2ad41c0381593be4e05`, exact GitHub Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS.
+- CI proves 21/21 test files and 250/250 tests. PostgreSQL 17 migrations/workflows, logical backup/restore drill, lint, build, preview smoke 4173 and dev smoke 5173 passed. Import streaming benchmark correctly skipped because this commit changed no import-processing file.
+- Round-trip builds the 27-column XLSX and reads it through production `parseXlsxFirstWorksheet`, validating sheet, row count, exact header, sparse detail normalization, SKU `000125`, quantity `3`, price `12.5`, order number `ORD-000125`, and four trailing blanks.
+- The initial candidate `fd4bf79ae76ecd004a1a0c0748d3b9788455e32f` failed only because its test assumed trailing blank cells were serialized explicitly. Normalizing sparse OOXML rows resolved it. No exporter code change required. Actual browser download and compatibility with target Onyx version remain unproven.
+- Next source task: `AGH-ASYNC-OUTBOX-001`.
+
+
+## AGH-ASYNC-OUTBOX-001 focused source acceptance checkpoint
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; exact complete CI baseline includes SHA `96b064c9a772f2267e73e2ad41c0381593be4e05`, Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS: 21/21 files, 250/250 tests, PostgreSQL 17, backup/restore, lint/build and route smokes 4173/5173.
+- Focused source reviewed: `supabase/functions/outbox-worker/index.ts`, `logic.ts`, `src/test/outbox-worker-logic.test.ts`, `supabase/migrations/20261015190000_outbox_worker_lifecycle.sql`, `20261016130000_outbox_credential_match_boundaries.sql`, and outbox SQL assertions in `scripts/test-database-migrations.mjs`.
+- Coverage already proves bounded 4096-byte request reading, strict UTF-8 and declared/actual content-length limits, batch bounds and unique UUID claims, worker-secret authentication, lease-based crash recovery, attempt cap/dead lettering, per-consumer delivery idempotency, retries with backoff, unknown RPC status never treated as success, durable database-side credential/PII redaction, and sanitized failure-path handling. No additional source defect was established in those paths; no speculative change was made.
+- Task disposition: source logic **ACCEPTED** on current exact full CI baseline; registry remains PARTIAL because the intended Supabase project is inaccessible and deployed crash/replay/provider delivery cannot be tested here. Next source task is `AGH-AI-GATEWAY-001`.
+- Concrete AI gateway issue queued from source review: `supabase/functions/ai-gateway/index.ts` buffers `await request.text()` before checking `raw.length > 4096`, so a large authenticated request may be fully buffered before rejection. Replace with shared bounded byte reader and add a focused wiring regression.
+
+
+## AGH-AI-GATEWAY-001 bounded request batch
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; parent `a6957fd7778b24deb324885c5fc0c46111d2708b`. Last integrated CI `96b064c9a772f2267e73e2ad41c0381593be4e05`, Actions [38834690553](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834690553) SUCCESS; this batch needs its own exact-SHA CI.
+- Concrete defect: `supabase/functions/ai-gateway/index.ts` used `await request.text()` and only then checked `raw.length > 4096`. That buffers the entire untrusted body and measures UTF-16 string code units rather than wire bytes; a request with multibyte Arabic can exceed 4096 bytes while appearing shorter by character count.
+- Fix: created `supabase/functions/_shared/bounded-request.ts` with the existing actual-byte bounded stream reader; outbox worker re-exports the same helper to preserve its test/API import and runtime use. AI gateway now checks the actual request bytes before JSON parsing and returns 413 for excess payload, 400 for invalid UTF-8/read failures. Empty chunks are ignored to avoid unbounded chunk-list growth.
+- Tests added in `src/test/ai-gateway-logic.test.ts`: an Arabic payload whose JS string length is below 4096 while UTF-8 bytes exceed it must be rejected, and a handler-wiring test asserts the Edge route uses the bounded helper rather than `request.text()`. Local test command `npx vitest run src/test/ai-gateway-logic.test.ts src/test/outbox-worker-logic.test.ts` NOT RUN locally (no checkout and GitHub DNS unavailable). Exact-SHA CI pending.
+- Source task stays active until full exact-SHA CI succeeds or failures are repaired. Provider keys/live calls remain external proof; no secrets or project-target changes were made.
+
+
+## AGH-AI-GATEWAY-001 test harness correction
+- First candidate `2ef8aa181bd787cb829e3158e569acdf5ce848a3`, Actions [38835193715](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38835193715), FAILED in `src/test/ai-gateway-logic.test.ts`: the UTF-8 byte-limit test passed, but handler-wiring test called `readFile(new URL(..., import.meta.url))` in Vitest, where `import.meta.url` is not a `file:` URL (`ERR_INVALID_URL_SCHEME`). Unit suite: 20/21 files passed, 251/252 tests passed. The fixture now reads the repository-relative source path; production source was not implicated in this failure.
+- New exact-SHA rerun pending; task remains `AGH-AI-GATEWAY-001`. Do not advance until full CI completes.
+
+## 2026-10-16 — customer account/company slice checkpoint (parent SHA 9826d0a3cc8b2264b59207dc0fad0cd25593d469)
+- Active cursor remains `AGH-PRODUCT-SCREEN-COVERAGE-001`; PR #72 remains open on `fix/acceptance-hardening-cart-finance-20261015`.
+- Added `src/components/CustomerAccount.tsx` and route files `profile.tsx`, `company.details.tsx`, `account.pending.tsx`, `onboarding.profile.tsx`, `onboarding.company.tsx`.
+- Expanded `src/test/app-routing.test.tsx` and added `src/test/customer-account.test.tsx` for profile identity/logout success and failure, company RPC-backed data/retry, and non-inferred approval state.
+- Updated the screen/action matrix and requirement registry. Company/profile editing and account approval-state data remain explicitly unavailable because a verified server mutation/read contract is not present in the current client contract.
+- `.github/workflows/commerce-checks.yml` now emits the post-build TanStack-generated route tree as temporary diagnostic evidence; use that output to synchronize `src/routeTree.gen.ts` from the official Vite plugin result, then remove the diagnostic step and keep a drift guard if supported.
+- **Verification:** local commands not run (no local checkout). Exact-head CI for the slice is **PENDING**. Route tree must not be called source-synchronized until generated output from the new route files is committed.
+- Next action: read the generated tree from the latest workflow run, commit generated route-tree output, add route-tree drift protection, then continue remaining account and admin paths.
+
+
+## 2026-10-16 — route-tree synchronization and account-test repair
+- Parent HEAD: `5bb354a113f5450251965f9e728c1c110e877efb`; PR #72 remained OPEN on `fix/acceptance-hardening-cart-finance-20261015`.
+- Exact parent workflow [38847419772](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38847419772) **FAILED** during unit tests: 26 files / 290 tests passed and 1 file / 4 tests failed. All four new account-screen failures shared the same fixture error: `mocks.signOut` was undefined; corrected references are `mocks.auth.signOut`.
+- The same CI build ran the official TanStack Vite generator. Its captured `src/routeTree.gen.ts` contains **56 route imports**, including addresses, templates, checkout review/confirm, company details/users/contacts/members, profile, approval status and onboarding paths. The generated output is committed in this follow-up, and the temporary log-dump step is replaced with a route-tree drift check.
+- Added direct route-ID assertions for customer account/company paths, checkout review/confirmation, addresses and purchase templates; existing component-level tests assert logout success/failure, RPC-backed company read/retry, and non-inferred approval state.
+- New repair SHA / exact-head CI: pending at checkpoint creation; no local checkout means local commands were not run. Continue from the latest PR head and repair any remaining exact-head CI failure before broadening route coverage.
+
+
+## 2026-10-16 — administration operational routes batch (pre-generator checkpoint)
+- Parent source SHA: `d6bf05ffb649b04540ef846a83c225f4e1ef5e80`; same open PR #72 and branch `fix/acceptance-hardening-cart-finance-20261015`.
+- Components now support deep-link initial tabs for import engine/history, Onyx, stock reconciliation, and AI alerts/tasks.
+- Added 14 exact route modules for the operational/admin paths listed in the coverage matrix and route-ID tests in `src/test/app-routing.test.tsx`.
+- `src/routeTree.gen.ts` is deliberately waiting for the official output from this batch's Vite/TanStack build; the workflow temporarily emits that generator output so the resulting source file can be committed exactly and the drift guard restored.
+- Exact-head CI for this batch pending. No local commands were run in this GitHub-only session.
+
+
+## 2026-10-16 — route-tree synchronized after administration batch
+- Exact parent: `79292f0c9e26758aa1065705993163bcb4a7c2a0`; PR #72 remained OPEN on `fix/acceptance-hardening-cart-finance-20261015`.
+- Successful parent CI [38848240501](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38848240501) produced the official Vite/TanStack route tree with **70 imports**; build succeeded, 27 test files / 333 tests passed, and the isolated PostgreSQL/core-workflow suite, backup/restore, lint and preview/dev smoke steps concluded SUCCESS.
+- The exact generator output is being committed to `src/routeTree.gen.ts`. The temporary route dump is removed and `git diff --exit-code -- src/routeTree.gen.ts` is restored as the build drift guard.
+- Exact-head CI for this synchronized commit remains pending; do not reuse parent CI as proof for the new SHA.
+- Next slice after exact-head CI: customer catalog/search/category paths and explicit blocked status pages only where no verified server contract exists.
+
+
+## 2026-10-16 — route-tree capture + discovery/account/help checkpoint
+- Exact parent SHA: 69ab0d71b85df51db800dfa9a8819c427e1bbeb8; PR #72 remains open on fix/acceptance-hardening-cart-finance-20261015.
+- Added CustomerDiscoveryPages.tsx and route modules for catalog discovery/category/search deep links; CustomerAccountSettingsPages.tsx and account/notification routes; CustomerHelpPages.tsx and help routes; direct-route assertions in src/test/screen-route-coverage.test.tsx.
+- Official generator output captured from build of exact parent Actions [38850270064](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38850270064), route imports = 101. The drift-guard step then failed because the generated source had not yet been committed, so unit tests and later stages were skipped. Do not treat that run as passing tests.
+- This commit synchronizes src/routeTree.gen.ts with the official generated output, removes the temporary dump step, and restores git diff --exit-code -- src/routeTree.gen.ts. Exact-head rerun is required.
+- Current route-module inventory at parent: 101 files under src/routes including root/endpoint modules; this is not a count of complete business screens.
+- Next: repair exact-head CI route acceptance, then add template detail/create/edit/update/delete routes backed by a tenant-bound RPC and ownership tests.
+
+
+## 2026-10-16 — template routes official generation checkpoint
+- Active PR #72 / branch fix/acceptance-hardening-cart-finance-20261015; parent source SHA 68885a7cdcd432a8c1123eba42835f383b9faa2a; new route tree captured from CI build of ae465c44a5d810b598fb7eba85a80d15b7edae0a. Generator emitted 105 route imports including the 4 new template/detail/reorder route modules.
+- Source commit 3aad34546ead53d6c22efec4ab8e2ff27a6d60b5 added update_reorder_template SQL and the client service; its CI failed three focused input tests because the fixture UUID had invalid version group 0000. Commit 68885a7cdcd432a8c1123eba42835f383b9faa2a fixes the fixture to a valid version-4 UUID.
+- The build/route-capture run for ae465c44a5d810b598fb7eba85a80d15b7edae0a succeeded through build and official route generation but was expected to fail the old-tree diff guard; unit tests were skipped in that capture run. This checkpoint commits the official generated output and restores the route-tree diff guard.
+- Next task: exact-head CI and migration tests. Repair any new failures before broadening operational route scope.

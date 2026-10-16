@@ -1,20 +1,32 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { classifyOutboxProcessResult, sanitizeOutboxErrorMessage } from "./logic.ts";
+import {
+  classifyOutboxProcessResult,
+  readBoundedRequestBody,
+  sanitizeOutboxErrorMessage,
+  parseOutboxBatchSize,
+} from "./logic.ts";
 
 type WorkerRuntime = {
   env: { get(name: string): string | undefined };
   serve(handler: (request: Request) => Response | Promise<Response>): void;
 };
-type OutboxEvent = { id: string; event_type: string; attempts: number };
 type RpcResult = { status?: string; notifications_created?: number; event_id?: string };
 
 const runtime = (globalThis as unknown as { Deno?: WorkerRuntime }).Deno;
 if (!runtime) throw new Error("This worker must run in the Supabase Edge Runtime.");
 
-function json(body: Record<string, unknown>, status = 200): Response {
+function json(
+  body: Record<string, unknown>,
+  status = 200,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...extraHeaders,
+    },
   });
 }
 
@@ -41,13 +53,12 @@ if (runtime) {
     const serviceKey = runtime.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!url || !serviceKey) return json({ error: "worker_not_configured" }, 503);
 
-    let bodyText = "";
-    try {
-      bodyText = await request.text();
-    } catch {
+    const boundedBody = await readBoundedRequestBody(request, 4096);
+    if (!boundedBody.ok) {
+      if (boundedBody.reason === "too_large") return json({ error: "request_too_large" }, 413);
       return json({ error: "invalid_request" }, 400);
     }
-    if (bodyText.length > 4096) return json({ error: "request_too_large" }, 413);
+    const bodyText = boundedBody.text;
 
     let payload: unknown = {};
     if (bodyText.trim()) {
@@ -57,39 +68,69 @@ if (runtime) {
         return json({ error: "invalid_json" }, 400);
       }
     }
-    const input = payload && typeof payload === "object" && !Array.isArray(payload)
-      ? payload as Record<string, unknown>
-      : {};
-    const batchSize = input.batch_size === undefined ? 20 : input.batch_size;
-    if (!Number.isInteger(batchSize) || Number(batchSize) < 1 || Number(batchSize) > 50) {
-      return json({ error: "batch_size_must_be_between_1_and_50" }, 400);
+    const batch = parseOutboxBatchSize(payload);
+    if (!batch.ok) {
+      return json({
+        error: batch.reason === "invalid_shape" ? "request_body_must_be_an_object" : "batch_size_must_be_between_1_and_50",
+      }, 400);
     }
+    const batchSize = batch.batch_size;
 
     const workerId = "edge-outbox:" + crypto.randomUUID();
     const client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
-    const { data: claimedRows, error: claimError } = await client.rpc("claim_outbox_events", {
-      p_worker: workerId,
-      p_limit: Number(batchSize),
-      p_lease_seconds: 300,
-    });
+    let claimedRows: unknown = null;
+    let claimError: { code?: string; message?: string } | null = null;
+    try {
+      const result = await client.rpc("claim_outbox_events", {
+        p_worker: workerId,
+        p_limit: Number(batchSize),
+        p_lease_seconds: 300,
+      });
+      claimedRows = result.data;
+      claimError = result.error;
+    } catch (cause) {
+      console.error("outbox claim transport failed", {
+        error: sanitizeOutboxErrorMessage(cause),
+      });
+      return json({ error: "claim_transport_failed" }, 503, { "retry-after": "30" });
+    }
     if (claimError) {
       console.error("outbox claim failed", { code: claimError.code ?? "unknown" });
-      return json({ error: "claim_failed" }, 500);
+      return json({ error: "claim_failed" }, 503, { "retry-after": "30" });
     }
 
-    const claimed = (claimedRows ?? []) as OutboxEvent[];
+    const claimResult = parseClaimedOutboxEvents(claimedRows);
+    if (!claimResult.ok) {
+      console.error("outbox claim returned an invalid event batch", { reason: claimResult.reason });
+      return json({ error: "claim_result_invalid" }, 502);
+    }
+    const claimed = claimResult.events;
     let processed = 0;
     let retryScheduled = 0;
     let deadLettered = 0;
     let failures = 0;
+    let retryAfterSeconds = 30;
 
     for (const event of claimed) {
-      const { data, error } = await client.rpc("process_outbox_event", {
-        p_event_id: event.id,
-        p_worker: workerId,
-      });
+      // Supabase client calls normally return { data, error }, but transport/runtime
+      // exceptions must also enter the durable retry path instead of abandoning a lease.
+      let data: unknown = null;
+      let error: { code?: string; message?: string } | null = null;
+      try {
+        const result = await client.rpc("process_outbox_event", {
+          p_event_id: event.id,
+          p_worker: workerId,
+        });
+        data = result.data;
+        error = result.error;
+      } catch (cause) {
+        error = {
+          code: "outbox_process_transport_error",
+          message: sanitizeOutboxErrorMessage(cause),
+        };
+      }
       const processOutcome = error ? "unexpected" : classifyOutboxProcessResult(data);
       if (processOutcome === "processed") {
         processed++;
@@ -106,16 +147,31 @@ if (runtime) {
 
       // A successful HTTP/RPC envelope with a missing or unknown status is not success.
       // Persist it as a retry so the event does not remain leased until timeout unnoticed.
-      const { data: failureData, error: failureError } = await client.rpc("fail_outbox_event", {
-        p_event_id: event.id,
-        p_worker: workerId,
-        p_error_class: error?.code ?? "unexpected_process_result",
-        p_error_message: error
-          ? safeErrorMessage(error.message)
-          : "process_outbox_event returned no recognized status",
-      });
+      let failureData: unknown = null;
+      let failureError: { code?: string; message?: string } | null = null;
+      try {
+        const result = await client.rpc("fail_outbox_event", {
+          p_event_id: event.id,
+          p_worker: workerId,
+          p_error_class: error?.code ?? "unexpected_process_result",
+          p_error_message: error
+            ? sanitizeOutboxErrorMessage(error)
+            : "process_outbox_event returned no recognized status",
+        });
+        failureData = result.data;
+        failureError = result.error;
+      } catch (cause) {
+        // Keep this invocation bounded and observable. The DB lease is allowed to expire
+        // and the event can be reclaimed; no false processed/retry success is reported.
+        failureError = {
+          code: "outbox_failure_transport_error",
+          message: sanitizeOutboxErrorMessage(cause),
+        };
+      }
       if (failureError) {
         failures++;
+        // This event remains leased until the 300-second lease expires and can then be reclaimed.
+        retryAfterSeconds = Math.max(retryAfterSeconds, 300);
         console.error("outbox failure could not be persisted", {
           eventId: event.id,
           code: failureError.code ?? "unknown",
@@ -142,6 +198,6 @@ if (runtime) {
       retry_scheduled: retryScheduled,
       dead_lettered: deadLettered,
       failures,
-    });
+    }, failures > 0 ? 503 : 200, failures > 0 ? { "retry-after": String(retryAfterSeconds) } : {});
   });
 }

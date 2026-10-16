@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { readBoundedRequestBody } from "../_shared/bounded-request.ts";
 import { buildGeminiRequestConfig, estimateCost,estimateInputTokens,isSafeProviderBaseUrl,parseProviderResponse,sanitizeAiQuestion,type AiProvider,type AiCostRates } from "./logic.ts";
 type Runtime={env:{get(n:string):string|undefined};serve(h:(r:Request)=>Response|Promise<Response>):void};
 type Settings={status:string;primary_provider:AiProvider;primary_model:string;primary_base_url:string;fallback_enabled:boolean;fallback_provider:AiProvider;fallback_model:string;fallback_base_url:string};
@@ -44,8 +45,12 @@ if(d)d.serve(async(request)=>{
  const db=createClient(endpoint,serviceKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
  const {data:authData,error:authError}=await db.auth.getUser(bearer[1]);
  if(authError||!authData.user)return reply({error:"unauthorized"},401);
- let raw="";try{raw=await request.text();}catch{return reply({error:"invalid_request"},400);}
- if(raw.length>4096)return reply({error:"request_too_large"},413);
+ const boundedBody=await readBoundedRequestBody(request,4096);
+ if(!boundedBody.ok){
+  if(boundedBody.reason==="too_large")return reply({error:"request_too_large"},413);
+  return reply({error:"invalid_request"},400);
+ }
+ const raw=boundedBody.text;
  let parsed:unknown;try{parsed=JSON.parse(raw);}catch{return reply({error:"invalid_json"},400);}
  if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return reply({error:"invalid_request"},400);
  const body=parsed as Record<string,unknown>,action=body.action==="test_connection"?"test_connection":body.action==="ask"?"ask":null;

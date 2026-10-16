@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, BarChart3, Check, Database, FileText,
   Gauge, History, Package, RefreshCw, ShieldCheck, Upload, Zap,
@@ -15,7 +15,7 @@ import { DEFAULT_SYNONYMS, normalizeHeader as normalizeImportHeader } from '@/li
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from '@/components/AdminPages';
 import { UnifiedImportEngine } from '@/components/UnifiedImportEngine';
 
-type OperationTab = 'imports' | 'onyx' | 'reconcile' | 'dictionary';
+export type OperationTab = 'imports' | 'import-logs' | 'onyx' | 'reconcile' | 'dictionary';
 
 const synonymMap: Record<string, string> = { ...DEFAULT_SYNONYMS };
 
@@ -31,26 +31,29 @@ function qualityLabel(score: number): string {
 }
 
 
-export function OperationsCenter({ onNotice }: { onNotice: (message: string) => void }) {
-  const [tab, setTab] = useState<OperationTab>('imports');
+export function OperationsCenter({ onNotice, initialTab = 'imports' }: { onNotice: (message: string) => void; initialTab?: OperationTab }) {
+  const [tab, setTab] = useState<OperationTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const tabs: Array<{ id: OperationTab; label: string; icon: typeof Upload }> = [
     { id: 'imports', label: 'محرك الاستيراد الذكي', icon: Upload },
+    { id: 'import-logs', label: 'سجل دفعات الاستيراد', icon: History },
     { id: 'onyx', label: 'مزامنة أونكس برو', icon: Activity },
     { id: 'reconcile', label: 'مطابقة المخزون', icon: Gauge },
     { id: 'dictionary', label: 'قاموس المرادفات', icon: FileText },
   ];
   return <AdminPage eyebrow="البيانات والذكاء" title="مركز العمليات الذكي" description="استيراد ومزامنة ومطابقة موحدة مع حفظ مصدر البيانات وأثر التغييرات" icon={Zap} note="تظهر بيانات المتجر وأونكس ضمن سياق واحد، مع حفظ المصدر ومنع التعديل دون اعتماد" toolbar={<Button variant="secondary" onClick={() => setRefreshVersion((version) => version + 1)}><RefreshCw size={16} /> تحديث البيانات</Button>}>
-    <div className="operation-tabs">{tabs.map(({ id, label, icon: Icon }) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={16} />{label}</button>)}</div>
+    <div className="operation-tabs">{tabs.map(({ id, label, icon: Icon }) => <button key={id} type="button" aria-pressed={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={16} />{label}</button>)}</div>
     {tab === 'imports' && <ImportEngine onNotice={onNotice} refreshVersion={refreshVersion} />}
+    {tab === 'import-logs' && <ImportEngine onNotice={onNotice} refreshVersion={refreshVersion} historyOnly />}
     {tab === 'onyx' && <OnyxDashboard onNotice={onNotice} refreshVersion={refreshVersion} />}
     {tab === 'reconcile' && <InventoryReconciliation onNotice={onNotice} refreshVersion={refreshVersion} />}
     {tab === 'dictionary' && <SynonymDictionary refreshVersion={refreshVersion} />}
   </AdminPage>;
 }
 
-function ImportEngine({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
-  return <UnifiedImportEngine onNotice={onNotice} refreshVersion={refreshVersion} />;
+function ImportEngine({ onNotice, refreshVersion, historyOnly = false }: { onNotice: (message: string) => void; refreshVersion: number; historyOnly?: boolean }) {
+  return <UnifiedImportEngine onNotice={onNotice} refreshVersion={refreshVersion} historyOnly={historyOnly} />;
 }
 
 function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: string) => void; refreshVersion: number }) {
@@ -68,6 +71,22 @@ function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: strin
   );
   const [reconciling, setReconciling] = useState(false);
   const metrics = summary?.metrics;
+  const primaryAmountMetric = metrics?.revenue_total !== null && metrics?.revenue_total !== undefined
+    ? { label: 'الإيراد المحسوب', value: metrics.revenue_total }
+    : metrics?.sales_total !== null && metrics?.sales_total !== undefined
+      ? { label: 'المبيعات المسجلة', value: metrics.sales_total }
+      : { label: 'الإيراد/المبيعات', value: null };
+  const numericQualityNotices = metrics ? [
+    metrics.metric_quality.quantity !== 'COMPLETE'
+      ? `الكمية ${metrics.metric_quality.quantity === 'UNAVAILABLE' ? 'غير متاحة' : 'غير مكتملة'}: ${metrics.quantity_missing_rows} صفوف بلا قيمة و${metrics.quantity_invalid_rows} بقيمة غير رقمية.`
+      : '',
+    metrics.metric_quality.revenue !== 'COMPLETE'
+      ? `الإيراد ${metrics.metric_quality.revenue === 'UNAVAILABLE' ? 'غير متاح' : 'غير مكتمل'}: ${metrics.revenue_missing_rows} صفوف بلا قيمة و${metrics.revenue_invalid_rows} بقيمة غير رقمية.`
+      : '',
+    metrics.metric_quality.sales !== 'COMPLETE'
+      ? `المبيعات ${metrics.metric_quality.sales === 'UNAVAILABLE' ? 'غير متاحة' : 'غير مكتملة'}: ${metrics.sales_missing_rows} صفوف بلا قيمة و${metrics.sales_invalid_rows} بقيمة غير رقمية.`
+      : '',
+  ].filter(Boolean).join(' ') : '';
 
   async function reconcileNow() {
     if (!selectedId || reconciling) return;
@@ -91,12 +110,15 @@ function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: strin
     </section>
     {selected && !loading && <>
       <div className="onyx-source"><History size={16} /> المصدر: <strong>{selected.source_file_name ?? '—'}</strong><span>Snapshot #{selected.id.slice(0, 8)} • Version {selected.snapshot_version}</span><span>جودة المصدر {selected.data_quality_score}/100</span></div>
-      {summaryLoading ? <Loading /> : summaryError ? <ErrorBox message={summaryError} /> : metrics ? <section className="onyx-kpis">
-        <Metric icon={Database} label="السجلات الكاملة" value={formatNumber(metrics.row_count)} />
-        <Metric icon={Package} label="مفاتيح فريدة" value={formatNumber(metrics.unique_keys)} />
-        <Metric icon={Gauge} label="إجمالي الكمية" value={formatNumber(Number(metrics.quantity_total))} />
-        <Metric icon={BarChart3} label="الإيراد المحسوب" value={formatNumber(Number(metrics.revenue_total || metrics.sales_total))} />
-      </section> : null}
+      {summaryLoading ? <Loading /> : summaryError ? <ErrorBox message={summaryError} /> : metrics ? <>
+        <section className="onyx-kpis">
+          <Metric icon={Database} label="السجلات الكاملة" value={formatNumber(metrics.row_count)} />
+          <Metric icon={Package} label="مفاتيح فريدة" value={formatNumber(metrics.unique_keys)} />
+          <Metric icon={Gauge} label="إجمالي الكمية" value={metrics.quantity_total === null ? 'غير متاح' : formatNumber(metrics.quantity_total)} />
+          <Metric icon={BarChart3} label={primaryAmountMetric.label} value={primaryAmountMetric.value === null ? 'غير متاح' : formatNumber(primaryAmountMetric.value)} />
+        </section>
+        {numericQualityNotices && <p role="status" className="privacy-note" style={{ marginTop: 10, color: '#9b4e22' }}>{numericQualityNotices} لم تُستبدل القيم المفقودة بأصفار.</p>}
+      </> : null}
       <section className="onyx-section">
         <div className="onyx-section-head"><div><span>تحليل حتمي</span><h3>مصدر البيانات وجودتها</h3></div></div>
         <div className="onyx-insight-grid">
@@ -109,7 +131,7 @@ function OnyxDashboard({ onNotice, refreshVersion }: { onNotice: (message: strin
         <div className="onyx-section-head"><div><span>مطابقة المخزون</span><h3>قارن هذا Snapshot مع المخزون المباشر</h3></div></div>
         <div className="action-card"><div className="action-card-icon"><AlertTriangle size={20} /></div><div><strong>مطابقة قراءة فقط</strong><p>يُنشأ سجل تدقيق دائم للفروقات. لا يتغير المخزون المباشر من هذه الخطوة.</p></div><Button disabled={reconciling || rowsLoading} onClick={() => void reconcileNow()}>{reconciling ? 'جارٍ تنفيذ المطابقة...' : 'مطابقة الآن'}</Button></div>
       </section>
-      {summary && <section className="onyx-section panel"><div className="panel-head"><div><h3>مؤشرات الجودة حسب المسار</h3><p>النتائج التالية محسوبة على كامل Snapshot.</p></div></div><div className="onyx-insight-grid"><Insight icon={Check} title="صفوف صحيحة" body={formatNumber(metrics?.valid_rows ?? 0)} /><Insight icon={AlertTriangle} title="مرفوضة" body={formatNumber(metrics?.rejected_rows ?? 0)} /><Insight icon={History} title="تحذيرات" body={formatNumber(metrics?.warning_rows ?? 0)} /></div><div className="report-grid" style={{ marginTop: 14 }}>{summary.top_items.map((item) => <article className="report-metric" key={item.item_code}><Package size={20} /><span>{item.item_code}</span><strong>{item.name ?? '—'}</strong><small>الكمية {formatNumber(Number(item.quantity))} · الإيراد {formatNumber(Number(item.revenue))}</small></article>)}</div></section>}
+      {summary && <section className="onyx-section panel"><div className="panel-head"><div><h3>مؤشرات الجودة حسب المسار</h3><p>النتائج التالية محسوبة على كامل Snapshot.</p></div></div><div className="onyx-insight-grid"><Insight icon={Check} title="صفوف صحيحة" body={formatNumber(metrics?.valid_rows ?? 0)} /><Insight icon={AlertTriangle} title="مرفوضة" body={formatNumber(metrics?.rejected_rows ?? 0)} /><Insight icon={History} title="تحذيرات" body={formatNumber(metrics?.warning_rows ?? 0)} /></div><div className="report-grid" style={{ marginTop: 14 }}>{summary.top_items.map((item) => <article className="report-metric" key={item.item_code}><Package size={20} /><span>{item.item_code}</span><strong>{item.name ?? '—'}</strong><small>الكمية {item.quantity === null ? 'غير متاح' : formatNumber(item.quantity)} · الإيراد {item.revenue === null ? 'غير متاح' : formatNumber(item.revenue)}</small></article>)}</div></section>}
       {rowsError && <ErrorBox message={rowsError} />}
       {rows?.length ? <section className="onyx-section panel"><div className="panel-head"><div><h3>عينة من صفوف اللقطة الثابتة</h3><p>عرض أول 50 صفًا فقط في الواجهة؛ المؤشرات أعلى الصفحة تحسب جميع الصفوف.</p></div></div><TableWrap><table><thead><tr><th>رقم الصف</th><th>المفتاح القياسي</th><th>الحالة</th><th>بيانات الصف</th></tr></thead><tbody>{rows.slice(0,50).map((row) => <tr key={row.id}><td>{row.row_number}</td><td><code>{row.canonical_key ?? '—'}</code></td><td>{row.status}</td><td><code>{JSON.stringify(row.data).slice(0,220)}</code></td></tr>)}</tbody></table></TableWrap></section> : null}
     </>}

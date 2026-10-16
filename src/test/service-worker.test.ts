@@ -13,18 +13,40 @@ type Listener = (event: WorkerEvent | FetchWorkerEvent) => void;
 async function loadServiceWorker(overrides: {
   cacheAdd?: (url: string) => Promise<void>;
   cacheNames?: string[];
+  cacheEntries?: string[];
   cacheMatch?: (request: Request | string) => Promise<Response | null>;
+  cachePut?: (request: Request | string, response: Response) => Promise<void>;
+  cacheDeleteAsset?: (request: Request | string) => Promise<boolean>;
+  cacheOpenFails?: boolean;
   fetcher?: (request: Request) => Promise<Response>;
 } = {}) {
   const source = await readFile(resolve(process.cwd(), "public/sw.js"), "utf8");
   const listeners = new Map<string, Listener>();
+  let cacheEntryUrls = [...(overrides.cacheEntries ?? [])];
   const cacheAdd = vi.fn(async (url: string) => overrides.cacheAdd?.(url));
-  const cachePut = vi.fn(async (_request: Request | string, _response: Response) => undefined);
-  const cache = { add: cacheAdd, put: cachePut };
+  const cachePut = vi.fn(async (request: Request | string, response: Response) => {
+    if (overrides.cachePut) return overrides.cachePut(request, response);
+    const url = typeof request === "string" ? new URL(request, "https://aghbari.example").href : request.url;
+    cacheEntryUrls = cacheEntryUrls.filter((entry) => entry !== url);
+    cacheEntryUrls.push(url);
+  });
+  const cacheMatch = vi.fn(async (request: Request | string) => overrides.cacheMatch?.(request) ?? null);
+  const cacheDeleteAsset = vi.fn(async (request: Request | string) => {
+    if (overrides.cacheDeleteAsset) return overrides.cacheDeleteAsset(request);
+    const url = typeof request === "string" ? new URL(request, "https://aghbari.example").href : request.url;
+    const initial = cacheEntryUrls.length;
+    cacheEntryUrls = cacheEntryUrls.filter((entry) => entry !== url);
+    return cacheEntryUrls.length !== initial;
+  });
+  const cacheKeys = vi.fn(async () => cacheEntryUrls.map((url) => ({ url }) as Request));
+  const cache = { add: cacheAdd, put: cachePut, match: cacheMatch, keys: cacheKeys, delete: cacheDeleteAsset };
   const cacheDelete = vi.fn(async () => true);
   const cacheNames = overrides.cacheNames ?? [];
   const cachesMock = {
-    open: vi.fn(async () => cache),
+    open: vi.fn(async () => {
+      if (overrides.cacheOpenFails) throw new Error("cache storage unavailable");
+      return cache;
+    }),
     keys: vi.fn(async () => cacheNames),
     delete: cacheDelete,
     match: vi.fn(async (request: Request | string) => overrides.cacheMatch?.(request) ?? null),
@@ -50,7 +72,7 @@ async function loadServiceWorker(overrides: {
     console,
   });
 
-  return { listeners, cacheAdd, cachePut, cachesMock, cacheDelete, skipWaiting, claim };
+  return { listeners, cacheAdd, cachePut, cacheMatch, cacheKeys, cacheDeleteAsset, cachesMock, cacheDelete, skipWaiting, claim };
 }
 
 describe("Aghbari PWA offline shell", () => {
@@ -67,7 +89,7 @@ describe("Aghbari PWA offline shell", () => {
 
     expect(worker.cachesMock.open).toHaveBeenCalledWith("aghbari-shell-v2");
     expect(worker.cacheAdd.mock.calls.map(([url]) => url)).toEqual([
-      "/", "/manifest.webmanifest", "/favicon.ico",
+      "/", "/manifest.webmanifest", "/favicon.ico", "/aghbari-192.png", "/aghbari-512.png",
     ]);
     expect(worker.skipWaiting).toHaveBeenCalledOnce();
   });
@@ -117,7 +139,7 @@ describe("Aghbari PWA offline shell", () => {
       respondWith: (promise) => offlinePending.push(promise),
     });
     await expect(Promise.all(offlinePending)).resolves.toEqual([shell]);
-    expect(worker.cachesMock.match).toHaveBeenCalledWith("/");
+    expect(worker.cacheMatch).toHaveBeenCalledWith("/");
     expect(worker.cachePut).toHaveBeenCalledTimes(1);
   });
 
@@ -138,6 +160,153 @@ describe("Aghbari PWA offline shell", () => {
     } as WorkerEvent & { request: Request; respondWith: (promise: Promise<Response>) => void });
 
     await expect(Promise.all(pending)).resolves.toEqual([cachedResponse]);
+  });
+
+  it("never intercepts or caches an order-commit POST for offline replay", async () => {
+    const worker = await loadServiceWorker();
+    const respondWith = vi.fn();
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "POST",
+        url: "https://aghbari.example/rest/v1/rpc/place_order",
+        mode: "cors",
+      } as Request,
+      respondWith,
+    } as unknown as FetchWorkerEvent);
+
+    expect(respondWith).not.toHaveBeenCalled();
+    expect(worker.cachesMock.open).not.toHaveBeenCalled();
+    expect(worker.cachePut).not.toHaveBeenCalled();
+  });
+
+  it("never reads a matching response from an unrelated Cache Storage namespace", async () => {
+    const foreign = new Response("foreign cache response", { status: 200 });
+    const worker = await loadServiceWorker({
+      cacheMatch: async (key) => {
+        const pathname = typeof key === "string" ? key : new URL(key.url).pathname;
+        return pathname === "/assets/app.js" ? null : foreign;
+      },
+      fetcher: async () => new Response("own cache response", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const responses = await Promise.all(pending);
+    expect(responses[0]).not.toBe(foreign);
+    expect(await responses[0].text()).toBe("own cache response");
+    expect(worker.cachesMock.match).not.toHaveBeenCalled();
+    expect(worker.cacheMatch).toHaveBeenCalled();
+  });
+
+  it("does not fail a successful network response when cache persistence is unavailable", async () => {
+    const worker = await loadServiceWorker({
+      cachePut: async () => { throw new Error("quota exceeded"); },
+      fetcher: async () => {
+        const response = new Response("public build asset", { status: 200 });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      },
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const responses = await Promise.all(pending);
+    expect(await responses[0].text()).toBe("public build asset");
+  });
+
+  it("fetches a public asset from the network when Cache Storage cannot be opened", async () => {
+    const worker = await loadServiceWorker({
+      cacheOpenFails: true,
+      fetcher: async () => new Response("network asset", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const [response] = await Promise.all(pending);
+    expect(await response.text()).toBe("network asset");
+  });
+
+  it("returns a controlled error response when offline and Cache Storage cannot be opened", async () => {
+    const worker = await loadServiceWorker({
+      cacheOpenFails: true,
+      fetcher: async () => { throw new Error("offline"); },
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/app.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const [response] = await Promise.all(pending);
+    expect(response.type).toBe("error");
+  });
+
+  it("bounds retained public build assets and evicts the oldest entries first", async () => {
+    const entries = Array.from({ length: 121 }, (_, index) =>
+      "https://aghbari.example/assets/old-" + index + ".js",
+    );
+    const worker = await loadServiceWorker({
+      cacheEntries: entries,
+      fetcher: async () => {
+        const response = new Response("new build asset", { status: 200 });
+        Object.defineProperty(response, "type", { value: "basic" });
+        return response;
+      },
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/assets/new.js",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    const [response] = await Promise.all(pending);
+    expect(await response.text()).toBe("new build asset");
+    await vi.waitFor(() => expect(worker.cacheDeleteAsset).toHaveBeenCalledTimes(2));
+
+    expect(worker.cacheKeys).toHaveBeenCalled();
+    expect((worker.cacheDeleteAsset.mock.calls[0][0] as { url: string }).url)
+      .toBe("https://aghbari.example/assets/old-0.js");
+  });
+
+  it("does not cache profile or arbitrary same-origin image URLs by extension", async () => {
+    const worker = await loadServiceWorker({
+      fetcher: async () => new Response("account-bound image", { status: 200 }),
+    });
+    const pending: Promise<Response>[] = [];
+    worker.listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        url: "https://aghbari.example/profile/customer-avatar.png",
+        mode: "cors",
+      } as Request,
+      respondWith: (promise) => pending.push(promise),
+    });
+    await expect(Promise.all(pending)).resolves.toHaveLength(1);
+    expect(worker.cachePut).not.toHaveBeenCalled();
   });
 
   it("removes previous shell cache versions during activation", async () => {

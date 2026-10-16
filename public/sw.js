@@ -1,6 +1,29 @@
 /* Aghbari offline shell. Financial data, auth responses and Supabase traffic are never cached. */
 const CACHE_NAME = 'aghbari-shell-v2';
-const SHELL = ['/', '/manifest.webmanifest', '/favicon.ico'];
+const SHELL = ['/', '/manifest.webmanifest', '/favicon.ico', '/aghbari-192.png', '/aghbari-512.png'];
+
+const MAX_CACHED_BUILD_ASSETS = 120;
+
+/** Cache writes are best-effort; keep hashed build assets bounded as deployments accumulate. */
+async function cachePublicBuildAsset(cache, request, response) {
+  try {
+    await cache.put(request, response);
+    const keys = await cache.keys();
+    const assets = keys.filter((key) => {
+      const cachedUrl = new URL(key.url);
+      return cachedUrl.origin === self.location.origin &&
+        cachedUrl.pathname.startsWith('/assets/') &&
+        /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(cachedUrl.pathname);
+    });
+    const excess = assets.length - MAX_CACHED_BUILD_ASSETS;
+    if (excess > 0) {
+      // Cache.keys() returns insertion order; evict the oldest public assets first.
+      await Promise.all(assets.slice(0, excess).map((key) => cache.delete(key)));
+    }
+  } catch {
+    // Storage quota/eviction failures must never break the online response.
+  }
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -43,19 +66,32 @@ self.addEventListener('fetch', (event) => {
         // identity-bound data in future SSR changes.
         if (response.ok && url.pathname === '/') {
           const homeResponse = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put('/', homeResponse));
+          void caches.open(CACHE_NAME)
+            .then((cache) => cache.put('/', homeResponse))
+            .catch(() => undefined);
         }
         return response;
-      }).catch(async () => (await caches.match('/')) || Response.error()),
+      }).catch(async () => {
+        try {
+          const shellCache = await caches.open(CACHE_NAME);
+          return (await shellCache.match('/')) || Response.error();
+        } catch {
+          return Response.error();
+        }
+      }),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(request);
       const network = fetch(request).then((response) => {
-        if (response.ok && response.type === 'basic' && /\.(js|css|svg|png|jpe?g|webp|woff2?|ico)$/i.test(url.pathname)) {
-          void caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+        const isPublicBuildAsset =
+          (url.pathname.startsWith('/assets/') && /\.(js|css|svg|png|jpe?g|webp|woff2?)$/i.test(url.pathname)) ||
+          url.pathname === '/favicon.ico';
+        if (response.ok && response.type === 'basic' && isPublicBuildAsset) {
+          void cachePublicBuildAsset(cache, request, response.clone());
         }
         return response;
       });
@@ -66,6 +102,6 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
       return network.catch(() => Response.error());
-    }),
+    }).catch(() => fetch(request).catch(() => Response.error())),
   );
 });

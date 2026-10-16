@@ -8,8 +8,8 @@ import { useFetch } from "@/lib/useFetch";
 import { formatNumber } from "@/lib/format";
 import { AdminPage, Button, Empty, ErrorBox, Loading, TableWrap } from "@/components/AdminPages";
 import {
-  DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_FILE_BYTES, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
-  PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256,
+  DataQualityAccumulator, DEFAULT_SYNONYMS, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS,
+  PROCESSING_CHUNK_ROWS, UPLOAD_CHUNK_BYTES, IncrementalSha256, StreamingCsvParser, hashFileSha256, isImportFileSizeAllowed,
   applyImportProfileRules, normalizeHeader, parseXlsxFirstWorksheet, shouldPersistParsedImportRow, stableJsonStringify, validateCsvRow, validateImportProfileRules, validateVerifiedImportChunkPrefix,
   type ParsedImportRow, type QualityResult,
 } from "@/lib/unified-import";
@@ -46,7 +46,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice: (message: string) => void; refreshVersion?: number }) {
+export function UnifiedImportEngine({ onNotice, refreshVersion = 0, historyOnly = false }: { onNotice: (message: string) => void; refreshVersion?: number; historyOnly?: boolean }) {
   const { data: jobs, loading, error, refetch } = useFetch(fetchImportJobs, [refreshVersion]);
   const { data: profiles } = useFetch(fetchImportProfiles, [refreshVersion]);
   const { data: storedSynonyms } = useFetch(fetchCentralSynonyms, [refreshVersion]);
@@ -470,7 +470,7 @@ export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice
     event.target.value = "";
     if (!file || runningRef.current) return;
     if (file.size === 0) { setErrorMessage('الملف فارغ. اختر ملفًا يحتوي على بيانات.'); return; }
-    if (file.size > MAX_IMPORT_FILE_BYTES) {
+    if (!isImportFileSizeAllowed(file.size)) {
       setErrorMessage("حجم الملف يتجاوز الحد المسموح 100MB.");
       return;
     }
@@ -546,9 +546,9 @@ export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice
   }
 
   return (
-    <AdminPage eyebrow="البيانات والذكاء" title="محرك الاستيراد الموحد" description="معالجة CSV متدفقة، بصمات SHA-256، ملف تعريفي وإدارة نسخ دون حفظ الملفات الخام." icon={Upload} note="ملف خام لا يغادر المتصفح؛ الحفظ في الخادم يقتصر على الميتاداتا والصفوف المنظمة واللقطات.">
+    <AdminPage eyebrow="البيانات والذكاء" title={historyOnly ? "سجل دفعات الاستيراد" : "محرك الاستيراد الموحد"} description={historyOnly ? "سجل الخادم للدفعات وبصماتها وجودة بياناتها وحالتها، مع استئناف مشروط بالملف الأصلي." : "معالجة CSV متدفقة، بصمات SHA-256، ملف تعريفي وإدارة نسخ دون حفظ الملفات الخام."} icon={Upload} note="ملف خام لا يغادر المتصفح؛ الحفظ في الخادم يقتصر على الميتاداتا والصفوف المنظمة واللقطات.">
       <div className="import-layout">
-        <section className="panel import-upload-panel">
+        {!historyOnly && <section className="panel import-upload-panel">
           <div className="import-upload-icon"><Upload size={26} /></div>
           <h2>رفع ملف للمعالجة</h2>
           <p>يدعم CSV وملفات XLSX الجدولية (الورقة المرئية الأولى). صيغة XLS الثنائية وPDF تبقيان في مسار التعيين اليدوي؛ لا تُخترع بيانات غير مستخرجة.</p>
@@ -573,9 +573,9 @@ export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice
           {errorMessage && <div className="form-error"><XCircle size={15} /> {errorMessage}</div>}
           {statusMessage && <div className="privacy-note" role="status"><ShieldCheck size={17} /><span>{statusMessage}</span></div>}
           <div className="privacy-note"><ShieldCheck size={17} /><span>الملف الخام لا يُخزن. لا تُحذف سجلات تشغيلية بسبب غيابها من ملف الاستيراد.</span></div>
-        </section>
+        </section>}
 
-        {duplicatePrompt && <section className="panel" role="alert" style={{ gridColumn: "1 / -1", borderColor: "#d8c17a" }}>
+        {!historyOnly && duplicatePrompt && <section className="panel" role="alert" style={{ gridColumn: "1 / -1", borderColor: "#d8c17a" }}>
           <h2>تم اكتشاف ملف مطابق</h2>
           <p>الاسم: <strong>{duplicatePrompt.file.name}</strong> • SHA-256: <code>{duplicatePrompt.fileHash.slice(0, 20)}…</code> • دفعات سابقة: {duplicatePrompt.duplicate.jobs.length} • لقطات: {duplicatePrompt.duplicate.snapshots.length}</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -589,7 +589,7 @@ export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice
           <small style={{ display: "block", marginTop: 8 }}>الاستبدال يؤرشف اللقطة السابقة ولا يمحو سجلها. التعارضات التي تتطلب قرارًا بشريًا توقف الدمج.</small>
         </section>}
 
-        <section className="panel pipeline-panel">
+        {!historyOnly && <section className="panel pipeline-panel">
           <div className="panel-head">
             <div><h2>مراحل المعالجة</h2><p>تقدم فعلي من القراءة والصفوف المحفوظة إلى قرار الخادم واللقطة.</p></div>
             {stage && stage !== "complete" && <div style={{ display: "flex", gap: 8 }}>
@@ -609,7 +609,7 @@ export function UnifiedImportEngine({ onNotice, refreshVersion = 0 }: { onNotice
             <div className="progress-track"><i style={{ width: progress + "%" }} /></div>
             <small>{formatNumber(processed)} صف تمت معالجته {qualityPreview ? "• DQS أولي " + qualityPreview.score + "/100 (" + (qualityPreview.score >= 90 ? 'ممتاز' : qualityPreview.score >= 75 ? 'مقبول' : qualityPreview.score >= 50 ? 'تحذير' : 'مرفوض') + ")" : ""}</small>
           </div>}
-        </section>
+        </section>}
 
         <section className="panel import-jobs-panel">
           <div className="panel-head"><div><h2>سجل الدفعات</h2><p>البصمة والميتا والنتائج دون حفظ الملفات الخام</p></div><Button variant="outline" onClick={refetch}><RefreshCw size={15} /> تحديث</Button></div>

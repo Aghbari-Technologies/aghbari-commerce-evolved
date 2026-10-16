@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Install Bun for frozen-lockfile verification
         uses: oven-sh/setup-bun@v2
       - name: Verify Bun lockfile matches package.json
@@ -45,8 +47,41 @@ jobs:
           node-version: 22
       - name: Install dependencies from verified Bun lockfile
         run: bun install --frozen-lockfile
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          SUPABASE_URL: https://ci-placeholder.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+        run: npm run build
+
+      - name: Verify committed TanStack route tree matches official generation
+        run: git diff --exit-code -- src/routeTree.gen.ts
+
       - name: Unit tests
         run: npm test
+      - name: Import streaming performance probe (run only when the latest PR commit changes import code)
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          target_sha="${PR_HEAD_SHA:-$GITHUB_SHA}"
+          if ! git cat-file -e "${target_sha}^{commit}" 2>/dev/null; then
+            echo "::notice::Import benchmark skipped because the exact PR commit is not available in the checkout."
+            exit 0
+          fi
+          parent_sha="$(git rev-parse "${target_sha}^" 2>/dev/null || true)"
+          if [[ -n "$parent_sha" ]] && git diff --quiet "$parent_sha" "$target_sha" -- \
+            src/lib/unified-import.ts \
+            src/components/UnifiedImportEngine.tsx \
+            src/lib/unified-import.test.ts \
+            src/test/commerce-utils.test.ts \
+            scripts/benchmark-import-streaming.ts; then
+            echo "Skipped import benchmark: the latest source commit does not change import processing or its benchmark."
+            exit 0
+          fi
+          bun run scripts/benchmark-import-streaming.ts
       - name: Apply all migrations to isolated PostgreSQL 17 and verify core workflows
         shell: bash
         run: |
@@ -63,17 +98,163 @@ jobs:
             done
           fi
           exit "$db_status"
+
+      - name: Isolated PostgreSQL logical backup and restore drill
+        shell: bash
+        run: |
+          set -euo pipefail
+          postgres_container="$(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 == "postgres:17" {print $1; exit}')"
+          if [[ -z "$postgres_container" ]]; then
+            echo "PostgreSQL 17 service container was not found; refusing to report a restore PASS."
+            exit 1
+          fi
+
+          backup_file="$RUNNER_TEMP/aghbari-isolated-restore-drill.dump"
+          trap 'rm -f "$backup_file"; docker exec "$postgres_container" dropdb -U postgres --if-exists aghbari_restore_test >/dev/null 2>&1 || true' EXIT
+          docker exec "$postgres_container" pg_dump --version
+          docker exec "$postgres_container" pg_dump --format=custom --no-owner --no-privileges -U postgres -d aghbari_test > "$backup_file"
+          test -s "$backup_file"
+          docker exec "$postgres_container" createdb -U postgres -T template0 aghbari_restore_test
+          docker exec -i "$postgres_container" pg_restore --exit-on-error --no-owner --no-privileges -U postgres -d aghbari_restore_test < "$backup_file"
+
+          schema_signature() {
+            local database="$1"
+            docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              SELECT
+                (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE')::text || ':' ||
+                (SELECT count(*) FROM information_schema.columns WHERE table_schema='public')::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prokind IN ('f','p'))::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_constraint c JOIN pg_catalog.pg_class t ON t.oid=c.conrelid JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public')::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname='public');
+            "
+          }
+
+          data_signature() {
+            local database="$1"
+            local output signature
+            output="$(docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              DO \$dr\$
+              DECLARE
+                item record;
+                row_hash text;
+                data_summary text := '';
+              BEGIN
+                FOR item IN
+                  SELECT schemaname, tablename
+                  FROM pg_catalog.pg_tables
+                  WHERE schemaname='public'
+                  ORDER BY schemaname, tablename
+                LOOP
+                  EXECUTE format(
+                    'SELECT md5(coalesce(string_agg(md5(to_jsonb(r)::text), '''' ORDER BY md5(to_jsonb(r)::text)), '''')) FROM %I.%I AS r',
+                    item.schemaname, item.tablename
+                  ) INTO row_hash;
+                  data_summary := data_summary || item.schemaname || '.' || item.tablename || ':' || row_hash || ';';
+                END LOOP;
+                RAISE NOTICE 'AGHBARI_DATA_SIGNATURE=%', md5(data_summary);
+              END
+              \$dr\$;
+            " 2>&1)"
+            signature="$(printf '%s\n' "$output" | sed -n 's/^NOTICE:  AGHBARI_DATA_SIGNATURE=//p' | tail -n 1)"
+            if [[ -z "$signature" ]]; then
+              echo "Could not calculate the restored database row signature." >&2
+              printf '%s\n' "$output" >&2
+              return 1
+            fi
+            printf '%s' "$signature"
+          }
+
+          catalog_security_signature() {
+            local database="$1"
+            docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              SELECT
+                (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relrowsecurity)::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relforcerowsecurity)::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', n.nspname, c.relname, c.relrowsecurity::text, c.relforcerowsecurity::text), E'\n' ORDER BY n.nspname, c.relname)
+                  FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  WHERE n.nspname='public' AND c.relkind IN ('r','p')), '')) || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_policies WHERE schemaname='public')::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', schemaname, tablename, policyname, permissive, roles::text, cmd, coalesce(qual,''), coalesce(with_check,'')), E'\n' ORDER BY schemaname, tablename, policyname)
+                  FROM pg_catalog.pg_policies WHERE schemaname='public'), '')) || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  WHERE n.nspname='public' AND NOT t.tgisinternal)::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', n.nspname, c.relname, t.tgname, t.tgenabled, pg_catalog.pg_get_triggerdef(t.oid, true)), E'\n' ORDER BY n.nspname, c.relname, t.tgname)
+                  FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  WHERE n.nspname='public' AND NOT t.tgisinternal), '')) || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S')::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_extension)::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', e.extname, e.extversion, n.nspname), E'\n' ORDER BY e.extname)
+                  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace), ''));
+            "
+          }
+
+          sequence_state_signature() {
+            local database="$1"
+            local output signature
+            output="$(docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              DO \$dr\$
+              DECLARE
+                item record;
+                state record;
+                sequence_summary text := '';
+              BEGIN
+                FOR item IN
+                  SELECT n.nspname, c.relname, s.seqstart, s.seqincrement, s.seqmax, s.seqmin, s.seqcache, s.seqcycle, s.seqtypid::regtype::text AS seqtype
+                  FROM pg_catalog.pg_class c
+                  JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  JOIN pg_catalog.pg_sequence s ON s.seqrelid=c.oid
+                  WHERE n.nspname='public' AND c.relkind='S'
+                  ORDER BY n.nspname, c.relname
+                LOOP
+                  EXECUTE format('SELECT last_value::text, is_called::text FROM %I.%I', item.nspname, item.relname) INTO state;
+                  sequence_summary := sequence_summary || concat_ws('|',
+                    item.nspname, item.relname, item.seqstart, item.seqincrement, item.seqmax,
+                    item.seqmin, item.seqcache, item.seqcycle, item.seqtype, state.last_value, state.is_called
+                  ) || E'\n';
+                END LOOP;
+                RAISE NOTICE 'AGHBARI_SEQUENCE_SIGNATURE=%', md5(sequence_summary);
+              END
+              \$dr\$;
+            " 2>&1)"
+            signature="$(printf '%s\n' "$output" | sed -n 's/^NOTICE:  AGHBARI_SEQUENCE_SIGNATURE=//p' | tail -n 1)"
+            if [[ -z "$signature" ]]; then
+              echo "Could not calculate PostgreSQL sequence state signature." >&2
+              printf '%s\n' "$output" >&2
+              return 1
+            fi
+            printf '%s' "$signature"
+          }
+
+          source_schema="$(schema_signature aghbari_test)"
+          restored_schema="$(schema_signature aghbari_restore_test)"
+          if [[ -z "$source_schema" || "$source_schema" != "$restored_schema" ]]; then
+            echo "Schema signature mismatch after logical restore: source=$source_schema restored=$restored_schema"
+            exit 1
+          fi
+          source_data="$(data_signature aghbari_test)"
+          restored_data="$(data_signature aghbari_restore_test)"
+          if [[ "$source_data" != "$restored_data" ]]; then
+            echo "Row-data signature mismatch after logical restore: source=$source_data restored=$restored_data"
+            exit 1
+          fi
+          source_catalog="$(catalog_security_signature aghbari_test)"
+          restored_catalog="$(catalog_security_signature aghbari_restore_test)"
+          if [[ -z "$source_catalog" || "$source_catalog" != "$restored_catalog" ]]; then
+            echo "Security catalog signature mismatch after restore: source=$source_catalog restored=$restored_catalog"
+            exit 1
+          fi
+          source_sequences="$(sequence_state_signature aghbari_test)"
+          restored_sequences="$(sequence_state_signature aghbari_restore_test)"
+          if [[ -z "$source_sequences" || "$source_sequences" != "$restored_sequences" ]]; then
+            echo "Sequence state signature mismatch after restore: source=$source_sequences restored=$restored_sequences"
+            exit 1
+          fi
+          echo "PASS isolated PostgreSQL 17 logical backup/restore; schema_signature=$source_schema data_signature=$source_data security_catalog_signature=$source_catalog sequence_signature=$source_sequences"
+
       # The repository-wide Prettier rule currently reports thousands of pre-existing formatting errors.
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
       - name: Lint (excluding repository-wide Prettier formatting rule)
         run: npm run lint -- --rule=prettier/prettier:off
-      - name: Build
-        env:
-          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
-          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
-          SUPABASE_URL: https://ci-placeholder.supabase.co
-          SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
-        run: npm run build
 
       # The dev server compiles routes on demand and can hide missing production SSR/handler output.
       # Verify the actual built artifact separately before treating a green build as deployable.
@@ -87,8 +268,8 @@ jobs:
           npx wrangler dev --config .output/server/wrangler.json --local --ip 127.0.0.1 --port 4173 > /tmp/aghbari-preview.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
-          if [ ! -f .output/server/index.mjs ] || [ ! -f .output/server/wrangler.json ] || [ ! -f .output/public/manifest.webmanifest ]; then
-            echo "Expected Nitro/Cloudflare production artifacts are missing after build."
+          if [ ! -f .output/server/index.mjs ] || [ ! -f .output/server/wrangler.json ] || [ ! -f .output/public/manifest.webmanifest ] || [ ! -f .output/public/aghbari-192.png ] || [ ! -f .output/public/aghbari-512.png ]; then
+            echo "Expected production server, manifest, or PWA launcher icon artifacts are missing after build."
             find .output -maxdepth 3 -type f | sort | head -n 200
             exit 1
           fi
@@ -111,8 +292,8 @@ jobs:
             exit 1
           fi
           for route in \
-            /login /cart /checkout /orders /invoices /statement /quotes /assistant \
-            /admin /admin/orders /admin/products /admin/finance /manifest.webmanifest /sw.js; do
+            /login /store /cart /checkout /checkout/review /checkout/confirm /orders /invoices /statement /statements /quotes /assistant \
+            /admin /admin/orders /admin/products /admin/finance /manifest.webmanifest /sw.js /aghbari-192.png /aghbari-512.png; do
             status=$(curl --silent --connect-timeout 2 --max-time 5 --output /tmp/aghbari-preview-route.html --write-out "%{http_code}" "http://127.0.0.1:4173$route" || true)
             if [ "$status" != "200" ]; then
               echo "Production preview expected HTTP 200 from $route, received $status"
@@ -124,7 +305,10 @@ jobs:
           # customer route to render its own title in the built production artifact.
           for route_spec in \
             "/invoices|الفواتير" \
-            "/statement|كشف الحساب"; do
+            "/statement|كشف الحساب" \
+            "/statements|كشوف الحساب" \
+            "/checkout/review|مراجعة الطلب" \
+            "/checkout/confirm|تأكيد الطلب"; do
             route="${route_spec%%|*}"
             expected_title="${route_spec#*|}"
             curl --fail --silent --show-error "http://127.0.0.1:4173$route" -o /tmp/aghbari-preview-route-contract.html
@@ -159,6 +343,23 @@ jobs:
             cat /tmp/aghbari-preview-manifest.json
             exit 1
           }
+          for icon_spec in \
+            "/aghbari-192.png|192" \
+            "/aghbari-512.png|512"; do
+            route="${icon_spec%%|*}"
+            expected_size="${icon_spec#*|}"
+            curl --connect-timeout 2 --max-time 5 --fail --silent --show-error "http://127.0.0.1:4173$route" -o /tmp/aghbari-preview-icon.png
+            node --input-type=module - /tmp/aghbari-preview-icon.png "$expected_size" <<'NODE'
+          import { readFileSync } from "node:fs";
+          const [path, sizeText] = process.argv.slice(2);
+          const size = Number(sizeText);
+          const png = readFileSync(path);
+          const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+          if (!png.subarray(0, 8).equals(signature) || png.readUInt32BE(16) !== size || png.readUInt32BE(20) !== size) {
+            throw new Error(`Expected a ${size}x${size} PNG at ${path}`);
+          }
+          NODE
+          done
 
       - name: Dev server smoke test on port 5173
         env:
@@ -192,11 +393,11 @@ jobs:
           # Probe the client and admin workspaces plus PWA assets. Route-unit tests alone
           # don't prove the dev server can serve each URL.
           for route in \
-            /cart /checkout /compare /wishlist /addresses /company/contacts /company/members /company/accept-invitation /product/ci-route-smoke-test \
-            /orders /invoices /statement /quotes /reorder /assistant /barcode /offline \
+            /store /cart /checkout /checkout/review /checkout/confirm /compare /wishlist /addresses /company/contacts /company/members /company/users /company/accept-invitation /product/ci-route-smoke-test \
+            /orders /invoices /statement /statements /quotes /reorder /assistant /barcode /offline \
             /admin /admin/orders /admin/products /admin/customers /admin/pricing \
             /admin/operations /admin/finance /admin/reports /admin/settings \
-            /manifest.webmanifest /sw.js; do
+            /manifest.webmanifest /sw.js /aghbari-192.png /aghbari-512.png; do
             status=$(curl --silent --output /dev/null --write-out "%{http_code}" "http://127.0.0.1:5173$route")
             if [ "$status" != "200" ]; then
               echo "Expected HTTP 200 from $route, received $status"
@@ -208,7 +409,10 @@ jobs:
           # SSR document metadata so a missing file-based route cannot silently pass this probe.
           for route_spec in \
             "/invoices|الفواتير" \
-            "/statement|كشف الحساب"; do
+            "/statement|كشف الحساب" \
+            "/statements|كشوف الحساب" \
+            "/checkout/review|مراجعة الطلب" \
+            "/checkout/confirm|تأكيد الطلب"; do
             route="${route_spec%%|*}"
             expected_title="${route_spec#*|}"
             curl --fail --silent --show-error "http://127.0.0.1:5173$route" -o /tmp/aghbari-route-contract.html

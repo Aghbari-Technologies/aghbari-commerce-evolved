@@ -113,6 +113,81 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   });
 }
 
+export type PopularProductRanking = {
+  product_id: string;
+  ranking_position: number;
+};
+
+/**
+ * Returns tenant-scoped product IDs and positions only. Raw order totals, prices and
+ * customer identifiers remain server-side; storefront prices still come through fetchProducts.
+ */
+export type FeaturedProductRanking = {
+  product_id: string;
+  ranking_position: number;
+};
+
+/** Server-ranked editorial picks. Only safe product identifiers and positions cross the RPC boundary. */
+export async function fetchFeaturedProductRanking(limit = 20): Promise<FeaturedProductRanking[]> {
+  const requestedLimit = Number.isFinite(limit) ? Math.trunc(limit) : 20;
+  const safeLimit = Math.max(1, Math.min(50, requestedLimit));
+  const { data, error } = await supabase.rpc("fetch_public_featured_products", { p_limit: safeLimit });
+  if (error || !Array.isArray(data)) {
+    throw new Error("تعذر تحميل المنتجات المميزة من إعدادات الكتالوج؛ لم يتم إنشاء قائمة بديلة.");
+  }
+
+  const seenProducts = new Set<string>();
+  const seenPositions = new Set<number>();
+  const rankings = (data as Array<{ product_id?: unknown; ranking_position?: unknown }>).map((row) => {
+    if (typeof row.product_id !== "string" || row.product_id.trim().length === 0 || seenProducts.has(row.product_id)) {
+      throw new Error("أعاد الخادم هوية صنف غير صالحة في قائمة المنتجات المميزة.");
+    }
+    const position = Number(row.ranking_position);
+    if (!Number.isSafeInteger(position) || position < 1 || position > safeLimit || seenPositions.has(position)) {
+      throw new Error("أعاد الخادم موضع ترتيب غير صالح للمنتجات المميزة.");
+    }
+    seenProducts.add(row.product_id);
+    seenPositions.add(position);
+    return { product_id: row.product_id, ranking_position: position };
+  }).sort((a, b) => a.ranking_position - b.ranking_position);
+
+  if (rankings.length > safeLimit || rankings.some((row, index) => row.ranking_position !== index + 1)) {
+    throw new Error("قائمة المنتجات المميزة التي أعادها الخادم غير متسقة.");
+  }
+  return rankings;
+}
+
+export async function fetchPopularProductRanking(limit = 20): Promise<PopularProductRanking[]> {
+  const requestedLimit = Number.isFinite(limit) ? Math.trunc(limit) : 20;
+  const safeLimit = Math.max(1, Math.min(50, requestedLimit));
+  const { data, error } = await supabase.rpc("fetch_public_popular_products", {
+    p_limit: safeLimit,
+  });
+  if (error || !Array.isArray(data)) {
+    throw new Error("تعذر تحميل ترتيب المنتجات من الطلبات المسجلة؛ لم يُنشأ ترتيب بديل.");
+  }
+
+  const seenProducts = new Set<string>();
+  const seenPositions = new Set<number>();
+  const rankings = (data as Array<{ product_id?: unknown; ranking_position?: unknown }>).map((row) => {
+    if (typeof row.product_id !== "string" || row.product_id.trim().length === 0 || seenProducts.has(row.product_id)) {
+      throw new Error("أعاد الخادم هوية صنف غير صالحة في ترتيب الطلبات.");
+    }
+    const position = Number(row.ranking_position);
+    if (!Number.isSafeInteger(position) || position < 1 || position > safeLimit || seenPositions.has(position)) {
+      throw new Error("أعاد الخادم موضع ترتيب غير صالح.");
+    }
+    seenProducts.add(row.product_id);
+    seenPositions.add(position);
+    return { product_id: row.product_id, ranking_position: position };
+  }).sort((a, b) => a.ranking_position - b.ranking_position);
+
+  if (rankings.length > safeLimit || rankings.some((row, index) => row.ranking_position !== index + 1)) {
+    throw new Error("ترتيب الطلبات الذي أعاده الخادم غير متسق؛ لم يتم عرض ترتيب تقديري.");
+  }
+  return rankings;
+}
+
 async function fetchStaffProductById(id: string): Promise<Product> {
   const { data, error } = await supabase.rpc('fetch_staff_products', { p_product_id: id });
   if (error) throw error;
@@ -124,22 +199,32 @@ async function fetchStaffProductById(id: string): Promise<Product> {
 export async function createProduct(p: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
   const productId = typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID();
-  const { error } = await supabase
+  // Return only the safe primary key from the write. Read protected fields through the staff RPC.
+  const { data: inserted, error } = await supabase
     .from('products')
-    .insert({ ...p, id: productId, organization_id: orgId });
+    .insert({ ...p, id: productId, organization_id: orgId })
+    .select('id')
+    .single();
   if (error) throw error;
-  return fetchStaffProductById(productId);
+  if (!inserted?.id) throw new Error('تعذر تأكيد إنشاء الصنف من قاعدة البيانات.');
+  return fetchStaffProductById(inserted.id);
 }
 
 export async function updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
   const { organizationId: orgId } = await getCurrentTenantScope();
-  const { error } = await supabase
+  // No matched row is a failed write, not a successful stale read.
+  const { data: updated, error } = await supabase
     .from('products')
     .update(updates)
     .eq('id', id)
-    .eq('organization_id', orgId);
+    .eq('organization_id', orgId)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
-  return fetchStaffProductById(id);
+  if (!updated?.id || updated.id !== id) {
+    throw new Error('لم يُحفظ تعديل الصنف؛ الصنف غير موجود في المؤسسة الحالية أو لا تملك صلاحية تعديله.');
+  }
+  return fetchStaffProductById(updated.id);
 }
 
 export async function deleteProduct(id: string): Promise<void> {
@@ -833,6 +918,8 @@ export async function fetchOnyxSnapshots() {
   return data;
 }
 
+export type OnyxNumericMetricQuality = "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
+
 export type OnyxSnapshotAnalytics = {
   snapshot: {
     id: string; version: number; file_name: string | null; file_hash: string; report_type: string;
@@ -840,12 +927,16 @@ export type OnyxSnapshotAnalytics = {
   };
   metrics: {
     row_count: number; unique_keys: number; valid_rows: number; rejected_rows: number; warning_rows: number;
-    quantity_total: number; revenue_total: number; sales_total: number; customer_count: number;
-    supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
+    quantity_total: number | null; revenue_total: number | null; sales_total: number | null;
+    quantity_valid_rows: number; quantity_missing_rows: number; quantity_invalid_rows: number;
+    revenue_valid_rows: number; revenue_missing_rows: number; revenue_invalid_rows: number;
+    sales_valid_rows: number; sales_missing_rows: number; sales_invalid_rows: number;
+    metric_quality: { quantity: OnyxNumericMetricQuality; revenue: OnyxNumericMetricQuality; sales: OnyxNumericMetricQuality };
+    customer_count: number; supplier_count: number; item_count: number; snapshot_row_count: number; dqs: number;
   };
   status_distribution: Array<{ status: string; count: number }>;
-  top_items: Array<{ item_code: string; name: string | null; quantity: number; revenue: number }>;
-  top_customers: Array<{ customer_code: string; revenue: number; quantity: number }>;
+  top_items: Array<{ item_code: string; name: string | null; quantity: number | null; revenue: number | null }>;
+  top_customers: Array<{ customer_code: string; revenue: number | null; quantity: number | null }>;
   forecast_status: string;
   forecast_reason: string;
 };

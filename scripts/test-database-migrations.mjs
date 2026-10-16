@@ -274,6 +274,7 @@ async function main() {
       on conflict(id) do nothing`,
     [otherProductId, otherOrganizationId],
   );
+  await db.unsafe("update public.products set is_featured=true where id=$1", [otherProductId]);
 
   // The original schema seeded one wholesale price break at 10; migration 600 adds a second break.
   await db.unsafe(
@@ -379,6 +380,54 @@ async function main() {
   );
   await db.unsafe("reset role");
 
+  // AGH-SEC-TENANT-001: the publication config cannot pair one tenant with another tenant's warehouse.
+  await expectFailure(
+    "publication config rejects a warehouse owned by another organization",
+    () => db.unsafe(
+      "update public.storefront_publication_config set warehouse_id=$1 where singleton=true",
+      [foreignWarehouseId],
+    ),
+    /Storefront warehouse must belong to the configured organization/i,
+  );
+
+  // Simulate legacy corruption with the guard temporarily disabled, then prove every
+  // anonymous resolver hides the invalid warehouse and no inventory rows remain visible.
+  await db.unsafe("ALTER TABLE public.storefront_publication_config DISABLE TRIGGER storefront_publication_warehouse_scope_guard");
+  try {
+    await db.unsafe(
+      "update public.storefront_publication_config set warehouse_id=$1 where singleton=true",
+      [foreignWarehouseId],
+    );
+    await db.unsafe("set role anon");
+    const mismatchedPublicScopeRows = await db.unsafe("select public.get_public_storefront_context() as scope");
+    assert.equal(mismatchedPublicScopeRows[0].scope.organization_id, organizationId,
+      "a bad warehouse binding must not change the public storefront tenant");
+    assert.equal(mismatchedPublicScopeRows[0].scope.warehouse_id, null,
+      "public tenant scope must hide a warehouse owned by a different organization");
+    const mismatchedPublicWarehouseRows = await db.unsafe(
+      "select public.public_storefront_warehouse_id() as warehouse_id",
+    );
+    assert.equal(mismatchedPublicWarehouseRows[0].warehouse_id, null,
+      "the anonymous warehouse resolver must not return a foreign tenant's warehouse id");
+    const mismatchedPublicInventory = await db.unsafe(
+      "select product_id,warehouse_id,quantity_on_hand,quantity_available from public.inventory_balances",
+    );
+    assert.equal(mismatchedPublicInventory.length, 0,
+      "anonymous stock reads must fail closed when the publication warehouse is misbound");
+  } finally {
+    await db.unsafe("reset role");
+    try {
+      await db.unsafe(
+        "update public.storefront_publication_config set warehouse_id=$1 where singleton=true",
+        [publicScope.warehouse_id],
+      );
+    } finally {
+      await db.unsafe("ALTER TABLE public.storefront_publication_config ENABLE TRIGGER storefront_publication_warehouse_scope_guard");
+    }
+  }
+
+  await db.unsafe("reset role");
+
   await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
 
@@ -455,6 +504,44 @@ async function main() {
   assert.equal(Number(preview20[0].result.items[0].quantity), 20);
   assert.ok(!("total_amount" in preview20[0].result));
 
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key in ('customer_cart_amounts_visible','customer_order_amounts_visible')", [organizationId]);
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const checkoutMoneyHiddenResult = await db.unsafe(
+    "select public.get_customer_checkout_preview($1::jsonb) as result",
+    [db.json([{ product_id: productId, quantity: 10 }])],
+  );
+  const checkoutMoneyHidden = checkoutMoneyHiddenResult[0].result;
+  assert.equal(checkoutMoneyHidden.amounts_visible, false, "cart money must be hidden when the tenant policy is missing");
+  assert.ok(!("total_amount" in checkoutMoneyHidden), "default-hidden checkout response must not include a total field");
+  assert.ok(!("unit_price" in checkoutMoneyHidden.items[0]) && !("line_total" in checkoutMoneyHidden.items[0]), "default-hidden checkout item must contain no financial fields");
+  await expectFailure("customer cannot turn on cart financial visibility",
+    () => db.unsafe("select public.set_customer_money_display_policy('cart',true)"), /admin or manager/i);
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const cartVisibilityEnabled = await db.unsafe("select public.set_customer_money_display_policy('cart',true) as result");
+  assert.equal(cartVisibilityEnabled[0].result.surface, "cart");
+  assert.equal(cartVisibilityEnabled[0].result.visible, true, "an authorized admin must be able to enable cart price display");
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const checkoutMoneyVisibleResult = await db.unsafe(
+    "select public.get_customer_checkout_preview($1::jsonb) as result",
+    [db.json([{ product_id: productId, quantity: 10 }])],
+  );
+  const checkoutMoneyVisible = checkoutMoneyVisibleResult[0].result;
+  assert.equal(checkoutMoneyVisible.amounts_visible, true, "only the explicit tenant opt-in reveals cart prices");
+  assert.equal(Number(checkoutMoneyVisible.items[0].unit_price), 37000, "visible cart price must use the wholesale quantity resolver");
+  assert.equal(Number(checkoutMoneyVisible.items[0].line_total), 370000);
+  assert.equal(Number(checkoutMoneyVisible.total_amount), 370000);
+  assert.equal(checkoutMoneyVisible.currency, "YER");
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key='customer_cart_amounts_visible'", [organizationId]);
+  await db.unsafe("set role authenticated");
+
   const wholesaleResolved10 = await db.unsafe(
     "select product_id,unit_price from public.get_storefront_product_prices($1::uuid[],$2::numeric)",
     [[productId], 10],
@@ -502,6 +589,33 @@ async function main() {
   assert.equal(order.status, "pending");
   assert.ok(!("total_amount" in order), "customer order response must not disclose monetary values");
   assert.equal(order.idempotent_replay, false);
+
+  const orderMoneyHiddenResult = await db.unsafe("select public.get_customer_order_financials($1::uuid) as result", [order.id]);
+  const orderMoneyHidden = orderMoneyHiddenResult[0].result;
+  assert.equal(orderMoneyHidden.amounts_visible, false, "order detail money must default to hidden");
+  assert.equal(orderMoneyHidden.total_amount, null);
+  assert.ok(orderMoneyHidden.items.length > 0);
+  assert.ok(orderMoneyHidden.items.every((line) => line.unit_price === null && line.line_total === null), "hidden order items must carry NULL financial values");
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const orderVisibilityEnabled = await db.unsafe("select public.set_customer_money_display_policy('order',true) as result");
+  assert.equal(orderVisibilityEnabled[0].result.surface, "order");
+  assert.equal(orderVisibilityEnabled[0].result.visible, true, "an authorized admin must be able to enable order price display");
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const orderMoneyVisibleResult = await db.unsafe("select public.get_customer_order_financials($1::uuid) as result", [order.id]);
+  const orderMoneyVisible = orderMoneyVisibleResult[0].result;
+  assert.equal(orderMoneyVisible.amounts_visible, true);
+  assert.equal(Number(orderMoneyVisible.total_amount), 370000);
+  assert.equal(orderMoneyVisible.items.length, 1);
+  assert.equal(Number(orderMoneyVisible.items[0].unit_price), 37000);
+  assert.equal(Number(orderMoneyVisible.items[0].line_total), 370000);
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key='customer_order_amounts_visible'", [organizationId]);
+
   // Verify server-computed financial storage as the trusted test owner, not through customer grants.
   await db.unsafe("reset role");
   const persistedOrderAmount = await db.unsafe("select total_amount from public.orders where id=$1", [order.id]);
@@ -587,7 +701,12 @@ async function main() {
   );
   const retryResult = await db.unsafe(
     "select public.fail_outbox_event($1::uuid,$2::text,$3::text,$4::text) as result",
-    [retryEventId, "ci-outbox-worker-recovery", "unsupported_event", "No handler registered for CIUnsupportedEvent"],
+    [
+      retryEventId,
+      "ci-outbox-worker-recovery",
+      "unsupported_event",
+      "No handler registered for CIUnsupportedEvent; buyer@example.com; Bearer opaque-access-token; api_key=opaque-api-key; sk-12345678901234567890; ?access_token=opaque-query-token\nAuthorization: Basic opaque-basic-token\nProxy-Authorization: Bearer opaque-proxy-token\nCookie: session=opaque-cookie; next=opaque-session\nSet-Cookie: refresh_token=opaque-refresh-cookie\nOAuth callback https://auth.example.test/callback?state=ok&code=opaque-auth-code#id_token=opaque-id-token&client_secret=opaque-client-secret",
+    ],
   );
   assert.equal(retryResult[0].result.status, "retry");
   assert.equal(retryResult[0].result.attempts, 2);
@@ -596,6 +715,30 @@ async function main() {
   assert.ok(new Date(retryState[0].next_attempt_at).getTime() > Date.now(), "retry uses delayed backoff");
   assert.equal(retryState[0].locked_by, null);
   assert.equal(retryState[0].last_error.error_class, "unsupported_event");
+  const durableError = String(retryState[0].last_error.message);
+  assert.ok(durableError.includes("[email redacted]"), "database redacts email addresses even when called without the Edge worker");
+  assert.ok(durableError.includes("Bearer [redacted]"), "database redacts bearer credentials");
+  assert.ok(durableError.includes("api_key=[redacted]"), "database preserves credential field names while redacting their values");
+  assert.ok(durableError.includes("?access_token=[redacted]"), "database preserves query parameter names while redacting values");
+  assert.ok(durableError.includes("[authorization redacted]"), "database redacts Authorization and Proxy-Authorization header values");
+  assert.ok(durableError.includes("[cookie redacted]"), "database redacts Cookie and Set-Cookie header values");
+  assert.ok(durableError.includes("[secret redacted]"), "database redacts provider-key formats");
+  assert.ok(!durableError.includes("buyer@example.com"));
+  assert.ok(!durableError.includes("opaque-access-token"));
+  assert.ok(!durableError.includes("opaque-api-key"));
+  assert.ok(!durableError.includes("opaque-basic-token"));
+  assert.ok(!durableError.includes("opaque-proxy-token"));
+  assert.ok(!durableError.includes("opaque-cookie"));
+  assert.ok(!durableError.includes("opaque-session"));
+  assert.ok(!durableError.includes("opaque-refresh-cookie"));
+  assert.ok(durableError.includes("code=[redacted]"), "database redacts OAuth authorization codes");
+  assert.ok(durableError.includes("id_token=[redacted]"), "database preserves and redacts ID-token field names");
+  assert.ok(durableError.includes("client_secret=[redacted]"), "database preserves and redacts client-secret field names");
+  assert.ok(!durableError.includes("opaque-auth-code"));
+  assert.ok(!durableError.includes("opaque-id-token"));
+  assert.ok(!durableError.includes("opaque-client-secret"));
+  assert.ok(!durableError.includes("sk-12345678901234567890"));
+  assert.ok(!durableError.includes("opaque-query-token"));
 
   const poisonRows = await db.unsafe(
     "insert into public.outbox_events(organization_id,event_type,payload,idempotency_key,status,attempts,next_attempt_at) values($1,'CIUnsupportedPoisonEvent','{}'::jsonb,'ci-outbox-poison','pending',7,now()) returning id",
@@ -622,6 +765,11 @@ async function main() {
   assert.equal(deadLetterState[0].locked_by, null);
   await db.unsafe("set role authenticated");
 
+  await expectFailure(
+    "customer cannot call internal outbox error redaction helper",
+    () => db.unsafe("select public.sanitize_outbox_error_message('private@example.test')"),
+    /permission denied/i,
+  );
   await expectFailure(
     "customer cannot claim internal outbox events",
     () => db.unsafe("select * from public.claim_outbox_events('untrusted',1,300,null)"),
@@ -806,7 +954,34 @@ async function main() {
     "select count(*)::int as count from public.reorder_template_items where template_id=$1",
     [reorderId[0].id],
   );
+
   assert.equal(reorderItems[0].count, 1, "reorder template must persist its items");
+
+  const updatedTemplate = await db.unsafe(
+    "select public.update_reorder_template($1::uuid,$2,$3::jsonb) as id",
+    [reorderId[0].id, "CI regular order edited", db.json([{ product_id: productId, quantity: 4 }])],
+  );
+  assert.equal(updatedTemplate[0].id, reorderId[0].id, "update must preserve template identity");
+  const updatedTemplateHeader = await db.unsafe("select name from public.reorder_templates where id=$1", [reorderId[0].id]);
+  assert.equal(updatedTemplateHeader[0]?.name, "CI regular order edited", "update must persist the name");
+  const updatedTemplateItems = await db.unsafe("select quantity from public.reorder_template_items where template_id=$1", [reorderId[0].id]);
+  assert.equal(updatedTemplateItems.length, 1, "update must replace the item list atomically");
+  assert.equal(Number(updatedTemplateItems[0].quantity), 4, "update must persist changed quantity");
+
+  await db.unsafe("reset role");
+  await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
+  await db.unsafe("set role authenticated");
+  await expectFailure(
+    "customer cannot update another customer's reorder template",
+    () => db.unsafe("select public.update_reorder_template($1::uuid,$2,$3::jsonb)", [reorderId[0].id, "Not owned", db.json([{ product_id: productId, quantity: 5 }])]),
+    /not owned|42501|customer account/i,
+  );
+  const foreignDelete = await db.unsafe("delete from public.reorder_templates where id=$1 returning id", [reorderId[0].id]);
+  assert.equal(foreignDelete.length, 0, "RLS must prevent deleting another customer's template");
+  await db.unsafe("reset role");
+  const templateStillExists = await db.unsafe("select id from public.reorder_templates where id=$1", [reorderId[0].id]);
+  assert.equal(templateStillExists.length, 1, "unauthorized delete must leave the template intact");
+
 
   await db.unsafe("reset role");
   await setIdentity(staffAuthUserId, "admin@aghbari.ye");
@@ -966,29 +1141,197 @@ async function main() {
   const statementInvoice = statement.invoices.find((row) => row.id === invoice.id);
   assert.ok(statementInvoice, "customer statement should include the customer's own invoice");
   assert.equal(Number(statementInvoice.total_amount), 370000, "statement RPC may expose invoice totals on the authorized account-statement surface");
+  assert.equal(Number(statementInvoice.paid_amount), 100000, "per-invoice paid total must include the complete payment ledger");
+  assert.equal(Number(statementInvoice.outstanding_amount), 270000, "per-invoice balance must reconcile independently of the capped payment detail array");
   assert.equal(statement.payments.length, 1, "customer statement should include the payment ledger");
   assert.equal(Number(statement.payments[0].amount), 100000);
+  assert.equal(statement.summary.invoice_count, 1, "full-ledger invoice count is independent of returned detail rows");
+  assert.equal(statement.summary.payment_count, 1, "full-ledger payment count is independent of returned detail rows");
+  assert.deepEqual(
+    statement.summary.totals_by_currency.map((row) => ({
+      currency: row.currency,
+      invoiced: Number(row.invoiced),
+      paid: Number(row.paid),
+      outstanding: Number(row.outstanding),
+      invoice_count: row.invoice_count,
+    })),
+    [{ currency: "YER", invoiced: 370000, paid: 100000, outstanding: 270000, invoice_count: 1 }],
+    "server-side account totals must cover the complete ledger grouped by currency",
+  );
 
-  // The invoice PDF RPC returns amounts only for the signed-in customer's own invoice.
-  const ownInvoicePdfResult = await db.unsafe(
+  // Exercise both detail caps with isolated fixtures. The full summary and per-invoice
+  // balances must include rows that are intentionally absent from the returned detail arrays.
+  await db.unsafe("reset role");
+  const cappedOrders = await db.unsafe(
+    `insert into public.orders
+       (organization_id,customer_id,order_number,status,total_amount,total_items,created_by)
+     select $1,$2,'CI-STMT-CAP-' || lpad(n::text,4,'0'),'confirmed',100,1,$3
+       from generate_series(1,205) n
+     returning id`,
+    [organizationId, invoice.customer_id, staffProfileId],
+  );
+  assert.equal(cappedOrders.length, 205, "limit fixture must create 205 isolated orders");
+  const cappedInvoices = await db.unsafe(
+    `insert into public.customer_invoices
+       (organization_id,customer_id,order_id,invoice_number,status,issued_at,currency,subtotal,tax_amount,total_amount)
+     select o.organization_id,o.customer_id,o.id,'CI-STMT-CAP-' || o.order_number,'issued',
+            now() - (row_number() over (order by o.order_number) * interval '1 second'),
+            'YER',100,0,100
+       from public.orders o
+      where o.organization_id=$1 and o.customer_id=$2 and o.created_by=$3
+        and o.order_number like 'CI-STMT-CAP-%'
+     returning id`,
+    [organizationId, invoice.customer_id, staffProfileId],
+  );
+  assert.equal(cappedInvoices.length, 205, "limit fixture must create 205 isolated invoices");
+  await db.unsafe(
+    `insert into public.customer_payments
+       (organization_id,customer_id,invoice_id,amount,payment_method,reference,paid_at,created_by)
+     select $1,$2,$3,1,'cash','CI-STMT-PAY-CAP-' || lpad(n::text,4,'0'),
+            now() - (n * interval '1 second'),$4
+       from generate_series(1,501) n`,
+    [organizationId, invoice.customer_id, invoice.id, staffProfileId],
+  );
+  await db.unsafe(
+    "update public.customer_invoices set issued_at=now()+interval '1 hour' where id=$1",
+    [invoice.id],
+  );
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const cappedStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
+  const cappedStatement = cappedStatementResult[0].result;
+  assert.equal(cappedStatement.invoices.length, 200, "invoice details must remain bounded at 200 rows");
+  assert.equal(cappedStatement.payments.length, 500, "payment details must remain bounded at 500 rows");
+  assert.equal(cappedStatement.summary.invoice_count, 206, "summary must count invoices beyond the detail cap");
+  assert.equal(cappedStatement.summary.payment_count, 502, "summary must count payments beyond the detail cap");
+  const cappedYER = cappedStatement.summary.totals_by_currency.find((row) => row.currency === "YER");
+  assert.ok(cappedYER, "full-ledger summary must contain the invoice currency");
+  assert.equal(Number(cappedYER.invoiced), 390500, "full-ledger invoiced total must include all 206 invoices");
+  assert.equal(Number(cappedYER.paid), 100501, "full-ledger paid total must include payments beyond the 500-row detail cap");
+  assert.equal(Number(cappedYER.outstanding), 289999, "full-ledger outstanding total must reconcile across all invoices");
+  assert.equal(cappedYER.invoice_count, 206);
+  const cappedOriginalInvoice = cappedStatement.invoices.find((row) => row.id === invoice.id);
+  assert.ok(cappedOriginalInvoice, "the deliberately recent invoice should remain in detail output");
+  assert.equal(Number(cappedOriginalInvoice.paid_amount), 100501, "per-invoice paid amount must aggregate payments missing from the detail payload");
+  assert.equal(Number(cappedOriginalInvoice.outstanding_amount), 269499, "per-invoice balance must use the complete payment ledger");
+
+  // Privacy-by-default: when no setting exists, monetary amounts must not leave the server RPC.
+  await db.unsafe("reset role");
+  await db.unsafe(
+    "delete from public.admin_settings where organization_id=$1 and key='customer_invoice_amounts_visible'",
+    [organizationId],
+  );
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const hiddenInvoicePdfResult = await db.unsafe(
     "select public.get_customer_invoice_pdf($1::uuid) as result",
     [invoice.id],
   );
-  const ownInvoicePdf = ownInvoicePdfResult[0].result;
-  assert.equal(ownInvoicePdf.invoice.id, invoice.id);
-  assert.equal(Number(ownInvoicePdf.invoice.total_amount), 370000);
-  assert.equal(ownInvoicePdf.lines.length, 1);
-  assert.equal(Number(ownInvoicePdf.lines[0].unit_price), 37000);
-  assert.equal(Number(ownInvoicePdf.lines[0].line_total), 370000);
-  assert.equal(ownInvoicePdf.customer.id, undefined, "PDF customer projection should not return an internal customer primary key");
+  const hiddenInvoicePdf = hiddenInvoicePdfResult[0].result;
+  assert.equal(hiddenInvoicePdf.amounts_visible, false, "invoice amounts must default to hidden");
+  assert.equal(hiddenInvoicePdf.invoice.id, invoice.id);
+  assert.equal(hiddenInvoicePdf.invoice.total_amount, null, "hidden invoice total must be null at the RPC boundary");
+  assert.equal(hiddenInvoicePdf.invoice.subtotal, null);
+  assert.equal(hiddenInvoicePdf.invoice.tax_amount, null);
+  assert.equal(hiddenInvoicePdf.lines.length, 1);
+  assert.equal(hiddenInvoicePdf.lines[0].unit_price, null, "hidden unit price must not leak through JSON");
+  assert.equal(hiddenInvoicePdf.lines[0].line_total, null, "hidden line total must not leak through JSON");
+  assert.equal(hiddenInvoicePdf.customer.id, undefined, "PDF customer projection should not return an internal customer primary key");
+
+  // The setting must be changed through the role-checked RPC, never a generic customer write.
+  await expectFailure(
+    "customer cannot change invoice amount visibility through the RPC",
+    () => db.unsafe("select public.set_customer_invoice_amount_visibility(true)"),
+    /admin or manager/i,
+  );
+  await expectFailure(
+    "customer cannot write invoice visibility setting directly",
+    () => db.unsafe(
+      "insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_invoice_amounts_visible','true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+      [organizationId],
+    ),
+    /row-level security|permission denied/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const invoiceVisibilityEnabled = await db.unsafe(
+    "select public.set_customer_invoice_amount_visibility(true) as result",
+  );
+  assert.equal(invoiceVisibilityEnabled[0].result.visible, true, "admin can explicitly enable invoice amounts");
+  await db.unsafe("reset role");
+  await db.unsafe(
+    "insert into public.admin_settings(organization_id,key,value,category) values ($1,'customer_invoice_amounts_visible','false'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+    [otherOrganizationId],
+  );
+  await setIdentity(operationsStaffAuthUserId, "ci-operations-staff@example.test");
+  await db.unsafe("set role authenticated");
+  const staffCanReadInvoicePolicy = await db.unsafe(
+    "select value from public.admin_settings where organization_id=$1 and key='customer_invoice_amounts_visible'",
+    [organizationId],
+  );
+  assert.equal(staffCanReadInvoicePolicy.length, 1, "staff can read the display policy needed to render settings");
+  assert.equal(staffCanReadInvoicePolicy[0].value, true);
+  const tenantVisiblePolicies = await db.unsafe(
+    "select organization_id,value from public.admin_settings where key='customer_invoice_amounts_visible'",
+  );
+  assert.equal(tenantVisiblePolicies.length, 1, "staff policy reads must not expose another tenant's setting");
+  assert.equal(tenantVisiblePolicies[0].organization_id, organizationId);
+  await expectFailure(
+    "staff cannot insert settings into another tenant",
+    () => db.unsafe(
+      "insert into public.admin_settings(organization_id,key,value,category) values ($1,'staff_cross_tenant_probe','true'::jsonb,'general')",
+      [otherOrganizationId],
+    ),
+    /row-level security|permission denied/i,
+  );
+  for (const protectedKey of ["customer_invoice_amounts_visible", "customer_cart_amounts_visible", "customer_order_amounts_visible"]) {
+    await expectFailure(
+      "staff cannot write protected display setting directly: " + protectedKey,
+      () => db.unsafe(
+        "insert into public.admin_settings(organization_id,key,value,category) values ($1,$2,'true'::jsonb,'privacy') on conflict (organization_id,key) do update set value=excluded.value,updated_at=now()",
+        [organizationId, protectedKey],
+      ),
+      /row-level security|permission denied/i,
+    );
+  }
+  await expectFailure(
+    "staff cannot change invoice amount visibility through the RPC",
+    () => db.unsafe("select public.set_customer_invoice_amount_visibility(false)"),
+    /admin or manager/i,
+  );
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const visibleInvoicePdfResult = await db.unsafe(
+    "select public.get_customer_invoice_pdf($1::uuid) as result",
+    [invoice.id],
+  );
+  const visibleInvoicePdf = visibleInvoicePdfResult[0].result;
+  assert.equal(visibleInvoicePdf.amounts_visible, true);
+  assert.equal(Number(visibleInvoicePdf.invoice.total_amount), 370000);
+  assert.equal(Number(visibleInvoicePdf.lines[0].unit_price), 37000);
+  assert.equal(Number(visibleInvoicePdf.lines[0].line_total), 370000);
+
+  // Restore the secure default through the same privileged contract to avoid fixture bleed.
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const invoiceVisibilityDisabled = await db.unsafe(
+    "select public.set_customer_invoice_amount_visibility(false) as result",
+  );
+  assert.equal(invoiceVisibilityDisabled[0].result.visible, false);
+  await db.unsafe("reset role");
 
   // A second customer in the same organization must never receive the first customer's statement.
-  await db.unsafe("reset role");
   await setIdentity(secondAuthUserId, "ci-customer-two@example.test");
   await db.unsafe("set role authenticated");
   const otherStatementResult = await db.unsafe("select public.get_customer_account_statement() as result");
   assert.deepEqual(otherStatementResult[0].result.invoices, [], "customer two must not see customer one's invoice");
   assert.deepEqual(otherStatementResult[0].result.payments, [], "customer two must not see customer one's payments");
+  assert.equal(otherStatementResult[0].result.summary.invoice_count, 0, "full-ledger summary must remain customer-scoped");
+  assert.equal(otherStatementResult[0].result.summary.payment_count, 0, "full-ledger payment count must remain customer-scoped");
+  assert.deepEqual(otherStatementResult[0].result.summary.totals_by_currency, [], "currency summaries must not cross customer boundaries");
   await expectFailure(
     "customer two cannot read customer one's invoice PDF",
     () => db.unsafe("select public.get_customer_invoice_pdf($1::uuid)", [invoice.id]),
@@ -1297,6 +1640,32 @@ async function main() {
   assert.equal(Number(reviewedLines[0].quantity), 1);
   assert.equal(Number(reviewedLines[0].approved_unit_price), 36000);
   assert.match(reviewedLines[0].price_override_reason, /CI one-order override/);
+
+  // Customer order money must follow the approved unit price, approved quantity and
+  // recalculated persisted order total, not the original request snapshot.
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  const reviewedOrderPolicy = await db.unsafe("select public.set_customer_money_display_policy('order',true) as result");
+  assert.equal(reviewedOrderPolicy[0].result.visible, true);
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const reviewedCustomerMoneyResult = await db.unsafe(
+    "select public.get_customer_order_financials($1::uuid) as result",
+    [reviewOrder.id],
+  );
+  const reviewedCustomerMoney = reviewedCustomerMoneyResult[0].result;
+  assert.equal(reviewedCustomerMoney.amounts_visible, true);
+  assert.equal(Number(reviewedCustomerMoney.total_amount), 36000, "customer detail total must match the approved order total");
+  assert.equal(reviewedCustomerMoney.items.length, 1);
+  assert.equal(Number(reviewedCustomerMoney.items[0].unit_price), 36000, "customer detail unit price must match the approved price");
+  assert.equal(Number(reviewedCustomerMoney.items[0].line_total), 36000, "customer detail line total must match approved quantity × approved price");
+
+  await db.unsafe("reset role");
+  await db.unsafe("delete from public.admin_settings where organization_id=$1 and key='customer_order_amounts_visible'", [organizationId]);
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
   const reviewedFinance = await db.unsafe("select public.fetch_staff_finance_data() as result");
   const reviewedInvoice = reviewedFinance[0].result.invoices.filter((row) => row.order_id === reviewOrder.id);
   assert.equal(reviewedInvoice.length, 1, "approval should issue exactly one invoice");
@@ -1352,6 +1721,132 @@ async function main() {
      values($1,$2,'CI-ONYX-FOREIGN-ITEM','Foreign item','unit',1,0,0)`,
     [foreignAuditOrderId, otherProductId],
   );
+  await db.unsafe(
+    "update public.order_items set requested_quantity=1,approved_quantity=1 where order_id=$1",
+    [foreignAuditOrderId],
+  );
+
+  // AGH-CUSTOMER-DISCOVERY-POPULAR-001: tenant-isolated ranking from eligible order records; no raw totals returned.
+  const popularityProductId = "a1000000-0000-0000-0000-000000000099";
+  const pendingOnlyProductId = "a1000000-0000-0000-0000-000000000098";
+  const popularityOrderOneId = "b1000000-0000-0000-0000-000000000099";
+  const popularityOrderTwoId = "b1000000-0000-0000-0000-000000000098";
+  const popularityPendingOrderId = "b1000000-0000-0000-0000-000000000097";
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Popularity Product','CI-POPULAR-01','unit',1,'active') on conflict(id) do update set status='active'",
+    [popularityProductId, organizationId],
+  );
+  await db.unsafe("update public.products set is_featured=true where id=$1", [popularityProductId]);
+  const inactiveFeaturedProductId = "a1000000-0000-0000-0000-000000000097";
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status,is_featured) values($1,$2,'CI Inactive Featured Product','CI-POPULAR-INACTIVE-01','unit',1,'inactive',true) on conflict(id) do update set status='inactive',is_featured=true",
+    [inactiveFeaturedProductId, organizationId],
+  );
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Pending-Only Product','CI-POPULAR-PENDING-01','unit',1,'active') on conflict(id) do update set status='active'",
+    [pendingOnlyProductId, organizationId],
+  );
+  await db.unsafe(
+    `insert into public.orders(id,organization_id,customer_id,order_number,status,total_amount,total_items,created_by)
+     values
+       ($1,$2,$3,'CI-POPULAR-ORDER-001','delivered',0,1,$4),
+       ($5,$2,$3,'CI-POPULAR-ORDER-002','confirmed',0,1,$4),
+       ($6,$2,$3,'CI-POPULAR-ORDER-003','pending',0,1,$4)
+     on conflict(id) do update set status=excluded.status`,
+    [popularityOrderOneId, organizationId, customerOneId, profileId, popularityOrderTwoId, popularityPendingOrderId],
+  );
+  await db.unsafe(
+    `insert into public.order_items(id,order_id,product_id,item_code,product_name_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total,requested_quantity,approved_quantity,approved_unit_price)
+     values
+       ('c1000000-0000-0000-0000-000000000099',$1,$2,'CI-POPULAR-01','CI Popularity Product','unit',200,0,0,200,200,0),
+       ('c1000000-0000-0000-0000-000000000098',$3,$2,'CI-POPULAR-01','CI Popularity Product','unit',50,0,0,50,50,0),
+       ('c1000000-0000-0000-0000-000000000097',$4,$5,'CI-POPULAR-PENDING-01','CI Pending-Only Product','unit',100,0,0,100,100,0)
+     on conflict(id) do update set product_id=excluded.product_id,quantity=excluded.quantity,approved_quantity=excluded.approved_quantity`,
+    [popularityOrderOneId, popularityProductId, popularityOrderTwoId, popularityPendingOrderId, pendingOnlyProductId],
+  );
+
+  await db.unsafe("reset role");
+  await db.unsafe("select set_config('request.jwt.claim.sub','',false), set_config('request.jwt.claims','{}',false)");
+  await db.unsafe("set role anon");
+  const anonymousPopularity = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_popular_products($1)",
+    [10],
+  );
+  assert.equal(anonymousPopularity[0]?.product_id, popularityProductId, "published storefront ranking uses real eligible order records");
+  assert.equal(Number(anonymousPopularity[0]?.ranking_position), 1);
+  assert.ok(anonymousPopularity.every((row) => row.product_id !== otherProductId), "anonymous ranking cannot include another organization's products");
+  assert.ok(anonymousPopularity.every((row) => row.product_id !== pendingOnlyProductId), "pending orders do not contribute to the public popularity ranking");
+  assert.deepEqual(Object.keys(anonymousPopularity[0]).sort(), ["product_id","ranking_position"], "public ranking never exposes unit counts or financial totals");
+  const anonymousOneResult = await db.unsafe("select product_id,ranking_position from public.fetch_public_popular_products($1)", [1]);
+  assert.equal(anonymousOneResult.length, 1, "server honors the requested ranking limit");
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const ownPopularity = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_popular_products($1)",
+    [20],
+  );
+  assert.equal(ownPopularity[0]?.product_id, popularityProductId, "highest eligible ordered quantity ranks first");
+  assert.equal(Number(ownPopularity[0]?.ranking_position), 1);
+  assert.ok(!ownPopularity.some((row) => row.product_id === otherProductId), "customer ranking remains in the signed-in tenant");
+  assert.ok(!ownPopularity.some((row) => row.product_id === pendingOnlyProductId), "pending-only products are not included");
+
+  await db.unsafe("reset role");
+  await setIdentity(foreignAuthUserId, "foreign-ci-profile@example.test");
+  await db.unsafe("set role authenticated");
+  const foreignPopularity = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_popular_products($1)",
+    [20],
+  );
+  assert.ok(foreignPopularity.some((row) => row.product_id === otherProductId), "signed-in foreign tenant sees its own eligible popular product");
+  assert.ok(!foreignPopularity.some((row) => row.product_id === popularityProductId), "tenant product IDs do not cross the ranking boundary");
+
+  // AGH-CUSTOMER-DISCOVERY-FEATURED-001: curation flag write/read, active filtering, and tenant isolation.
+  await db.unsafe("reset role");
+  await db.unsafe("select set_config('request.jwt.claim.sub','',false), set_config('request.jwt.claims','{}',false)");
+  await db.unsafe("set role anon");
+  const anonymousFeatured = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_featured_products($1)",
+    [10],
+  );
+  assert.equal(anonymousFeatured.length, 1, "anonymous storefront only receives active featured products from the published tenant");
+  assert.equal(anonymousFeatured[0]?.product_id, popularityProductId);
+  assert.equal(Number(anonymousFeatured[0]?.ranking_position), 1);
+  assert.ok(!anonymousFeatured.some((row) => row.product_id === otherProductId), "public feature list cannot reveal another organization's featured product");
+  assert.ok(!anonymousFeatured.some((row) => row.product_id === inactiveFeaturedProductId), "inactive featured products are not published");
+  assert.deepEqual(Object.keys(anonymousFeatured[0]).sort(), ["product_id","ranking_position"], "featured endpoint reveals no prices or product details");
+  const anonymousFeaturedLimit = await db.unsafe("select product_id,ranking_position from public.fetch_public_featured_products($1)", [1]);
+  assert.equal(anonymousFeaturedLimit.length, 1, "featured endpoint respects the requested limit");
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+  const ownFeatured = await db.unsafe("select product_id,ranking_position from public.fetch_public_featured_products($1)", [20]);
+  assert.equal(ownFeatured[0]?.product_id, popularityProductId);
+  assert.ok(!ownFeatured.some((row) => row.product_id === otherProductId), "authenticated customers only receive their tenant's featured products");
+  assert.ok(!ownFeatured.some((row) => row.product_id === inactiveFeaturedProductId), "authenticated customers cannot see inactive featured entries");
+
+  await db.unsafe("reset role");
+  await setIdentity(foreignAuthUserId, "foreign-ci-profile@example.test");
+  await db.unsafe("set role authenticated");
+  const foreignFeatured = await db.unsafe("select product_id,ranking_position from public.fetch_public_featured_products($1)", [20]);
+  assert.equal(foreignFeatured.length, 1);
+  assert.equal(foreignFeatured[0]?.product_id, otherProductId, "the foreign tenant can see its own featured product");
+  assert.ok(!foreignFeatured.some((row) => row.product_id === popularityProductId));
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
+  await db.unsafe("set role authenticated");
+  await db.unsafe("update public.products set is_featured=false where id=$1 and organization_id=$2", [popularityProductId, organizationId]);
+  const staffUpdatedFeatured = await db.unsafe("select is_featured from public.fetch_staff_products($1::uuid)", [popularityProductId]);
+  assert.equal(staffUpdatedFeatured[0]?.is_featured, false, "staff can turn off a featured flag within their active tenant");
+  await db.unsafe("update public.products set is_featured=true where id=$1 and organization_id=$2", [popularityProductId, organizationId]);
+  const staffRestoredFeatured = await db.unsafe("select is_featured from public.fetch_staff_products($1::uuid)", [popularityProductId]);
+  assert.equal(staffRestoredFeatured[0]?.is_featured, true);
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await db.unsafe("set role authenticated");
   await expectFailure(
     "staff cannot create an Onyx export audit for an order in another organization",
@@ -1456,8 +1951,63 @@ async function main() {
   assert.equal(Number(onyxAnalytics[0].result.metrics.unique_keys), 2);
   assert.equal(Number(onyxAnalytics[0].result.metrics.quantity_total), 15, "quantity KPI must include every snapshot row");
   assert.equal(Number(onyxAnalytics[0].result.metrics.revenue_total), 600, "revenue KPI must include every snapshot row");
+  assert.equal(onyxAnalytics[0].result.metrics.metric_quality.quantity, "COMPLETE");
+  assert.equal(onyxAnalytics[0].result.metrics.metric_quality.revenue, "COMPLETE");
   assert.equal(onyxAnalytics[0].result.forecast_status, "Forecast Unavailable: Insufficient Historical Data");
-  process.stdout.write("PASS import profile, tenant-scoped synonyms, resumable chunk manifest, duplicate detection, DQS finalization and full-snapshot Onyx analytics\n");
+
+  // Missing/malformed numeric cells must not be silently aggregated as zero.
+  const analyticsRowsBefore = await db.unsafe(
+    "select id,row_number,data from public.onyx_snapshot_rows where snapshot_id=$1 order by row_number",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  assert.equal(analyticsRowsBefore.length, 2, "quality regression fixture must contain both import rows");
+  // Change isolated fixture rows only with the privileged test connection, then verify
+  // the SECURITY DEFINER analytics contract under the authenticated staff role.
+  await db.unsafe("reset role");
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=data || jsonb_build_object('quantity','not-a-number') where id=$1",
+    [analyticsRowsBefore[0].id],
+  );
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=data - 'revenue' where id=$1",
+    [analyticsRowsBefore[1].id],
+  );
+  await db.unsafe("set role authenticated");
+  const incompleteOnyxAnalytics = await db.unsafe(
+    "select public.get_onyx_snapshot_analytics($1::uuid) as result",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  const incompleteMetrics = incompleteOnyxAnalytics[0].result.metrics;
+  assert.equal(incompleteMetrics.quantity_total, null, "partial quantities must be unavailable rather than zero-filled");
+  assert.equal(Number(incompleteMetrics.quantity_invalid_rows), 1);
+  assert.equal(Number(incompleteMetrics.quantity_missing_rows), 0);
+  assert.equal(incompleteMetrics.revenue_total, null, "a missing revenue row must invalidate the full-snapshot total");
+  assert.equal(Number(incompleteMetrics.revenue_missing_rows), 1);
+  assert.equal(Number(incompleteMetrics.revenue_invalid_rows), 0);
+  assert.equal(incompleteMetrics.metric_quality.quantity, "PARTIAL");
+  assert.equal(incompleteMetrics.metric_quality.revenue, "PARTIAL");
+  assert.equal(incompleteMetrics.metric_quality.sales, "UNAVAILABLE");
+  const invalidItem = incompleteOnyxAnalytics[0].result.top_items.find((item) => item.item_code === "000125");
+  const missingRevenueItem = incompleteOnyxAnalytics[0].result.top_items.find((item) => item.item_code === "000126");
+  assert.equal(invalidItem.quantity, null, "top-item quantity should stay unavailable when one of its rows is malformed");
+  assert.equal(missingRevenueItem.revenue, null, "top-item revenue should stay unavailable when its row is missing the field");
+  await db.unsafe("reset role");
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=$2::jsonb where id=$1",
+    [analyticsRowsBefore[0].id, db.json(analyticsRowsBefore[0].data)],
+  );
+  await db.unsafe(
+    "update public.onyx_snapshot_rows set data=$2::jsonb where id=$1",
+    [analyticsRowsBefore[1].id, db.json(analyticsRowsBefore[1].data)],
+  );
+  await db.unsafe("set role authenticated");
+  const restoredOnyxAnalytics = await db.unsafe(
+    "select public.get_onyx_snapshot_analytics($1::uuid) as result",
+    [finalizedImport[0].result.snapshot_id],
+  );
+  assert.equal(Number(restoredOnyxAnalytics[0].result.metrics.quantity_total), 15);
+  assert.equal(Number(restoredOnyxAnalytics[0].result.metrics.revenue_total), 600);
+  process.stdout.write("PASS import profile, tenant-scoped synonyms, resumable chunk manifest, duplicate detection, DQS finalization and Onyx metric completeness boundaries\n");
 
   // The rule UI must reuse the existing deterministic pricing engine and reset to base price
   // when its last applicable rule is deleted.
@@ -1690,10 +2240,32 @@ async function main() {
   assert.equal(companyScope[0].customer_id,customerOneId,"member is bound to the invited customer, not a new company");
   assert.equal(companyScope[0].can_order,true,"buyer is allowed to create company orders");
   assert.equal(companyScope[0].can_statement,false,"buyer is not allowed to read finance statements");
+  await expectFailure("buyer membership cannot read the finance account statement",
+    ()=>db.unsafe("select public.get_customer_account_statement()"),
+    /company member is not allowed to read the account statement/i);
   assert.equal((await db.unsafe("select id from public.customers where id=$1",[customerOneId])).length,1);
   assert.equal((await db.unsafe("select id from public.customers where profile_id=$1",[secondProfileId])).length,0,"member cannot read a different customer in the same organization");
   assert.equal((await db.unsafe("select id from public.customer_addresses where id=$1",[firstId])).length,1,"buyer is scoped to the invited company's addresses");
   assert.equal((await db.unsafe("select id from public.customer_company_contacts where id=$1",[firstContactId])).length,1,"buyer is scoped to the invited company's contacts");
+
+  const memberAddressRows=await db.unsafe(
+    "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean) as id",
+    [null,"CI Buyer-managed dock","Invited buyer","7771113333","Member street",null,"Sanaa",null,null,"YE","member address capability",false],
+  );
+  const memberAddressId=memberAddressRows[0].id;
+  const memberAddressOwner=await db.unsafe("select customer_id,organization_id from public.customer_addresses where id=$1",[memberAddressId]);
+  assert.equal(memberAddressOwner.length,1,"buyer with addresses.manage can save an address through the capability-scoped RPC");
+  assert.equal(memberAddressOwner[0].customer_id,customerOneId,"member-created address remains bound to the invited company");
+
+  const memberContactRows=await db.unsafe(
+    "select public.save_customer_company_contact($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::boolean) as id",
+    [null,"CI Buyer-managed contact","Buyer","Procurement","7771116666","member-buyer@example.test",false],
+  );
+  const memberContactId=memberContactRows[0].id;
+  const memberContactOwner=await db.unsafe("select customer_id,organization_id from public.customer_company_contacts where id=$1",[memberContactId]);
+  assert.equal(memberContactOwner.length,1,"buyer with contacts.manage can create a company contact");
+  assert.equal(memberContactOwner[0].customer_id,customerOneId,"member-created contact remains bound to the invited company");
+
   const memberOrderRows=await db.unsafe(
     "select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid) as result",
     [db.json([{product_id:productId,quantity:1}]),"Member checkout test","CI Company One","Invited buyer","7771113333","cash_on_delivery","member-checkout-key-000001",null],
@@ -1717,6 +2289,28 @@ async function main() {
   assert.equal(financeScope[0].customer_id,customerOneId);
   assert.equal(financeScope[0].can_order,false,"finance member cannot create orders");
   assert.equal(financeScope[0].can_statement,true,"finance member can read company statements");
+  // Run the statement regression only after this finance member's invitation has been accepted.
+  const financeMemberStatementRows=await db.unsafe("select public.get_customer_account_statement() as result");
+  const financeMemberStatement=financeMemberStatementRows[0].result;
+  assert.ok(financeMemberStatement.invoices.some((row)=>row.id===invoice.id),
+    "finance member must see invoices for the invited company");
+  assert.ok(financeMemberStatement.summary.invoice_count >= 1,
+    "finance member statement summary must retain the linked company scope");
+  const financeCurrencyTotal=financeMemberStatement.summary.totals_by_currency.find((row)=>row.currency==="YER");
+  assert.ok(financeCurrencyTotal && Number(financeCurrencyTotal.invoiced) >= 370000,
+    "finance member can read server-calculated authorized statement totals");
+  await expectFailure("finance member cannot manage company addresses",
+    ()=>db.unsafe(
+      "select public.save_customer_address($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::text,$11::text,$12::boolean)",
+      [null,"Finance-forbidden address","Finance member","7771114444","Finance street",null,"Sanaa",null,null,"YE",null,false],
+    ),
+    /company capability required/i);
+  await expectFailure("finance member cannot manage company contacts",
+    ()=>db.unsafe(
+      "select public.save_customer_company_contact($1::uuid,$2::text,$3::text,$4::text,$5::text,$6::text,$7::boolean)",
+      [null,"Finance-forbidden contact","Accountant","Finance","7771114444","finance@example.test",false],
+    ),
+    /company capability required/i);
   await expectFailure("finance member cannot bypass the order capability through checkout",
     ()=>db.unsafe("select public.submit_customer_order($1::jsonb,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::uuid)",
       [db.json([{product_id:productId,quantity:1}]),"Forbidden finance checkout","CI Company One","Finance member","7771114444","cash_on_delivery","finance-checkout-key-0001",null]),
@@ -1736,6 +2330,8 @@ async function main() {
   assert.equal(revokedScope[0].customer_id,null,"revocation removes active company scope");
   assert.equal(revokedScope[0].can_read,false);
   assert.equal((await db.unsafe("select id from public.orders where id=$1",[memberOrderId])).length,0,"revoked member loses order visibility");
+  assert.equal((await db.unsafe("select id from public.customer_addresses where id=$1",[memberAddressId])).length,0,"revoked member loses access to company addresses");
+  assert.equal((await db.unsafe("select id from public.customer_company_contacts where id=$1",[memberContactId])).length,0,"revoked member loses access to company contacts");
   process.stdout.write("PASS company membership: hash-only invitations, email-bound single-use acceptance, tenant isolation, buyer/finance capabilities, checkout linkage and revocation\n");
 
   // AGH-AI-GATEWAY-001: configuration authorization, atomic budget reservation and usage audit.

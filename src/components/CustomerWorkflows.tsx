@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent } from "react";
+import { Link,
+  useNavigate } from "@tanstack/react-router";
 import {
   ArrowRight,
   FileText,
@@ -19,25 +26,41 @@ import {
   Plus,
   Pencil,
   Trash2,
-} from "lucide-react";
+  } from "lucide-react";
 import { Login } from "@/components/Login";
 import { useAuth } from "@/lib/auth";
-import { getCurrentTenantScope, supabase } from "@/lib/supabase";
-import { formatCurrency, formatDate, formatDateShort, formatNumber } from "@/lib/format";
+import { getCurrentTenantScope,
+  supabase } from "@/lib/supabase";
+import { formatCurrency,
+  formatDate,
+  formatDateShort,
+  formatNumber } from "@/lib/format";
 import {
   classifyAssistantIntent,
   matchesArabicCatalogSearch,
   normalizeCartDraft,
   sanitizePublicCatalogCache,
-  summarizeAccount,
-  summarizeInvoiceAmounts,
-  isCustomerStatementPossiblyPartial,
   summarizeCustomerInvoiceStatuses,
   summarizeCustomerOrderStatuses,
-  type InvoiceAmount,
   type PaymentAmount,
-} from "@/lib/commerce-utils";
-import { fetchProducts, fetchResolvedProductPrices } from "@/lib/api";
+  } from "@/lib/commerce-utils";
+import { fetchProducts,
+  fetchResolvedProductPrices } from "@/lib/api";
+import {
+  appendOfflineCartMutation,
+  compactOfflineCartLedger,
+  createOfflineCartMutationId,
+  createStableOfflineCartMutationId,
+  createOfflineCartScopeKey,
+  getOfflineCartLedgerPrefix,
+  getOfflineCatalogCacheKey,
+  readLegacyCartDraftForScope,
+  readOfflineCartLedger,
+  writeLegacyCartOwner,
+  getOfflineCatalogSyncTimestampKey,
+  subscribeToOfflineCartState,
+  getOfflineCartRestoreEpochKey,
+} from "@/lib/offline-cart-ledger";
 import { fetchCustomerAddresses, saveCustomerAddress, deleteCustomerAddress, type CustomerAddress, type CustomerAddressInput } from "@/lib/customer-addresses";
 import { fetchCustomerCompanyContacts, saveCustomerCompanyContact, deleteCustomerCompanyContact, type CustomerCompanyContact, type CustomerCompanyContactInput } from "@/lib/customer-company-contacts";
 
@@ -53,7 +76,101 @@ type Invoice = {
   subtotal?: number | string;
   tax_amount?: number | string;
   total_amount?: number | string;
+  paid_amount?: number | string;
+  outstanding_amount?: number | string;
 };
+type AccountStatementCurrencyTotal = {
+  currency: string;
+  invoiced: number | string;
+  paid: number | string;
+  outstanding: number | string;
+  invoice_count: number;
+};
+type AccountStatementSummary = {
+  invoice_count: number;
+  payment_count: number;
+  totals_by_currency: AccountStatementCurrencyTotal[];
+};
+type AccountStatementPayload = {
+  invoices: Invoice[];
+  payments: (PaymentAmount & { id?: string; paid_at: string })[];
+  summary: AccountStatementSummary;
+};
+function isAccountStatementMoney(value: unknown): value is number | string {
+  if (typeof value !== "number" && typeof value !== "string") return false;
+  const raw = typeof value === "number" ? String(value) : value.trim();
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) return false;
+  return Number.isFinite(Number(raw)) && Number(raw) >= 0;
+}
+function validateAccountStatementPayload(payload: unknown): AccountStatementPayload {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("استجابة كشف الحساب غير صالحة.");
+  }
+  const candidate = payload as Partial<AccountStatementPayload>;
+  const invoices = candidate.invoices;
+  const payments = candidate.payments;
+  const summary = candidate.summary;
+  if (
+    !Array.isArray(invoices) ||
+    !Array.isArray(payments) ||
+    invoices.length > 200 ||
+    payments.length > 500 ||
+    !summary ||
+    !Number.isSafeInteger(summary.invoice_count) ||
+    summary.invoice_count < invoices.length ||
+    !Number.isSafeInteger(summary.payment_count) ||
+    summary.payment_count < payments.length ||
+    !Array.isArray(summary.totals_by_currency)
+  ) {
+    throw new Error("تعذر التحقق من إجماليات كشف الحساب الكامل. تحقق من تطبيق ترحيل المالية الأخير.");
+  }
+
+  const currencies = new Set<string>();
+  for (const total of summary.totals_by_currency) {
+    if (
+      !total ||
+      typeof total.currency !== "string" ||
+      !/^[A-Za-z]{3}$/.test(total.currency) ||
+      !Number.isSafeInteger(total.invoice_count) ||
+      total.invoice_count < 0 ||
+      !isAccountStatementMoney(total.invoiced) ||
+      !isAccountStatementMoney(total.paid) ||
+      !isAccountStatementMoney(total.outstanding)
+    ) {
+      throw new Error("تحتوي إجماليات كشف الحساب على قيمة غير صالحة؛ لم تُعرض كصفر.");
+    }
+    const currency = total.currency.toUpperCase();
+    if (currencies.has(currency)) throw new Error("تكرر رمز العملة في إجماليات كشف الحساب.");
+    currencies.add(currency);
+  }
+  for (const invoice of invoices) {
+    if (
+      !invoice ||
+      typeof invoice.id !== "string" ||
+      typeof invoice.invoice_number !== "string" ||
+      typeof invoice.status !== "string" ||
+      typeof invoice.issued_at !== "string" ||
+      typeof invoice.currency !== "string" ||
+      !/^[A-Za-z]{3}$/.test(invoice.currency) ||
+      !isAccountStatementMoney(invoice.total_amount) ||
+      !isAccountStatementMoney(invoice.paid_amount) ||
+      !isAccountStatementMoney(invoice.outstanding_amount)
+    ) {
+      throw new Error("تحتوي تفاصيل إحدى الفواتير على بيانات مالية ناقصة أو غير صالحة.");
+    }
+  }
+  for (const payment of payments) {
+    if (
+      !payment ||
+      typeof payment.invoice_id !== "string" ||
+      typeof payment.paid_at !== "string" ||
+      !isAccountStatementMoney(payment.amount)
+    ) {
+      throw new Error("تحتوي تفاصيل الدفعات على بيانات ناقصة أو غير صالحة.");
+    }
+  }
+  return { invoices, payments, summary };
+}
 type InvoiceLine = {
   id: string;
   item_code: string | null;
@@ -309,6 +426,7 @@ function Invoices() {
   } | null>(null);
   const [items, setItems] = useState<InvoiceLine[]>([]);
   const [chosenFinancials, setChosenFinancials] = useState<InvoiceFinancialSummary | null>(null);
+  const [amountsVisible, setAmountsVisible] = useState(false);
   const [busy, setBusy] = useState(true);
   const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState("");
@@ -333,6 +451,7 @@ function Invoices() {
     setChosen(i);
     setDetailBusy(true);
     setChosenFinancials(null);
+    setAmountsVisible(false);
     setItems([]);
     const [invoicePayloadResult, orderResult] = await Promise.all([
       supabase.rpc("get_customer_invoice_pdf", { p_invoice_id: i.id }),
@@ -352,6 +471,7 @@ function Invoices() {
         business_name?: string | null;
         contact_name?: string | null;
       };
+      amounts_visible?: boolean;
     } | null;
     const payloadValid = Boolean(
       payload?.invoice &&
@@ -369,17 +489,19 @@ function Invoices() {
     } else {
       setError("");
       setItems(payload.lines ?? []);
+      const showAmounts = payload.amounts_visible === true;
+      setAmountsVisible(showAmounts);
       setChosenCustomer({
         customer_code: payload.customer?.customer_code ?? "",
         business_name: payload.customer?.business_name ?? "",
         contact_name: payload.customer?.contact_name ?? null,
       });
-      setChosenFinancials({
+      setChosenFinancials(showAmounts ? {
         currency: payload.invoice.currency,
         subtotal: payload.invoice.subtotal,
         tax_amount: payload.invoice.tax_amount,
         total_amount: payload.invoice.total_amount,
-      });
+      } : null);
       setInvoiceOrder(
         orderResult.data as {
           quantity_review_required: boolean;
@@ -445,7 +567,7 @@ function Invoices() {
   return (
     <WorkspaceShell
       title="فواتيري"
-      subtitle="مستندات الفوترة الصادرة بعد اعتماد الإدارة. يعرض ملخص الفاتورة تفاصيل الأصناف والكميات، ويضم PDF الأسعار والإجماليات المسموح بها لصلاحية الحساب."
+      subtitle="مستندات الفوترة الصادرة بعد اعتماد الإدارة. يظهر السعر والإجمالي فقط إذا فعّلهما المدير في إعدادات الخصوصية."
     >
       <div
         style={{
@@ -585,8 +707,7 @@ function Invoices() {
                   <th style={{ textAlign: "right", padding: 10 }}>الصنف</th>
                   <th>الرمز</th>
                   <th>الكمية</th>
-                  <th>سعر الوحدة</th>
-                  <th>الإجمالي</th>
+                  {amountsVisible && <><th>سعر الوحدة</th><th>الإجمالي</th></>}
                 </tr>
               </thead>
               <tbody>
@@ -595,13 +716,13 @@ function Invoices() {
                     <td style={{ padding: 10 }}>{l.description}</td>
                     <td>{l.item_code ?? "—"}</td>
                     <td>{formatNumber(Number(l.quantity))} {l.unit ?? ""}</td>
-                    <td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td>
-                    <td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</td>
+                    {amountsVisible && <><td>{formatInvoiceMoney(l.unit_price, chosenFinancials?.currency ?? chosen.currency)}</td><td>{formatInvoiceMoney(l.line_total, chosenFinancials?.currency ?? chosen.currency)}</td></>}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          {!amountsVisible && !detailBusy && <p role="status" style={{ ...quiet, marginTop: 12 }}>المبالغ المالية مخفية وفق إعدادات خصوصية الحساب.</p>}
           {!detailBusy && chosenFinancials && (
             <div style={{ ...card, marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
               <div><span style={quiet}>الإجمالي الفرعي</span><strong style={{ display: "block", marginTop: 6 }}>{formatInvoiceMoney(chosenFinancials.subtotal, chosenFinancials.currency)}</strong></div>
@@ -656,7 +777,8 @@ function formatAccountMoney(value: number | string, currency: string): string {
 }
 function Statement() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [payments, setPayments] = useState<(PaymentAmount & { paid_at?: string })[]>([]);
+  const [payments, setPayments] = useState<(PaymentAmount & { paid_at: string })[]>([]);
+  const [summary, setSummary] = useState<AccountStatementSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -664,17 +786,22 @@ function Statement() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const r = await supabase.rpc("get_customer_account_statement");
-    if (r.error) setError("تعذر قراءة كشف الحساب. تحقق من نشر مخطط المالية.");
-    else {
-      const payload = (r.data ?? {}) as {
-        invoices?: Invoice[];
-        payments?: (PaymentAmount & { id?: string; paid_at?: string })[];
-      };
-      setInvoices(payload.invoices ?? []);
-      setPayments(payload.payments ?? []);
+    setSummary(null);
+    try {
+      const r = await supabase.rpc("get_customer_account_statement");
+      if (r.error) throw new Error("تعذر قراءة كشف الحساب. تحقق من نشر مخطط المالية.");
+      const payload = validateAccountStatementPayload(r.data);
+      setInvoices(payload.invoices);
+      setPayments(payload.payments);
+      setSummary(payload.summary);
+    } catch (cause) {
+      setInvoices([]);
+      setPayments([]);
+      setSummary(null);
+      setError(cause instanceof Error ? cause.message : "تعذر التحقق من كشف الحساب.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
   const downloadStatementPdf = useCallback(async () => {
     setPdfBusy(true);
@@ -731,11 +858,9 @@ function Statement() {
   useEffect(() => {
     void load();
   }, [load]);
-  const totals = useMemo(
-    () => summarizeAccount(invoices as InvoiceAmount[], payments),
-    [invoices, payments],
+  const statementMayBePartial = Boolean(
+    summary && (summary.invoice_count > invoices.length || summary.payment_count > payments.length),
   );
-  const statementMayBePartial = isCustomerStatementPossiblyPartial(invoices.length, payments.length);
   return (
     <WorkspaceShell title="كشف الحساب" subtitle="ملخص من الفواتير والمدفوعات المسجلة فقط.">
       <div
@@ -755,20 +880,25 @@ function Statement() {
         <p role="status">جارٍ تحميل كشف الحساب...</p>
       ) : (
         <>
-          {!totals.valid && (
+          {!summary && (
             <p role="alert" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
-              تعذر احتساب أرصدة الحساب بدقة؛ توجد قيمة مالية غير صالحة في البيانات. لم تُعرض كصفر.
+              لا يمكن عرض أرصدة محسوبة من تفاصيل محدودة؛ لم يُعرض أي إجمالي حتى يُثبت ملخص الدفتر الكامل.
+            </p>
+          )}
+          {summary && (
+            <p role="status" style={{ ...quiet, marginBottom: 12 }}>
+              السجل الكامل: {formatNumber(summary.invoice_count)} فاتورة و{formatNumber(summary.payment_count)} دفعة.
             </p>
           )}
           {statementMayBePartial && (
             <p role="status" style={{ ...quiet, color: "#9b4e22", marginBottom: 12 }}>
-              تنبيه اكتمال البيانات: يعرض هذا الملخص أحدث 200 فاتورة و500 دفعة كحد أقصى؛ قد لا تمثل الأرقام إجمالي السجل الكامل.
+              تفاصيل العرض محدودة بأحدث 200 فاتورة و500 دفعة. إجماليات الأرصدة أدناه محسوبة خادميًا من كامل دفتر العميل.
             </p>
           )}
-          {totals.valid ? (
-            totals.currencies.length ? (
+          {summary ? (
+            summary.totals_by_currency.length ? (
               <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
-                {totals.currencies.map((currencyBalance) => (
+                {summary.totals_by_currency.map((currencyBalance) => (
                   <section key={currencyBalance.currency} style={card}>
                     <h3 style={{ margin: "0 0 12px", color: "#087f8d" }}>
                       ملخص الرصيد بعملة {currencyBalance.currency}
@@ -817,16 +947,20 @@ function Statement() {
               </thead>
               <tbody>
                 {invoices.map((i) => {
-                  const balance = summarizeInvoiceAmounts(i as InvoiceAmount, payments);
+                  const rowValid =
+                    isAccountStatementMoney(i.total_amount) &&
+                    isAccountStatementMoney(i.paid_amount) &&
+                    isAccountStatementMoney(i.outstanding_amount) &&
+                    typeof i.currency === "string";
                   return (
                     <tr key={i.id} style={{ borderTop: "1px solid #edf2f3" }}>
                       <td style={{ padding: 12 }}>{formatDateShort(i.issued_at)}</td>
                       <td>
                         <strong>{i.invoice_number}</strong>
                       </td>
-                      <td>{balance.valid ? formatAccountMoney(balance.total, balance.currency) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatAccountMoney(balance.paid, balance.currency) : "غير متاح"}</td>
-                      <td>{balance.valid ? formatAccountMoney(balance.outstanding, balance.currency) : "غير متاح"}</td>
+                      <td>{rowValid ? formatAccountMoney(i.total_amount!, i.currency) : "غير متاح"}</td>
+                      <td>{rowValid ? formatAccountMoney(i.paid_amount!, i.currency) : "غير متاح"}</td>
+                      <td>{rowValid ? formatAccountMoney(i.outstanding_amount!, i.currency) : "غير متاح"}</td>
                       <td>
                         {i.status === "paid"
                           ? "مدفوعة"
@@ -841,9 +975,11 @@ function Statement() {
                 })}
               </tbody>
             </table>
-            {!invoices.length && <p style={{ padding: 14 }}>لا توجد حركات مالية مسجلة.</p>}
+            {!invoices.length && <p style={{ padding: 14 }}>لا توجد فواتير ضمن أحدث التفاصيل المعادة.</p>}
           </section>
-          <p style={quiet}>عدد الدفعات المسجلة: {payments.length}.</p>
+          <p style={quiet}>
+            الدفعات المعروضة: {formatNumber(payments.length)} من أصل {formatNumber(summary?.payment_count ?? 0)} دفعة في السجل الكامل.
+          </p>
         </>
       )}
     </WorkspaceShell>
@@ -1160,6 +1296,11 @@ export function ReorderWorkspacePage() {
 }
 function Reorder() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === "undefined" ? "server-render" : window.location.origin,
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [templates, setTemplates] = useState<ReorderTemplate[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -1258,10 +1399,16 @@ function Reorder() {
       return;
     }
     try {
-      localStorage.setItem("aghbari:cart-restore:v1", JSON.stringify(draft));
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل نقل قالب إعادة الطلب إلى السلة.");
+      appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "merge",
+        lines: draft,
+      }, []);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
       void navigate({ to: "/" });
-    } catch {
-      setError("تعذر حفظ السلة على هذا الجهاز.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "تعذر حفظ مسودة إعادة الطلب على هذا الجهاز.");
     }
     setBusy(false);
   }
@@ -1386,6 +1533,11 @@ export function BarcodeWorkspacePage() {
   );
 }
 function Barcode() {
+  const { user } = useAuth();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === "undefined" ? "server-render" : window.location.origin,
+  );
   const [value, setValue] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
   const [error, setError] = useState("");
@@ -1507,13 +1659,17 @@ function Barcode() {
   async function add() {
     if (!product) return;
     try {
-      localStorage.setItem(
-        "aghbari:cart-restore:v1",
-        JSON.stringify([{ product_id: product.id, quantity: 1 }]),
-      );
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل إضافة الصنف إلى سلتك.");
+      appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: createOfflineCartMutationId(),
+        kind: "adjust",
+        product_id: product.id,
+        delta: 1,
+      }, []);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
       void navigate({ to: "/" });
-    } catch {
-      setError("تعذر حفظ الصنف في السلة على هذا الجهاز.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "تعذر حفظ الصنف في سجل السلة المحلي.");
     }
   }
   return (
@@ -1770,46 +1926,149 @@ export function OfflineWorkspacePage() {
   );
 }
 function Offline() {
+  const { user } = useAuth();
+  const cartScopeKey = createOfflineCartScopeKey(
+    user?.profileId ?? null,
+    typeof window === "undefined" ? "server-render" : window.location.origin,
+  );
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
   const [cached, setCached] = useState(0);
+  const [catalogRows, setCatalogRows] = useState<ReturnType<typeof sanitizePublicCatalogCache>>([]);
+  const [cartLines, setCartLines] = useState<ReturnType<typeof readOfflineCartLedger>["lines"]>([]);
+  const [lastCatalogSyncAt, setLastCatalogSyncAt] = useState<number | null>(null);
+  const [catalogSearch, setCatalogSearch] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
+  const [storageError, setStorageError] = useState("");
+  // Keep an idempotency ID for an intent until the caller confirms its outcome.
+  // If storage wrote the record and then threw, retrying the same intent must not double-apply it.
+  const pendingLocalMutationIds = useRef(new Map<string, string>());
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+  function pendingMutationId(intent: string): string {
+    const existing = pendingLocalMutationIds.current.get(intent);
+    if (existing) return existing;
+    const created = createOfflineCartMutationId();
+    pendingLocalMutationIds.current.set(intent, created);
+    return created;
+  }
+  function finishLocalMutation(intent: string) {
+    pendingLocalMutationIds.current.delete(intent);
+  }
+  function initialOfflineCartLines() {
+    const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+    if (seedExists) return [];
+    const catalog = sanitizePublicCatalogCache(
+      JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+    );
+    return readLegacyCartDraftForScope(
+      localStorage,
+      cartScopeKey,
+      catalog.map((product) => product.id),
+    ).lines;
+  }
+  const catalogQuery = catalogSearch.trim().toLocaleLowerCase();
+  const matchingCatalogRows = catalogRows.filter((product) => {
+    if (!catalogQuery) return true;
+    // Share storefront Arabic normalization, SKU/barcode prefixes and name typo tolerance.
+    return matchesArabicCatalogSearch(product, catalogSearch) ||
+      matchesArabicCatalogSearch({ name: product.category?.name }, catalogSearch);
+  });
+  const visibleCatalogRows = matchingCatalogRows.slice(0, 100);
   const refresh = useCallback(() => {
+    let safeCatalog: ReturnType<typeof sanitizePublicCatalogCache> = [];
+    let catalogStorageError = "";
+
+    // Catalog readability and cart integrity are independent. A corrupt cart journal
+    // must block edits without unnecessarily hiding a valid cached catalog.
     try {
-      let safeCatalog = [];
       try {
         safeCatalog = sanitizePublicCatalogCache(
-          JSON.parse(localStorage.getItem("aghbari:catalog:v1") || "[]"),
+          JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
         );
       } catch {
-        localStorage.removeItem("aghbari:catalog:v1");
+        try { localStorage.removeItem(getOfflineCatalogCacheKey(cartScopeKey)); } catch {
+          catalogStorageError = "تعذر الوصول إلى التخزين المحلي؛ قد تكون مساحة المتصفح ممتلئة.";
+        }
+        safeCatalog = [];
       }
-      // Rewrite legacy caches through the allowlist so private staff fields never linger in storage.
-      localStorage.setItem("aghbari:catalog:v1", JSON.stringify(safeCatalog));
+
+      // A legacy global cache has no trustworthy account scope: remove it without replaying it.
+      try {
+        const oldGlobalCache = localStorage.getItem("aghbari:catalog:v1");
+        if (oldGlobalCache) {
+          try { sanitizePublicCatalogCache(JSON.parse(oldGlobalCache)); } catch { /* Never restore this unscoped cache. */ }
+          localStorage.removeItem("aghbari:catalog:v1");
+        }
+      } catch {
+        try { localStorage.removeItem("aghbari:catalog:v1"); } catch {
+          catalogStorageError = catalogStorageError || "تعذر حذف نسخة الكتالوج القديمة غير المرتبطة بحساب.";
+        }
+      }
+
       setCached(safeCatalog.length);
-      setCartCount(
-        normalizeCartDraft(JSON.parse(localStorage.getItem("aghbari:cart:v1") || "[]")).reduce(
-          (s, l) => s + l.quantity,
-          0,
-        ),
-      );
+      setCatalogRows(safeCatalog);
+      try {
+        // Rewrite cache entries through the public allowlist, even when only reading them.
+        localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog));
+      } catch {
+        catalogStorageError = catalogStorageError || "تعذر حفظ نسخة الكتالوج محليًا؛ راجع مساحة التخزين.";
+      }
+
+      try {
+        const rawSyncTimestamp = localStorage.getItem(getOfflineCatalogSyncTimestampKey(cartScopeKey));
+        const syncTimestamp = rawSyncTimestamp === null ? Number.NaN : Number(rawSyncTimestamp);
+        setLastCatalogSyncAt(
+          Number.isSafeInteger(syncTimestamp) &&
+          syncTimestamp > 0 &&
+          syncTimestamp <= Date.now() + 5 * 60 * 1000
+            ? syncTimestamp
+            : null,
+        );
+      } catch {
+        setLastCatalogSyncAt(null);
+        catalogStorageError = catalogStorageError || "تعذر قراءة وقت مزامنة الكتالوج؛ لا يمكن تأكيد حداثته.";
+      }
     } catch {
       setCached(0);
-      setCartCount(0);
+      setCatalogRows([]);
+      setLastCatalogSyncAt(null);
+      catalogStorageError = "تعذر قراءة الكتالوج المحلي؛ ستحتاج إلى مزامنة جديدة.";
     }
-  }, []);
+
+    try {
+      const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, safeCatalog.map((product) => product.id));
+      const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(ledger.lines);
+      setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setStorageError(catalogStorageError);
+      return !catalogStorageError;
+    } catch {
+      setCartLines([]);
+      setCartCount(0);
+      setStorageError(
+        catalogStorageError
+          ? catalogStorageError + " كما تعذر التحقق من سجل السلة؛ لم تُرسل أي عملية."
+          : "تعذر التحقق من سجل السلة المحلي؛ الكتالوج المحفوظ يبقى للقراءة فقط حتى إصلاح المسودة. لم تُرسل أي عملية.",
+      );
+      return false;
+    }
+  }, [cartScopeKey]);
   useEffect(() => {
     const on = () => setOnline(true),
       off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     refresh();
+    const unsubscribeLedger = subscribeToOfflineCartState(cartScopeKey, refresh);
     return () => {
+      unsubscribeLedger();
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
-  }, [refresh]);
+  }, [cartScopeKey, refresh]);
   async function sync() {
     if (!navigator.onLine) {
       setMessage("لا يوجد اتصال؛ ستظل النسخة المحلية محفوظة.");
@@ -1817,36 +2076,399 @@ function Offline() {
     }
     setSyncing(true);
     setMessage("");
+    let localPersistenceFailed = false;
     try {
-      const rows = sanitizePublicCatalogCache(await fetchProducts());
-      localStorage.setItem("aghbari:catalog:v1", JSON.stringify(rows));
-      refresh();
+      const fetchedCatalog: unknown = await fetchProducts();
+      if (!Array.isArray(fetchedCatalog)) {
+        throw new Error("استجابة الكتالوج من الخادم غير صالحة؛ احتفظنا بالنسخة المحلية.");
+      }
+      const rows = sanitizePublicCatalogCache(fetchedCatalog);
+      if (fetchedCatalog.length > 0 && rows.length === 0) {
+        throw new Error("لم تتضمن استجابة الخادم أصنافًا صالحة؛ احتفظنا بالنسخة المحلية.");
+      }
+      const cacheKey = getOfflineCatalogCacheKey(cartScopeKey);
+      const timestampKey = getOfflineCatalogSyncTimestampKey(cartScopeKey);
+      const previousCache = localStorage.getItem(cacheKey);
+      const previousTimestamp = localStorage.getItem(timestampKey);
+      const syncTimestamp = Date.now();
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(rows));
+        localStorage.setItem(timestampKey, String(syncTimestamp));
+      } catch (cause) {
+        localPersistenceFailed = true;
+        // localStorage has no transaction support; best-effort rollback prevents
+        // pairing a new catalog with an old freshness timestamp after quota failure.
+        try {
+          if (previousCache === null) localStorage.removeItem(cacheKey);
+          else localStorage.setItem(cacheKey, previousCache);
+        } catch { /* Disabled storage may also reject rollback. */ }
+        try {
+          if (previousTimestamp === null) localStorage.removeItem(timestampKey);
+          else localStorage.setItem(timestampKey, previousTimestamp);
+        } catch { /* Disabled storage may also reject rollback. */ }
+        throw cause;
+      }
+      if (!refresh()) {
+        setMessage("تعذر التحقق من سجل السلة المحلي؛ لم نعلن اكتمال المزامنة.");
+        return;
+      }
       setMessage(
         "تم تحديث نسخة الكتالوج المحلية من الخادم: " +
           rows.length +
-          " صنف، مع أرصدة المخزون والتصنيفات المتاحة.",
+          " صنف. السعر والمخزون النهائيان يخضعان للتحقق المباشر عند الشراء.",
       );
-    } catch {
-      setMessage("تعذر تحديث الكتالوج؛ لم نغيّر النسخة المحلية.");
+    } catch (cause) {
+      const detail = cause instanceof Error
+        ? cause.message
+        : "تعذر تحديث الكتالوج من الخادم.";
+      if (localPersistenceFailed) {
+        setStorageError("فشل حفظ تحديث الكتالوج محليًا. احتفظنا بالنسخة السابقة قدر الإمكان؛ أعد التحقق من التخزين قبل تعديل السلة.");
+        setMessage("فشل حفظ تحديث الكتالوج محليًا؛ لم نعلن نجاح المزامنة.");
+      } else {
+        // Network and validation failures must not disable a valid saved cart/catalog.
+        setMessage(detail + " احتفظنا بالنسخة المحلية السابقة.");
+      }
     } finally {
       setSyncing(false);
     }
   }
   function queue() {
     try {
-      const lines = normalizeCartDraft(JSON.parse(localStorage.getItem("aghbari:cart:v1") || "[]"));
-      if (!lines.length) {
-        setMessage("السلة فارغة.");
+      const catalog = sanitizePublicCatalogCache(JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"));
+      const legacy = readLegacyCartDraftForScope(localStorage, cartScopeKey, catalog.map((product) => product.id));
+      const seedExists = localStorage.getItem(getOfflineCartLedgerPrefix(cartScopeKey) + "seed") !== null;
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, seedExists ? [] : legacy.lines);
+      const compacted = compactOfflineCartLedger(localStorage, cartScopeKey, ledger.lines);
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(compacted.lines);
+      setCartCount(compacted.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage(
+        "تم حفظ ومراجعة مسودة السلة المحلية (" +
+          compacted.lines.length +
+          " صنف). هذه عملية محلية فقط؛ لن يُرسل الطلب أو يُعتمد السعر دون تحقق الخادم عند عودة الاتصال.",
+      );
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر حفظ مسودة السلة المحلية بأمان.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
+    }
+  }
+  function addToLocalDraft(productId: string, productName: string) {
+    const intent = "adjust:" + productId + ":1";
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل حفظ مسودة سلة مرتبطة بحسابك.");
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: pendingMutationId(intent),
+        kind: "adjust",
+        product_id: productId,
+        delta: 1,
+      }, initialOfflineCartLines());
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage(
+        "تمت إضافة " + productName + " إلى مسودة السلة المحلية فقط. لم يُرسل طلب؛ السعر والمخزون يحتاجان تحقق الخادم عند عودة الاتصال.",
+      );
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر إضافة الصنف إلى المسودة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
+    }
+  }
+  function adjustLocalDraft(productId: string, delta: 1 | -1) {
+    const intent = "adjust:" + productId + ":" + delta;
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: pendingMutationId(intent),
+        kind: "adjust",
+        product_id: productId,
+        delta,
+      }, initialOfflineCartLines());
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage(delta > 0 ? "تمت زيادة الكمية في المسودة المحلية." : "تم إنقاص الكمية في المسودة المحلية.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر تعديل مسودة السلة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
+    }
+  }
+  function removeFromLocalDraft(productId: string, productName: string) {
+    const intent = "remove:" + productId;
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: pendingMutationId(intent),
+        kind: "remove",
+        product_id: productId,
+      });
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      finishLocalMutation(intent);
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setMessage("تمت إزالة " + productName + " من المسودة المحلية فقط.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر إزالة الصنف من المسودة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
+    }
+  }
+  async function restoreLocalDraftBackup(file: File) {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل استعادة مسودة مرتبطة بحسابك.");
+      if (file.size > 512 * 1024) throw new Error("حجم ملف النسخة الاحتياطية يتجاوز 512 كيلوبايت.");
+      const source = await file.text();
+      if (source.length > 512 * 1024) throw new Error("حجم ملف النسخة الاحتياطية بعد القراءة يتجاوز الحد المسموح.");
+      let payload: unknown;
+      try {
+        payload = JSON.parse(source) as unknown;
+      } catch {
+        throw new Error("ملف النسخة الاحتياطية ليس JSON صالحًا.");
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new Error("بنية النسخة الاحتياطية غير صالحة.");
+      }
+      const record = payload as Record<string, unknown>;
+      if (record.schema !== "aghbari.offline-cart-draft" || record.version !== 2 ||
+          typeof record.scope_marker !== "string" || !Array.isArray(record.lines)) {
+        throw new Error("نوع النسخة أو إصدارها غير مدعوم؛ أعد تصدير المسودة من الحساب الحالي.");
+      }
+      const expectedScopeMarker = createStableOfflineCartMutationId("backup-scope", cartScopeKey);
+      if (record.scope_marker !== expectedScopeMarker) {
+        throw new Error("هذه النسخة الاحتياطية لا تنتمي إلى الحساب والمتجر الحاليين؛ لم تتغير المسودة.");
+      }
+      if (record.lines.length < 1 || record.lines.length > 1000) {
+        throw new Error("يجب أن تحتوي النسخة على صنف واحد إلى 1,000 صنف.");
+      }
+
+      const catalog = sanitizePublicCatalogCache(
+        JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+      );
+      const products = new Set(catalog.map((product) => product.id));
+      const seen = new Set<string>();
+      const lines: { product_id: string; quantity: number }[] = [];
+      for (const item of record.lines) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          throw new Error("تتضمن النسخة بندًا غير صالح؛ لم تُغيّر المسودة.");
+        }
+        const line = item as Record<string, unknown>;
+        if (
+          typeof line.product_id !== "string" ||
+          !products.has(line.product_id) ||
+          !Number.isSafeInteger(line.quantity) ||
+          Number(line.quantity) < 1 ||
+          Number(line.quantity) > 10000 ||
+          seen.has(line.product_id)
+        ) {
+          throw new Error("يتضمن الملف صنفًا غير موجود في كتالوج الحساب الحالي أو كمية غير صالحة؛ لم تُغيّر المسودة.");
+        }
+        seen.add(line.product_id);
+        // Deliberately retain only product ID and quantity; imported names, prices,
+        // inventory fields, notes and other untrusted properties are never persisted.
+        lines.push({ product_id: line.product_id, quantity: Number(line.quantity) });
+      }
+      lines.sort((left, right) => left.product_id.localeCompare(right.product_id));
+      const seedLines = initialOfflineCartLines();
+      const currentLedger = readOfflineCartLedger(localStorage, cartScopeKey, seedLines);
+      const currentLines = currentLedger.lines;
+      const restoreEpoch = localStorage.getItem(getOfflineCartRestoreEpochKey(cartScopeKey)) || "initial";
+      const mutationId = createStableOfflineCartMutationId("backup-restore", { epoch: restoreEpoch, lines });
+      if (currentLedger.applied_mutation_ids.includes(mutationId)) {
+        // Same backup in the same cart generation is a replay. Let the journal verify
+        // its fingerprint before skipping merge-size checks; large valid backups should
+        // stay idempotent even when merging them twice would exceed a quantity cap.
+        try {
+          const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id: mutationId,
+            kind: "merge",
+            lines,
+          }, currentLines);
+          writeLegacyCartOwner(localStorage, cartScopeKey);
+          setCartLines(next.lines);
+          setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+          setMessage("سبق دمج هذه النسخة في جيل المسودة الحالي؛ لم تُضاعف الكميات.");
+        } catch (cause) {
+          const detail = cause instanceof Error ? cause.message : "تعذر التحقق من نسخة مستعادة سابقًا.";
+          setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+          setMessage(detail);
+        }
         return;
       }
-      localStorage.setItem("aghbari:cart:v1", JSON.stringify(lines));
-      setMessage(
-        "تم حفظ مسودة السلة على هذا الجهاز (" +
-          lines.length +
-          " صنف). لن يُرسل الطلب أو يؤكد السعر قبل عودة الاتصال.",
+      const resultingCart = new Map(currentLines.map((line) => [line.product_id, line.quantity]));
+      for (const line of lines) {
+        const combinedQuantity = (resultingCart.get(line.product_id) ?? 0) + line.quantity;
+        if (combinedQuantity > 10000) {
+          throw new Error("لا يمكن دمج النسخة دون تجاوز حد 10,000 وحدة للصنف؛ لم تُغيّر المسودة.");
+        }
+        resultingCart.set(line.product_id, combinedQuantity);
+      }
+      if (resultingCart.size > 1000) {
+        throw new Error("لا يمكن دمج النسخة؛ سيتجاوز عدد أصناف المسودة الحد الآمن البالغ 1,000 صنف.");
+      }
+      const totalUnits = lines.reduce((sum, line) => sum + line.quantity, 0);
+      const approved = window.confirm(
+        "سيتم دمج " + lines.length + " صنفًا (" + formatNumber(totalUnits) +
+        " وحدة) مع مسودة السلة المحلية الحالية. لن تُستورد أسعار ولن يُرسل طلب. هل تريد المتابعة؟",
       );
-    } catch {
-      setMessage("تعذر حفظ مسودة السلة المحلية.");
+      if (!approved) {
+        setMessage("أُلغيت استعادة النسخة الاحتياطية؛ لم تتغير المسودة.");
+        return;
+      }
+
+      let next: ReturnType<typeof readOfflineCartLedger>;
+      try {
+        next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+          id: mutationId,
+          kind: "merge",
+          lines,
+        }, seedLines);
+        writeLegacyCartOwner(localStorage, cartScopeKey);
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : "تعذر حفظ المسودة المستعادة محليًا.";
+        setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+        setMessage(detail);
+        return;
+      }
+      setCartLines(next.lines);
+      setCartCount(next.lines.reduce((sum, line) => sum + line.quantity, 0));
+      setStorageError("");
+      setMessage("تم دمج النسخة الاحتياطية في المسودة المحلية بعد التحقق من الأصناف؛ لم تُستورد أسعار ولم يُرسل طلب.");
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "تعذر قراءة النسخة الاحتياطية.");
+    }
+  }
+  function exportLocalDraftBackup() {
+    try {
+      if (!user?.profileId) throw new Error("سجّل الدخول قبل تصدير مسودة مرتبطة بحسابك.");
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, initialOfflineCartLines());
+      const catalog = sanitizePublicCatalogCache(
+        JSON.parse(localStorage.getItem(getOfflineCatalogCacheKey(cartScopeKey)) || "[]"),
+      );
+      const payload = {
+        schema: "aghbari.offline-cart-draft",
+        version: 2,
+        scope_marker: createStableOfflineCartMutationId("backup-scope", cartScopeKey),
+        exported_at: new Date().toISOString(),
+        line_count: ledger.lines.length,
+        total_units: ledger.lines.reduce((sum, line) => sum + line.quantity, 0),
+        lines: ledger.lines.map((line) => {
+          const product = catalog.find((item) => item.id === line.product_id);
+          return {
+            product_id: line.product_id,
+            item_code: product?.item_code ?? null,
+            name: product?.name ?? null,
+            unit: product?.unit ?? null,
+            quantity: line.quantity,
+          };
+        }),
+        disclaimer: "Local cart draft backup only. Not an order, invoice, reservation, stock confirmation or trusted price.",
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "aghbari-cart-draft-" + new Date().toISOString().slice(0, 10) + ".json";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      if (typeof URL.revokeObjectURL === "function") {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      }
+      setMessage("تم تنزيل نسخة احتياطية للمسودة المحلية دون أسعار أو مخزون؛ الملف ليس طلبًا ولا يثبت توفر الأصناف.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر تصدير المسودة المحلية.";
+      setMessage(detail);
+    }
+  }
+  function clearLocalDraft() {
+    const intent = "clear";
+    if (!user?.profileId) {
+      setMessage("سجّل الدخول قبل تعديل مسودة سلة مرتبطة بحسابك.");
+      return;
+    }
+    if (!cartLines.length) return;
+    const approved = window.confirm("سيتم تفريغ مسودة السلة المحلية على هذا الجهاز فقط. لن يُرسل طلب ولن تُحذف الأصناف من الكتالوج. هل تريد المتابعة؟");
+    if (!approved) {
+      setMessage("أُلغي تفريغ المسودة؛ بقيت الكميات كما هي.");
+      return;
+    }
+    try {
+      const next = appendOfflineCartMutation(localStorage, cartScopeKey, {
+        id: pendingMutationId(intent),
+        kind: "clear",
+      });
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      // A new restore generation allows an intentionally cleared draft to restore the same backup again.
+      localStorage.setItem(getOfflineCartRestoreEpochKey(cartScopeKey), pendingMutationId(intent));
+      finishLocalMutation(intent);
+      setCartLines(next.lines);
+      setCartCount(0);
+      setMessage("تم تفريغ مسودة السلة المحلية فقط. لم يُرسل طلب ولم يتغير الكتالوج.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذر تفريغ مسودة السلة المحلية.";
+      setStorageError(detail + " أعد التحقق من التخزين قبل إجراء تغييرات أخرى.");
+      setMessage(detail);
+    }
+  }
+  function retryLocalStorage() {
+    if (!refresh()) {
+      setMessage("ما زال التحقق من التخزين المحلي متعذرًا؛ لم نحذف أي مسودة.");
+      return;
+    }
+    try {
+      // Replay uncertain mutations using the same ID. Existing records are idempotent;
+      // missing records are written once. Only clear the intent after reconciliation succeeds.
+      const settledIntents: string[] = [];
+      for (const [intent, id] of pendingLocalMutationIds.current.entries()) {
+        if (intent === "clear") {
+          appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id,
+            kind: "clear",
+          }, initialOfflineCartLines());
+          localStorage.setItem(getOfflineCartRestoreEpochKey(cartScopeKey), id);
+        } else if (intent.startsWith("remove:")) {
+          appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id,
+            kind: "remove",
+            product_id: intent.slice("remove:".length),
+          }, initialOfflineCartLines());
+        } else if (intent.startsWith("adjust:")) {
+          const separator = intent.lastIndexOf(":");
+          const productId = intent.slice("adjust:".length, separator);
+          const delta = Number(intent.slice(separator + 1));
+          if (!productId || (delta !== 1 && delta !== -1)) {
+            throw new Error("تعذر استعادة نوع تعديل السلة المحفوظ بأمان.");
+          }
+          appendOfflineCartMutation(localStorage, cartScopeKey, {
+            id,
+            kind: "adjust",
+            product_id: productId,
+            delta,
+          }, initialOfflineCartLines());
+        } else {
+          throw new Error("تعذر استعادة حركة سلة محلية غير معروفة.");
+        }
+        settledIntents.push(intent);
+      }
+      const ledger = readOfflineCartLedger(localStorage, cartScopeKey, initialOfflineCartLines());
+      writeLegacyCartOwner(localStorage, cartScopeKey);
+      setCartLines(ledger.lines);
+      setCartCount(ledger.lines.reduce((sum, line) => sum + line.quantity, 0));
+      // Drop pending IDs only after the complete recovery/readback/owner write succeeds.
+      for (const intent of settledIntents) finishLocalMutation(intent);
+      setStorageError("");
+      setMessage("تم التحقق من التخزين وتسوية الحركات غير المحسومة دون تكرارها.");
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "تعذرت تسوية الحركات المحلية.";
+      setStorageError(detail + " أعد المحاولة قبل تعديل المسودة.");
+      setMessage(detail);
     }
   }
   return (
@@ -1882,12 +2504,132 @@ function Offline() {
           </strong>
         </article>
       </div>
+      {storageError && (
+        <div role="alert" style={{ ...card, marginBottom: 14, border: "1px solid #b91c1c", color: "#991b1b" }}>
+          <p style={{ marginTop: 0 }}>{storageError}</p>
+          <button style={secondary} onClick={retryLocalStorage}>إعادة محاولة قراءة التخزين</button>
+        </div>
+      )}
+      <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-catalog-heading">
+        <h2 id="offline-catalog-heading" style={{ marginTop: 0, fontSize: 18 }}>الكتالوج المحلي</h2>
+        <label htmlFor="offline-catalog-search" style={{ ...quiet, display: "block", marginBottom: 8 }}>ابحث بالاسم أو رمز الصنف أو الباركود أو التصنيف</label>
+        <input
+          id="offline-catalog-search"
+          aria-label="البحث في الكتالوج المحلي"
+          type="search"
+          dir="rtl"
+          value={catalogSearch}
+          onChange={(event) => setCatalogSearch(event.target.value)}
+          placeholder="اسم الصنف أو الرمز..."
+          style={{ width: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, font: "inherit", marginBottom: 12, background: "#fff" }}
+        />
+        {lastCatalogSyncAt !== null && Date.now() - lastCatalogSyncAt > 24 * 60 * 60 * 1000 ? (
+          <p role="status" style={{ ...quiet, color: "#92400e", marginTop: 0 }}>
+            نسخة الكتالوج قديمة (آخر مزامنة: {new Date(lastCatalogSyncAt).toLocaleString("ar-YE")}). لا تعتمد على المخزون المحلي لاتخاذ قرار شراء.
+          </p>
+        ) : lastCatalogSyncAt !== null ? (
+          <p style={{ ...quiet, marginTop: 0 }}>
+            آخر مزامنة ناجحة من الخادم: {new Date(lastCatalogSyncAt).toLocaleString("ar-YE")}. الأسعار والمخزون النهائيان يتطلبان تحققًا مباشرًا.
+          </p>
+        ) : catalogRows.length > 0 ? (
+          <p role="status" style={{ ...quiet, color: "#92400e", marginTop: 0 }}>
+            وقت تحديث هذه النسخة غير معروف؛ تعامل معها كبيانات قديمة حتى تنجح المزامنة مع الخادم.
+          </p>
+        ) : null}
+        {catalogRows.length === 0 && !storageError ? (
+          <p role="status" style={quiet}>لا توجد أصناف محفوظة على هذا الجهاز. اتصل بالخادم ثم حدّث الكتالوج.</p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
+            {visibleCatalogRows.map((product) => (
+              <article key={product.id} style={{ border: "1px solid #dbe5e7", borderRadius: 10, padding: 12 }}>
+                <strong>{product.name}</strong>
+                <p style={quiet}>رمز الصنف: {product.item_code} · الوحدة: {product.unit}</p>
+                {product.category?.name && <p style={quiet}>التصنيف: {product.category.name}</p>}
+                <p style={quiet}>السعر والمخزون الحاليان يحتاجان مراجعة الخادم؛ لا نعتمد قيمًا محلية قديمة.</p>
+                <button style={secondary} disabled={Boolean(storageError)} onClick={() => addToLocalDraft(product.id, product.name)}>
+                  إضافة إلى المسودة المحلية
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+        {matchingCatalogRows.length > 100 && (
+          <p style={quiet}>يُعرض أول 100 صنف مطابق لتجنب تحميل قائمة كبيرة؛ أضف كلمات بحث لتضييق النتائج.</p>
+        )}
+        {catalogRows.length > 0 && matchingCatalogRows.length === 0 && <p role="status" style={quiet}>لا توجد أصناف مطابقة لبحثك.</p>}
+      </section>
+      <section style={{ ...card, marginBottom: 14 }} aria-labelledby="offline-draft-heading">
+        <h2 id="offline-draft-heading" style={{ marginTop: 0, fontSize: 18 }}>مسودة السلة المحلية</h2>
+        <p style={quiet}>هذه كميات محفوظة على الجهاز فقط؛ لا تظهر أسعار ولا تُرسل طلبات من هذه الشاشة.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <input
+            ref={backupFileInputRef}
+            id="offline-cart-backup-input"
+            type="file"
+            accept=".json,application/json"
+            aria-label="اختر نسخة احتياطية لمسودة السلة"
+            style={{ display: "none" }}
+            disabled={Boolean(storageError)}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file) void restoreLocalDraftBackup(file);
+            }}
+          />
+          <button
+            style={secondary}
+            disabled={Boolean(storageError) || cartLines.length === 0}
+            onClick={exportLocalDraftBackup}
+          >
+            تنزيل نسخة احتياطية للمسودة
+          </button>
+          <button
+            style={secondary}
+            disabled={Boolean(storageError)}
+            onClick={() => backupFileInputRef.current?.click()}
+          >
+            استعادة من نسخة JSON
+          </button>
+          {cartLines.length > 0 && (
+            <button
+              style={{ ...secondary, color: "#991b1b", borderColor: "#fecaca" }}
+              disabled={Boolean(storageError)}
+              onClick={clearLocalDraft}
+            >
+              تفريغ المسودة المحلية
+            </button>
+          )}
+        </div>
+        {cartLines.length === 0 ? (
+          <p role="status" style={quiet}>مسودة السلة فارغة.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {cartLines.map((line) => {
+              const product = catalogRows.find((item) => item.id === line.product_id);
+              const label = product?.name || ("صنف غير موجود في النسخة المحلية (" + line.product_id + ")");
+              return (
+                <article key={line.product_id} style={{ border: "1px solid #dbe5e7", borderRadius: 10, padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <strong>{label}</strong>
+                    <p style={quiet}>الكمية: {formatNumber(line.quantity)} · لا يوجد سعر معتمد دون الخادم</p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={secondary} aria-label={"زيادة كمية " + label} disabled={Boolean(storageError)} onClick={() => adjustLocalDraft(line.product_id, 1)}>＋</button>
+                    <button style={secondary} aria-label={"إنقاص كمية " + label} onClick={() => adjustLocalDraft(line.product_id, -1)} disabled={Boolean(storageError) || line.quantity <= 0}>−</button>
+                    <button style={secondary} aria-label={"إزالة " + label} disabled={Boolean(storageError)} onClick={() => removeFromLocalDraft(line.product_id, label)}>إزالة</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
       <section style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <button style={primary} onClick={() => void sync()} disabled={syncing || !online}>
           <RefreshCw size={16} />
           {syncing ? "جارٍ التحديث..." : "تحديث الكتالوج المحلي"}
         </button>
-        <button style={secondary} onClick={queue}>
+        <button style={secondary} disabled={Boolean(storageError)} onClick={queue}>
           <Save size={16} /> حفظ السلة كمسودة
         </button>
         <Link to="/" style={secondary as React.CSSProperties}>
