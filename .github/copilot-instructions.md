@@ -1,11 +1,14 @@
-## Current execution control (2026-10-16)
-
-Follow the highest-priority override in root `AGENTS.md`. Preserve active PR #72 on `fix/acceptance-hardening-cart-finance-20261015`; do not switch branches or send this work to `main` while PR #72 is open. Use only the topmost current pointer in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; current next task: `AGH-OPS-DR-001` (100 MB file, 100-column, 4,000-character cell, XLSX expansion boundaries). Implement and test immediately; do not repeat repo-wide discovery or reread the full spec. **Before every run/session ends or a context limit is reached, persist the current HEAD, work completed, real tests/results, next task ID and blocker in the existing state file and matching registry row.** Never claim unsaved/unpushed work is remote or tests passed without evidence.
-
 # Aghbari Commerce — repository-wide Copilot instructions
 
-Read and obey the root `AGENTS.md` before acting. It is the shared agent rulebook; do not copy or fork its full content here. Lovable's official documentation confirms that root-level `AGENTS.md` is always read by its agent; this is the free persistent-instruction path: https://docs.lovable.dev/features/knowledge.
+Root `AGENTS.md` is the governing execution policy. Lovable's official documentation says the root-level `AGENTS.md` is automatically read by its agent; keep it concise and authoritative.
 
-At every task/session, verify the live repository state once (`git fetch origin`, `git status --short --branch`, branch, local HEAD, `origin/main`, latest commit, and exact-SHA GitHub Actions). Then read `PROJECT_MEMORY.md`, `ops/AGHBARI-SESSION-RESUME.md`, `ops/AGHBARI-LATEST-EXECUTION-STATE.md`, `docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md`, and `docs/canonical/AGHBARI-EXECUTION-MANDATE.md`. Use `docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md` as the authoritative product spec, consulting only the relevant acceptance criteria.
+## Active execution cursor
 
-Continue from the current `next_task_id`; do not ask the owner to repeat saved requirements, do broad rediscovery, or recreate progress ledgers. Preserve working code and existing history. Treat `DONE_VERIFIED` as closed unless exact-SHA evidence, a dependency/input change, regression, security finding, or invalidated test reopens it. Implement and test one coherent batch, record real commands/results/changed paths/exact SHA/blocker/next task, update the existing canonical records, then push safely to `main` and verify Actions for the resulting SHA. Never transfer CI proof between SHAs, claim production connectivity or Lovable sync without direct evidence, or spend Lovable points on discovery/speculative prompts.
+- Preserve active PR #72 on `fix/acceptance-hardening-cart-finance-20261015`. Do not switch branches or push directly to `main` while this PR is open.
+- Use only the first/current pointer in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; disregard old task IDs in historical sections. Current task: `AGH-OPS-DR-001` — test the 100 MB file-size, 100-column, 4,000-character cell and XLSX archive-expansion boundaries; repair proven gaps.
+- At startup, verify the active PR/head and its exact-SHA CI once. If a local checkout is available, run `git fetch origin` and check branch/status/HEAD; otherwise, do not claim local Git commands ran.
+- Read only the active task's registry row, relevant source and acceptance clauses. Do not reread all canonical documents, perform broad rediscovery, recreate plans, or ask the owner to resend saved context.
+- Implement and test one coherent batch immediately; fix failures and continue to the next open task.
+- After every coherent batch and **before every run/session ends, context limit or pause**, update the existing state file and matching registry row with actual branch/PR/HEAD, changed paths, real test commands/results, tested SHA/CI, next task and evidenced blocker. Mark unrun tests and unpushed changes honestly.
+- Commit/push to the active PR branch, not `main`, until that PR is deliberately integrated. Never fake PASS, production access, or Lovable sync.
+- Finish code and automated tests in Git first. Spend Lovable free points only on a concrete live editor/database/browser integration or synchronization/publishing task that source access cannot complete.
