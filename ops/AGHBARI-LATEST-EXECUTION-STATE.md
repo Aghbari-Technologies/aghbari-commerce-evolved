@@ -16,7 +16,7 @@
 - PWA manifest/icons/preview evidence remains [38825705008](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38825705008) and [38825885494](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38825885494). Public manifest/icons and finance deep routes returned 404 in read-only checks. Connected Lovable has no matching Aghbari project and no signed-in browser context; no publish attempted. Intended Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied; never substitute another project.
 
 ## Evidence checkpoint
-- Last verified pre-patch HEAD: `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`; Actions `38830342032` SUCCESS. ZIP-header identity patch is pending commit/CI; do not transfer the base PASS.
+- Last verified pre-patch HEAD: `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`; Actions `38830342032` SUCCESS. Candidate `4554980c6ffbf4c3a8ca49d8f5d166cdce7e0645` failed the regression fixture (Actions `38832046485`); fixture reader corrected for the test runtime, with new exact-SHA CI pending.
 - Previously verified importer profile SHA: `c241970e648f7292178e0a9a88bdf4938a69ef2f` / Actions 38828317225.
 - Previously verified PWA source preview: `2ee243599c60054468f419c541f3d52ea7e2a111` / Actions 38825705008 and `cdfed3adb21ee881f85117e6f2f163a4c7cf0de2` / Actions 38825885494.
 - Recheck exact HEAD every resume. Isolated CI, live browser acceptance, and production database proof remain separate claims.
@@ -26,8 +26,9 @@
 - Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; base HEAD `6ca3826ba5d6e3c469c5721a28e045d480eb53d9`.
 - Files in the source batch: `src/lib/unified-import.ts`, `src/lib/unified-import.test.ts`, this state file, and the matching registry row.
 - Existing boundary tests cover positive file sizes through 100 MiB, 100/101 columns, 4,000/4,001-character cells, declared archive expansion, and aggregate expansion budgets. Added a regression for a central-directory record redirected to a different local ZIP member; production parser now checks local flags and decoded local path before consuming member bytes.
-- Local test command: `npx vitest run src/lib/unified-import.test.ts` — NOT RUN locally (GitHub connector edit; no local checkout/runtime used). Exact-SHA CI is the execution gate and is PENDING for the new candidate until the Git ref and workflow run are read back.
+- Local test command: `npx vitest run src/lib/unified-import.test.ts` — NOT RUN locally. An attempted shallow clone failed because this runtime cannot resolve `github.com`; no local test PASS is claimed. Exact-SHA GitHub Actions is the execution gate; the rerun is pending for the fixture fix.
 - No deployment, production restore, failover, PR merge, or Lovable publishing was attempted.
+- Local network limitation evidenced by `git clone --depth 1 --single-branch --branch fix/acceptance-hardening-cart-finance-20261015 https://github.com/Aghbari-Technologies/aghbari-commerce-evolved.git /tmp/aghbari-commerce-evolved` failing with `Could not resolve host: github.com`; use GitHub Actions/connector evidence, not local-test claims.
 
 ## Known external blocker — not a reason to stop source work
 - `AGH-SEC-BROWSER-E2E-001` remains externally blocked until authenticated Lovable/browser access is available.

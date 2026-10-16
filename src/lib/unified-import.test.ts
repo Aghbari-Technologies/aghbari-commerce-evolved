@@ -65,7 +65,21 @@ async function repointCentralDirectoryEntry(
   sourcePath: string,
   targetPath: string,
 ): Promise<Blob> {
-  const bytes = new Uint8Array(await archive.arrayBuffer());
+  const nativeArrayBuffer = (archive as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
+  let bytes: Uint8Array;
+  if (typeof nativeArrayBuffer === "function") {
+    bytes = new Uint8Array(await nativeArrayBuffer.call(archive));
+  } else {
+    if (typeof FileReader === "undefined") throw new Error("Test runtime cannot read ZIP fixture bytes");
+    bytes = await new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => reader.result instanceof ArrayBuffer
+        ? resolve(new Uint8Array(reader.result))
+        : reject(new Error("ZIP fixture did not return an ArrayBuffer"));
+      reader.onerror = () => reject(reader.error ?? new Error("ZIP fixture read failed"));
+      reader.readAsArrayBuffer(archive);
+    });
+  }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder();
   let directoryOffset = -1;
