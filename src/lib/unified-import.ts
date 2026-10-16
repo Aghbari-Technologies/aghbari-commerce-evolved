@@ -429,6 +429,21 @@ export class StreamingCsvParser {
   private currentCellExceeded = false;
   private rowCount = 0;
 
+  /**
+   * Retain at most one overflow field for deterministic row rejection. Without this
+   * cap, a single comma-heavy line can allocate millions of array elements before
+   * validateCsvRow gets a chance to enforce MAX_IMPORT_COLUMNS.
+   */
+  private appendCurrentCell(): void {
+    if (this.currentRow.length <= MAX_IMPORT_COLUMNS) {
+      this.currentRow.push(
+        this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell,
+      );
+    }
+    this.currentCell = '';
+    this.currentCellExceeded = false;
+  }
+
   async push(chunk: string, onRow: (values: string[]) => void | Promise<void>, final = false): Promise<void> {
     this.pending += chunk;
     let cursor = 0;
@@ -452,16 +467,12 @@ export class StreamingCsvParser {
         continue;
       }
       if (char === ',' && !this.quoted) {
-        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
-        this.currentCell = '';
-        this.currentCellExceeded = false;
+        this.appendCurrentCell();
         continue;
       }
       if ((char === '\n' || char === '\r') && !this.quoted) {
         if (char === '\r' && next === '\n') cursor += 1;
-        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
-        this.currentCell = '';
-        this.currentCellExceeded = false;
+        this.appendCurrentCell();
         const values = this.currentRow;
         this.currentRow = [];
         if (values.some((part) => part.trim() !== '')) {
@@ -486,9 +497,7 @@ export class StreamingCsvParser {
       if (this.currentCell.length || this.currentCellExceeded || this.currentRow.length || this.pending.length) {
         this.currentCell += this.pending;
         this.pending = '';
-        this.currentRow.push(this.currentCellExceeded ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1) : this.currentCell);
-        this.currentCell = '';
-        this.currentCellExceeded = false;
+        this.appendCurrentCell();
         const values = this.currentRow;
         this.currentRow = [];
         if (values.some((part) => part.trim() !== '')) {
@@ -922,7 +931,11 @@ export async function parseXlsxFirstWorksheet(
         else if (kind === 'd') value = raw;
         else value = formatXlsxNumber(raw, Number.isInteger(styleIndex) ? styleIndex : 0, styles, date1904);
       }
-      values[column] = value;
+      // Match the CSV contract: preserve the rejected state without forwarding the
+      // full oversized string to downstream import stages.
+      values[column] = value.length > MAX_IMPORT_CELL_CHARS
+        ? 'x'.repeat(MAX_IMPORT_CELL_CHARS + 1)
+        : value;
     }
     await onRow(Array.from({ length: values.length }, (_value, index) => values[index] ?? ''));
   }
