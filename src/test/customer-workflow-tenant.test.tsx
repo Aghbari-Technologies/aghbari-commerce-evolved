@@ -308,9 +308,17 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     expect(host?.textContent).toContain("تفاصيل الكميات للمتابعة");
     expect(host?.textContent).not.toContain("سعر الوحدة");
     expect(host?.textContent).not.toContain("الإجمالي المسجل للطلب");
+    const orderQuery = queryFor("orders");
+    expect(orderQuery.filters).toContainEqual({ column: "id", value: orderId });
+    expect(orderQuery.columns).not.toMatch(/total_amount|unit_price|line_total|base_price|cost_price/i);
+
     const itemQuery = queryFor("order_items");
+    expect(itemQuery.filters).toContainEqual({ column: "order_id", value: orderId });
     expect(itemQuery.columns).toBe("id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity");
     expect(itemQuery.columns).not.toMatch(/unit_price|line_total|total_amount/i);
+
+    const historyQuery = queryFor("order_status_history");
+    expect(historyQuery.filters).toContainEqual({ column: "order_id", value: orderId });
   });
 
   it("shows recorded order money only when the scoped RPC explicitly authorizes it", async () => {
