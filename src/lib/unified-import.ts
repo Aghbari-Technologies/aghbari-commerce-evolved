@@ -205,7 +205,7 @@ export async function hashFileSha256(file: Blob, onProgress?: (processedBytes: n
   }
   const digest = new IncrementalSha256();
   for (let offset = 0; offset < file.size; offset += UPLOAD_CHUNK_BYTES) {
-    const bytes = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + UPLOAD_CHUNK_BYTES)).arrayBuffer());
+    const bytes = new Uint8Array(await readBlobArrayBuffer(file.slice(offset, Math.min(file.size, offset + UPLOAD_CHUNK_BYTES))));
     digest.update(bytes);
     onProgress?.(Math.min(file.size, offset + bytes.byteLength));
   }
@@ -696,7 +696,7 @@ function resolveXlsxSheetPath(target: string): string {
   return result;
 }
 
-async function readXlsxBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+async function readBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   const nativeArrayBuffer = (blob as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer;
   if (typeof nativeArrayBuffer === 'function') return nativeArrayBuffer.call(blob);
   if (typeof FileReader === 'undefined') throw new Error('المتصفح لا يوفر واجهة قراءة أجزاء ملف XLSX.');
@@ -717,7 +717,7 @@ function xlsxBlobStream(blob: Blob): ReadableStream<Uint8Array> {
   // Fallback is only for test/legacy Blob implementations. Modern browsers use Blob.stream().
   return new ReadableStream<Uint8Array>({
     start(controller) {
-      void readXlsxBlobArrayBuffer(blob).then((buffer) => {
+      void readBlobArrayBuffer(blob).then((buffer) => {
         const bytes = new Uint8Array(buffer);
         const segmentBytes = 64 * 1024;
         for (let offset = 0; offset < bytes.length; offset += segmentBytes) {
@@ -732,7 +732,7 @@ function xlsxBlobStream(blob: Blob): ReadableStream<Uint8Array> {
 async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntry>> {
   if (file.size < 22) throw new Error('ملف XLSX تالف أو أقصر من ترويسة ZIP المطلوبة.');
   const tailStart = Math.max(0, file.size - 22 - 65_535);
-  const tail = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(tailStart)));
+  const tail = new Uint8Array(await readBlobArrayBuffer(file.slice(tailStart)));
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
   let endOffset = -1;
   for (let offset = tail.length - 22; offset >= Math.max(0, tail.length - 22 - 65_535); offset -= 1) {
@@ -754,7 +754,7 @@ async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntr
   if (entryCount < 1 || entryCount > MAX_XLSX_ENTRY_COUNT || directorySize > 8 * 1024 * 1024 ||
       directoryOffset + directorySize > eocdAbsolute) throw new Error('فهرس XLSX غير صالح أو يتجاوز الحدود الآمنة.');
 
-  const bytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(directoryOffset, directoryOffset + directorySize)));
+  const bytes = new Uint8Array(await readBlobArrayBuffer(file.slice(directoryOffset, directoryOffset + directorySize)));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const entries = new Map<string, XlsxZipEntry>();
@@ -809,7 +809,7 @@ export async function parseXlsxFirstWorksheet(
       return null;
     }
     assertXlsxExpandedBytesWithinLimit(expandedBytes, entry.uncompressedSize, expandedLimit);
-    const localBytes = new Uint8Array(await readXlsxBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
+    const localBytes = new Uint8Array(await readBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
     if (localBytes.length !== 30) throw new Error('ترويسة مكون XLSX ناقصة.');
     const local = new DataView(localBytes.buffer, localBytes.byteOffset, localBytes.byteLength);
     if (local.getUint32(0, true) !== 0x04034b50 || local.getUint16(8, true) !== entry.compressionMethod) {
@@ -820,7 +820,7 @@ export async function parseXlsxFirstWorksheet(
     if (dataStart < entry.localHeaderOffset + 30 || dataEnd > file.size) throw new Error('حدود بيانات مكون XLSX غير صالحة.');
     const member = file.slice(dataStart, dataEnd);
     if (entry.compressionMethod === 0) {
-      const plainBytes = new Uint8Array(await readXlsxBlobArrayBuffer(member));
+      const plainBytes = new Uint8Array(await readBlobArrayBuffer(member));
       if (plainBytes.byteLength !== entry.uncompressedSize ||
           expandedBytes + plainBytes.byteLength > expandedLimit) {
         throw new Error('حجم مكون XLSX المخزن لا يطابق الفهرس أو يتجاوز الحد الآمن.');
