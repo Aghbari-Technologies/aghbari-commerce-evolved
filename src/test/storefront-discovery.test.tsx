@@ -117,6 +117,7 @@ function clickButton(host: HTMLElement, selector: string, index: number) {
 describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
     mocks.products.splice(0, mocks.products.length, ...initialProducts);
     mocks.popularRanking.splice(0, mocks.popularRanking.length, ...initialPopularRanking);
     mocks.featuredRanking.splice(0, mocks.featuredRanking.length, ...initialFeaturedRanking);
@@ -128,6 +129,7 @@ describe("customer storefront saved discovery", () => {
   afterEach(async () => {
     for (const mount of mounts.splice(0)) await unmount(mount);
     window.localStorage.clear();
+    window.sessionStorage.clear();
   });
 
   it("distinguishes an empty published catalog from a filtered empty result", async () => {
