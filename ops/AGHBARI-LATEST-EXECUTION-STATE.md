@@ -1,5 +1,18 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
+## LATEST EXECUTION POINTER — 2026-10-16 (admin route CI verified)
+
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this documentation update: `eb6d294c68dcc55993e56537e5e2e71f0ec9ad91`.
+- Admin source batch: `3b748d041cf47def279b033850e87e39fd397168`; official TanStack tree sync: `eb6d294c68dcc55993e56537e5e2e71f0ec9ad91`.
+- **Exact-head CI PASS** [run 38852875873](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852875873): build PASS, official generated route-tree guard PASS, **29 test files / 394 tests PASS**, PostgreSQL 17 migrations/core workflows PASS, isolated logical backup/restore PASS, lint PASS, preview smoke 4173 PASS, dev smoke 5173 PASS.
+- Added 22 direct admin route modules, test assertions for their route IDs, and official generator output. Coverage rows now distinguish source-backed read screens from `BLOCKED / NOT CONFIGURED` features whose server contracts do not exist. Do not mark those blocked feature functions PASS without backend implementation.
+- Current source-inventory estimate: 77/109 route modules using the existing matrix counting convention. Route modules and route-match tests do not prove all actions or live behavior.
+- Next task cursor: `AGH-ADMIN-SCREEN-BEHAVIOR-001` — continue implementation with focused component tests and exact-head CI after every batch; next improve a source-backed recommendation/alert workflow and deeper customer-discovery interactions without duplicating engines.
+- External gates remain distinct: Lovable project access/publish, authorized intended Supabase ref `ffxxjaolfntzbapmfbuv`, and a signed-in browser are not proven here. No production mutation, deployment or Lovable publish was performed.
+- Docs-only commit based on the verified source SHA must receive its own CI run before its HEAD inherits any PASS designation.
+
+---
+
 ## LATEST EXECUTION POINTER — 2026-10-16 (official route-tree sync)
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this sync commit: `3b748d041cf47def279b033850e87e39fd397168`.

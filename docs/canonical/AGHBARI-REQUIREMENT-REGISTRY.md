@@ -1,3 +1,8 @@
+## 2026-10-16 — Admin route tree synchronized and verified
+
+- Exact-head CI [38852875873](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852875873) on `eb6d294c68dcc55993e56537e5e2e71f0ec9ad91`: PASS for build, route-tree generator drift guard, **29 test files / 394 tests**, isolated PostgreSQL 17 migration/core workflow acceptance, logical backup/restore, lint, preview smoke on 4173, and dev smoke on 5173.
+- The official generated `src/routeTree.gen.ts` includes the new administrative direct routes. Screen coverage rows now distinguish source-backed read screens from unavailable write contracts.
+- This is source/CI evidence only. Lovable publishing, intended live Supabase and authenticated-browser E2E remain unproven external gates.
 ## 2026-10-16 — Administration screen completion slice
 
 - Source batch adds 22 missing administrative direct route modules from specification §13.4 and route-ID assertions for every route.
