@@ -574,6 +574,7 @@ export function chooseImportStatus(score: number): 'completed' | 'manual_review'
 
 type XlsxZipEntry = {
   name: string;
+  flags: number;
   compressionMethod: number;
   compressedSize: number;
   uncompressedSize: number;
@@ -780,7 +781,7 @@ async function readXlsxZipDirectory(file: Blob): Promise<Map<string, XlsxZipEntr
     if (name.startsWith('/') || name.split('/').includes('..') || entries.has(name)) {
       throw new Error('أسماء مسارات مكونات XLSX غير صالحة أو مكررة.');
     }
-    entries.set(name, { name, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
+    entries.set(name, { name, flags, compressionMethod, compressedSize, uncompressedSize, localHeaderOffset });
     offset = nextOffset;
   }
   if (offset !== bytes.length) throw new Error('طول فهرس ZIP لا يطابق عدد سجلات XLSX.');
@@ -812,10 +813,24 @@ export async function parseXlsxFirstWorksheet(
     const localBytes = new Uint8Array(await readBlobArrayBuffer(file.slice(entry.localHeaderOffset, entry.localHeaderOffset + 30)));
     if (localBytes.length !== 30) throw new Error('ترويسة مكون XLSX ناقصة.');
     const local = new DataView(localBytes.buffer, localBytes.byteOffset, localBytes.byteLength);
-    if (local.getUint32(0, true) !== 0x04034b50 || local.getUint16(8, true) !== entry.compressionMethod) {
+    const localFlags = local.getUint16(6, true);
+    const localNameLength = local.getUint16(26, true);
+    const localExtraLength = local.getUint16(28, true);
+    if (local.getUint32(0, true) !== 0x04034b50 ||
+        local.getUint16(8, true) !== entry.compressionMethod || localFlags !== entry.flags) {
       throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
     }
-    const dataStart = entry.localHeaderOffset + 30 + local.getUint16(26, true) + local.getUint16(28, true);
+    const localNameBytes = new Uint8Array(await readBlobArrayBuffer(
+      file.slice(entry.localHeaderOffset + 30, entry.localHeaderOffset + 30 + localNameLength),
+    ));
+    let localName: string;
+    try {
+      localName = new TextDecoder('utf-8', { fatal: true }).decode(localNameBytes);
+    } catch {
+      throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
+    }
+    if (localName !== entry.name) throw new Error('ترويسة مكون XLSX لا تطابق فهرس ZIP.');
+    const dataStart = entry.localHeaderOffset + 30 + localNameLength + localExtraLength;
     const dataEnd = dataStart + entry.compressedSize;
     if (dataStart < entry.localHeaderOffset + 30 || dataEnd > file.size) throw new Error('حدود بيانات مكون XLSX غير صالحة.');
     const member = file.slice(dataStart, dataEnd);

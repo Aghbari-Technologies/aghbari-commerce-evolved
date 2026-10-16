@@ -60,6 +60,47 @@ function makeStoredZip(entries: StoredZipFixtureEntry[]): Blob {
   return new Blob([...localParts, ...centralParts, end]);
 }
 
+async function repointCentralDirectoryEntry(
+  archive: Blob,
+  sourcePath: string,
+  targetPath: string,
+): Promise<Blob> {
+  const bytes = new Uint8Array(await archive.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  let directoryOffset = -1;
+  let directorySize = 0;
+  for (let offset = bytes.length - 22; offset >= 0; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      directorySize = view.getUint32(offset + 12, true);
+      directoryOffset = view.getUint32(offset + 16, true);
+      break;
+    }
+  }
+  if (directoryOffset < 0 || directoryOffset + directorySize > bytes.length) {
+    throw new Error("ZIP fixture has no valid central directory");
+  }
+
+  let sourceEntryOffset = -1;
+  let targetLocalHeaderOffset = -1;
+  const directoryEnd = directoryOffset + directorySize;
+  for (let offset = directoryOffset; offset + 46 <= directoryEnd;) {
+    if (view.getUint32(offset, true) !== 0x02014b50) throw new Error("ZIP fixture central entry is invalid");
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const path = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
+    if (path === sourcePath) sourceEntryOffset = offset;
+    if (path === targetPath) targetLocalHeaderOffset = view.getUint32(offset + 42, true);
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  if (sourceEntryOffset < 0 || targetLocalHeaderOffset < 0) {
+    throw new Error("ZIP fixture source or target member is missing");
+  }
+  view.setUint32(sourceEntryOffset + 42, targetLocalHeaderOffset, true);
+  return new Blob([bytes]);
+}
+
 function xlsxColumnName(columnNumber: number): string {
   let value = columnNumber;
   let name = "";
@@ -175,6 +216,23 @@ describe("large-file import boundaries", () => {
     // XLXS decoding must cap a maliciously long field to a small invalid sentinel.
     expect(overlongRow?.[1]).toHaveLength(MAX_IMPORT_CELL_CHARS + 1);
     expect(validateCsvRow(overlongRow!, ["item_code", "name"], 2).status).toBe("rejected");
+  });
+
+  it("rejects a central-directory entry redirected to another member's local header", async () => {
+    const workbookXml = '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" r:id="rId1"/></sheets></workbook>';
+    const archive = makeStoredZip([
+      { path: "xl/workbook.xml", content: workbookXml },
+      {
+        path: "xl/_rels/workbook.xml.rels",
+        content: '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+      },
+      { path: "xl/worksheets/sheet1.xml", content: '<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>000125</t></is></c></row></sheetData></worksheet>' },
+      // Same byte count/content lets the old reader consume this payload while trusting the wrong path.
+      { path: "xl/decoy.xml", content: workbookXml },
+    ]);
+    const redirected = await repointCentralDirectoryEntry(archive, "xl/workbook.xml", "xl/decoy.xml");
+    await expect(parseXlsxFirstWorksheet(redirected, () => undefined))
+      .rejects.toThrow("ترويسة مكون XLSX لا تطابق فهرس ZIP");
   });
 
   it("rejects a forged XLSX central-directory expansion claim before reading member bytes", async () => {
