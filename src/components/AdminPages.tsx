@@ -603,12 +603,14 @@ export function Devices({ onNotice }: { onNotice: (m: string) => void }) {
   </AdminPage>;
 }
 
-export function SettingsPage({ onNotice }: { onNotice: (m: string) => void }) {
+export type SettingsPageTab = 'general' | 'storefront' | 'appearance' | 'access';
+export function SettingsPage({ onNotice, initialTab = 'general' }: { onNotice: (m: string) => void; initialTab?: SettingsPageTab }) {
   const { user } = useAuth();
   const canManageRoles = Boolean(user?.roles.includes('admin'));
   const canManageMoneyDisplay = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager'));
   const { data: settings, loading, refetch } = useFetch(fetchSettings);
-  const [tab, setTab] = useState<'general' | 'storefront' | 'appearance' | 'access'>('general');
+  const [tab, setTab] = useState<SettingsPageTab>(initialTab);
+  useEffect(() => { setTab(initialTab === 'access' && !canManageRoles ? 'general' : initialTab); }, [initialTab, canManageRoles]);
   const [saving, setSaving] = useState(false);
   const map = useMemo(() => { const m: Record<string, unknown> = {}; settings?.forEach((s: AdminSetting) => m[s.key] = s.value); return m; }, [settings]);
 

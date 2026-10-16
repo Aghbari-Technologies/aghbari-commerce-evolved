@@ -24,6 +24,7 @@ import {
   AiCenter, Devices, Field, Loading, ErrorBox, Empty, Button,
   TableWrap, Modal, Notifications, OrderDetail, SettingsPage, Suppliers,
   type AiCenterTab,
+  type SettingsPageTab,
 } from '@/components/AdminPages';
 import { OperationsCenter, type OperationTab } from '@/components/OperationsCenter';
 import { StaffQuotesPage, StaffFinancePage } from '@/components/CustomerWorkflows';
@@ -62,7 +63,7 @@ const adminPaths: Record<View, string> = {
   quotes: '/admin/quotes', finance: '/admin/finance',
 };
 
-function AppContent({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string }) {
+function AppContent({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId, initialSettingsTab }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string; initialSettingsTab?: SettingsPageTab }) {
   const { user, ready, signOut } = useAuth();
   const canOperateAdmin = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'staff'));
   const canManageFinance = Boolean(user?.roles.some((role) => role === 'admin' || role === 'manager' || role === 'accountant'));
@@ -160,7 +161,7 @@ function AppContent({ initialView = 'dashboard', initialOperationTab, initialAiT
           {view === 'notifications' && <Notifications onNotice={showNotice} />}
           {view === 'data' && <DataCenter onNotice={showNotice} />}
           {view === 'operations' && <OperationsCenter onNotice={showNotice} initialTab={initialOperationTab} />}
-          {view === 'settings' && <SettingsPage onNotice={showNotice} />}
+          {view === 'settings' && <SettingsPage onNotice={showNotice} initialTab={initialSettingsTab} />}
           {view === 'quotes' && <StaffQuotesPage />}
           {view === 'finance' && <StaffFinancePage />}
             </>
@@ -195,8 +196,8 @@ function AppContent({ initialView = 'dashboard', initialOperationTab, initialAiT
   );
 }
 
-export function AdminApp({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string }) {
-  return <AppContent initialView={initialView} initialOperationTab={initialOperationTab} initialAiTab={initialAiTab} initialOrderDetailId={initialOrderDetailId} />;
+export function AdminApp({ initialView = 'dashboard', initialOperationTab, initialAiTab, initialOrderDetailId, initialSettingsTab }: { initialView?: View; initialOperationTab?: OperationTab; initialAiTab?: AiCenterTab; initialOrderDetailId?: string; initialSettingsTab?: SettingsPageTab }) {
+  return <AppContent initialView={initialView} initialOperationTab={initialOperationTab} initialAiTab={initialAiTab} initialOrderDetailId={initialOrderDetailId} initialSettingsTab={initialSettingsTab} />;
 }
 
 function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
