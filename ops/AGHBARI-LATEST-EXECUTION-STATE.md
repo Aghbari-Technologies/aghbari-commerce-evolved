@@ -2,19 +2,19 @@
 
 ## Active workstream
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`.
-- Completed latest source SHA `c0365bafe6f8cf98692f2fbde44c8494b3b618a9`, Actions [38833494937](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38833494937) SUCCESS. Current branch HEAD was verified at this SHA before this documentation checkpoint; only that code SHA has this exact CI proof.
-- Latest source CI: exact SHA `c0365bafe6f8cf98692f2fbde44c8494b3b618a9`, Actions [38833494937](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38833494937) SUCCESS. This run also passed the new company membership capability assertions.
+- Completed latest source SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. Finance membership-aware statement regression passed on this exact code SHA; current branch HEAD was verified at this SHA before this documentation checkpoint.
+- Latest source CI: exact SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS: 21/21 unit-test files, 249/249 tests, isolated PostgreSQL 17 migration/workflow tests including finance-member statement access and buyer denial, logical backup/restore, lint/build, preview smoke 4173 and dev smoke 5173.
 - Last previously verified baseline: exact source/workflow SHA `f71f3f70f0683685d7707b085e7ef63fa1ec89a5`, Actions [38829458881](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38829458881) PASS, including 21 test files, isolated PostgreSQL migration/workflow checks, RLS/policy/trigger/sequence/extension signatures, lint, production build, preview smoke 4173 and dev-server smoke 5173. Subsequent test-fixture and globals/ACL changes are evaluated only by current candidate CI above.
 
 ## Only next task
-- `next_task_id = AGH-FINANCE-DOCS-001` — exact-SHA CI is pending for the membership-aware statement fix. Read its run, fix any exact logged cause, then checkpoint before moving to external browser/production gates or the next source task.
+- `next_task_id = AGH-ONYX-INTEGRATION-001` — inspect only existing Onyx contracts, adapters, and import/export call sites. Do not invent API contracts or credentials; if no vendor contract exists, mark integration blocked and continue to `AGH-ONYX-XLSX-001`. `AGH-SEC-BROWSER-E2E-001` remains blocked pending authorized intended Lovable project/session and published SHA.
 - Completed source acceptance for `AGH-OPS-DR-001`: exact candidate SHA `3420307d1d54a46a4f2f48a8bfc68a5b50ba494b`, Actions [38832196621](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38832196621) **SUCCESS**. Unit tests 21/21 files and 249/249 tests; import streaming benchmark PASS; isolated PostgreSQL 17 migration/workflow suite PASS; backup/restore signatures PASS; lint, build, preview smoke 4173 and dev smoke 5173 PASS.
 - XLSX ZIP regression now checks local member filename + general-purpose flags against central-directory metadata and rejects central-directory redirection to another member. Test helper has FileReader fallback for the CI test Blob.
 - Benchmark on this exact SHA: 100,000 business rows + header, 76.28 MiB, 1,121.14 ms, 68.04 MiB/s, sampled heap delta +15,511,608 bytes / RSS delta +36,642,816 bytes over 1,221 samples. Synthetic single-run sample only; not production P95/peak.
 - `AGH-OPS-DR-001` remains **PARTIAL** because production backup/restore, production failover, and live runtime proof are not available; do not close the umbrella requirement. Lovable/browser/prod access remains a separate gate.
 
 ## Evidence checkpoint
-- Last tested source SHA `064f3e4d7e84e53c2b1a4aaf88553f709637bb37` / Actions `38832735509` SUCCESS. Next commit is a documentation checkpoint; no test evidence transfers to later code SHA.
+- Last tested source SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795` / Actions `38834000106` SUCCESS. This next commit is a documentation checkpoint; no test evidence transfers to later code SHA.
 - Previously verified importer profile SHA: `c241970e648f7292178e0a9a88bdf4938a69ef2f` / Actions 38828317225.
 - Previously verified PWA source preview: `2ee243599c60054468f419c541f3d52ea7e2a111` / Actions 38825705008 and `cdfed3adb21ee881f85117e6f2f163a4c7cf0de2` / Actions 38825885494.
 - Recheck exact HEAD every resume. Isolated CI, live browser acceptance, and production database proof remain separate claims.
@@ -81,3 +81,9 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - Fix: resolve `current_customer_id()` + `current_organization_id()`, require active profile/org context and `current_customer_can('statement.read')`, verify the customer/organization pair before running the complete-ledger aggregates. Preserve all existing summary counts, per-currency amounts, bounded detail arrays and payment sums.
 - Regression coverage: buyer member is explicitly denied statement access; finance member gets the linked company statement and full-ledger totals for an existing invoice. Local `node scripts/test-database-migrations.mjs` NOT RUN (no local checkout; GitHub DNS blocked). New exact-SHA CI is PENDING for this candidate.
 - Next: run exact-SHA CI, repair failures before advancing cursor. Intended-production migration/readback and authenticated published PDF/browser evidence remain external gates.
+
+
+## AGH-FINANCE-DOCS-001 acceptance checkpoint
+- Source fix PASS on exact SHA `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. Unit tests: 21/21 files, 249/249 tests. PostgreSQL 17 migration/workflow suite passed, including finance-member statement access and buyer-member denial. Logical backup/restore, lint, build, preview smoke 4173 and dev smoke 5173 also passed.
+- The first candidate `0fccfa2ee1d5d0bed4015f237afcf8e6ff09b8f8` failed only in JS test-fixture ordering because `financeAuthUserId` was referenced before its declaration. The assertion was moved after finance invitation acceptance and rerun successfully.
+- Next source task: `AGH-ONYX-INTEGRATION-001`. Published browser routes remain blocked pending access to the intended project and authorized signed-in browser; do not spend Lovable credits on exploratory messages.
