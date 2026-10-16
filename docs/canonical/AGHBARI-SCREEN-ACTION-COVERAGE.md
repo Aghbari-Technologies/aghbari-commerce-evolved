@@ -5,9 +5,9 @@
 ## Baseline
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72; branch `fix/acceptance-hardening-cart-finance-20261015`.
-- Current source HEAD before this matrix correction: `d2a232fc52d94d821cea95f0daaaa24692462e30`.
+- Current source HEAD at the start of this slice: `36f5430511fc84c36552925228e9b26f81b69896`; this documentation and route slice adds `/templates` using the existing reorder-template workflow. Exact-head CI for the new commits is pending.
 - Exact-head CI on `d2a232fc52d94d821cea95f0daaaa24692462e30` was IN PROGRESS at last readback: [Actions 38843235344](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38843235344).
-- §13.4 requires 64 customer paths and 45 admin paths (109 total). The tree has 49 route modules excluding the root layout (including the API endpoints). 32/109 (29.4%) have an exact matching source route module before considering partial candidates/aliases; alias candidates do not count as exact paths.
+- §13.4 requires 64 customer paths and 45 admin paths (109 total). The tree has 49 route modules excluding the root layout (including the API endpoints). 34/109 (31.2%) have an exact matching source route module before considering partial candidates/aliases; alias candidates do not count as exact paths.
 
 ## Behavior contracts by screen family
 
@@ -60,7 +60,7 @@
 | `/orders/:id` | عميل | `src/routes/orders.$id.tsx` | `src/routes/orders.$id.tsx` | Authenticated customer or company member; tenant scope via server/RLS | PARTIAL — exact route module exists; full actions/states/role behavior not proven | route-specific automated test NOT PROVEN |
 | `/reorder` | عميل | `src/routes/reorder.tsx` | `src/routes/reorder.tsx` | Authenticated customer or company member; tenant scope via server/RLS | PARTIAL — exact route module exists; full actions/states/role behavior not proven | app-routing route-match test; workflow coverage remains partial |
 | `/reorder/:id` | عميل | `MISSING` | `src/routes/reorder.tsx` | Authenticated customer or company member; tenant scope via server/RLS | PARTIAL — closest component exists but exact deep-link route is absent | exact URL match NOT REGISTERED |
-| `/templates` | عميل | `MISSING` | `—` | Authenticated customer or company member; tenant scope via server/RLS | MISSING — no exact route module or verified equivalent | NOT RUN |
+| `/templates` | عميل | `src/routes/templates.tsx` | `ReorderWorkspacePage` in `src/components/CustomerWorkflows.tsx` | Authenticated customer/company member; template reads/writes remain tenant-scoped through existing data calls/RLS | IMPLEMENTED IN SOURCE — exact route reuses existing saved reorder-template workflow; create/edit/delete persistence and read-after-write remain PARTIAL until tests confirm | `src/test/app-routing.test.tsx` route-match assertion added; exact-head CI pending |
 | `/templates/:id` | عميل | `MISSING` | `—` | Authenticated customer or company member; tenant scope via server/RLS | MISSING — no exact route module or verified equivalent | NOT RUN |
 | `/templates/new` | عميل | `MISSING` | `—` | Authenticated customer or company member; tenant scope via server/RLS | MISSING — no exact route module or verified equivalent | NOT RUN |
 | `/templates/:id/edit` | عميل | `MISSING` | `—` | Authenticated customer or company member; tenant scope via server/RLS | MISSING — no exact route module or verified equivalent | NOT RUN |
