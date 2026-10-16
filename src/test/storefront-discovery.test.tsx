@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   fetchCategories: vi.fn(),
+  productFetchError: null as string | null,
+  categoryFetchError: null as string | null,
+  refetchProducts: vi.fn(),
   fetchPromotions: vi.fn(),
   fetchPopularProductRanking: vi.fn(),
   fetchFeaturedProductRanking: vi.fn(),
@@ -44,8 +47,8 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/useFetch", () => ({
   useFetch: (fetcher: unknown) => {
-    if (fetcher === mocks.fetchProducts) return { data: mocks.products, loading: false, error: null, refetch: vi.fn() };
-    if (fetcher === mocks.fetchCategories) return { data: [], loading: false, error: null, refetch: vi.fn() };
+    if (fetcher === mocks.fetchProducts) return { data: mocks.productFetchError ? null : mocks.products, loading: false, error: mocks.productFetchError, refetch: mocks.refetchProducts };
+    if (fetcher === mocks.fetchCategories) return { data: mocks.categoryFetchError ? null : [], loading: false, error: mocks.categoryFetchError, refetch: vi.fn() };
     if (fetcher === mocks.fetchPromotions) return { data: [], loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchPopularProductRanking) return { data: mocks.popularRanking, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchFeaturedProductRanking) return { data: mocks.featuredRanking, loading: false, error: null, refetch: vi.fn() };
@@ -122,6 +125,9 @@ describe("customer storefront saved discovery", () => {
     mocks.popularRanking.splice(0, mocks.popularRanking.length, ...initialPopularRanking);
     mocks.featuredRanking.splice(0, mocks.featuredRanking.length, ...initialFeaturedRanking);
     mocks.user = null;
+    mocks.productFetchError = null;
+    mocks.categoryFetchError = null;
+    mocks.refetchProducts.mockReset();
     mocks.rpc.mockReset();
     mocks.rpc.mockResolvedValue({ data: null, error: null });
   });
@@ -148,6 +154,24 @@ describe("customer storefront saved discovery", () => {
     expect(detail.host.querySelector(".sf-btn-primary")?.textContent).toContain("إضافة إلى السلة");
     expect(detail.host.textContent).toContain("أضف للمفضلة");
     expect(detail.host.textContent).not.toContain("1500");
+  });
+
+  it("shows catalog and category read failures with a working retry action", async () => {
+    mocks.productFetchError = "تعذر الاتصال بمصدر الكتالوج";
+    mocks.categoryFetchError = "تعذر الاتصال بمصدر التصنيفات";
+
+    const catalog = await mountAt("/catalog");
+    expect(catalog.host.querySelector('[role="alert"]')?.textContent).toContain("تعذر تحميل الكتالوج");
+    expect(catalog.host.textContent).toContain("تعذر الاتصال بمصدر الكتالوج");
+    expect(catalog.host.textContent).toContain("تعذر تحميل التصنيفات؛ يمكنك البحث بالاسم أو رمز الصنف مؤقتًا.");
+
+    const retry = Array.from(catalog.host.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.trim() === "إعادة المحاولة");
+    expect(retry).toBeDefined();
+    await act(async () => {
+      retry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(mocks.refetchProducts).toHaveBeenCalledTimes(1);
   });
 
   it("renders an explicit unavailable state for an unknown product identifier", async () => {
