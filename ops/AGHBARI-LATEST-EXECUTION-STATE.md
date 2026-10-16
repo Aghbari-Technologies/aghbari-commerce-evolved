@@ -1,15 +1,14 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
-## LATEST EXECUTION POINTER — 2026-10-16 (canonical route reconciliation + fixture isolation)
+## LATEST EXECUTION POINTER — 2026-10-16 (password reset hardening)
 
-- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Source behavior last full CI PASS: `e6fc6a9882cbb1b737fd223b06b3b999ba2dd2a7`; current docs/test head before this checkpoint: `23f1754d5a86931f6c039bf53adb595913ed6074`.
-- CI `38876694584` on `e6fc6a9` passed build, official route-tree guard, unit tests, PostgreSQL 17, backup/restore, lint, preview 4173 and dev 5173. A docs/test CI run for the prior current head is separately in progress; this changed test/docs commit needs exact-head CI too.
-- Route reconciliation: canonical spec §13.4 has 64 customer + 45 admin = 109 unique paths. All 109 occur in the matrix; the only 110th row is supplementary `/offline`. No required canonical path is missing from the matrix.
-- Matrix is normalized/classified: 90 PARTIAL, 15 BLOCKED, 2 SOURCE ADDED, 3 IMPLEMENTED IN SOURCE, 0 COMPLETE. The complete BLOCKED inventory and cross-cutting open requirements now live in the same canonical coverage matrix. Route-list representation is not functional acceptance.
-- The category-route regression changes product category IDs. Test setup now clones initial product objects rather than reusing shared object references to prevent fixture mutation leaking between tests.
-- Next: exact-head CI on this docs/test checkpoint; then continue source-feasible PARTIAL behavior, starting with direct-link/state/role acceptance. Remaining external gates are authenticated checkout/order read-after-write, deployed finance/PDF/manifest privacy and routes, authorized intended Supabase ref `ffxxjaolfntzbapmfbuv`, and exact Lovable project/deployed SHA.
-- Supabase production access remains NOT_PROVEN because saved evidence was permission-denied; never substitute `mrcyqezbhpncuvaehwgf`. Lovable synced/published SHA and authenticated deployed-browser acceptance also remain NOT_PROVEN. No fake integration success.
-- Resume cursor: `AGH-COVERAGE-LEDGER-001` path reconciliation, then advance to the next source-feasible PARTIAL screen/action.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent SHA `aefbe2f06f9b49f2f83453abcbe6f252bc79d04b`; exact-head docs/test CI was started as run `38877466095`.
+- The last fully verified source checkpoint `e6fc6a9882cbb1b737fd223b06b3b999ba2dd2a7` passed all CI jobs: build, generated-route check, unit tests, PostgreSQL 17 migrations/core workflow, backup/restore, lint, preview 4173 and dev 5173. Subsequent documentation checkpoint reconciled all 109 canonical routes and added an independent product-fixture clone to prevent category-test mutation leakage. Its exact-head workflow must also be checked.
+- This source batch hardens `src/routes/reset-password.tsx`: the new password must be at least eight characters, confirmation must match, returned Supabase errors are reported without false success, rejected network promises are caught, and `finally` always re-enables the form. Success navigation occurs only after `updateUser` resolves without an error. Five focused tests were added in `src/test/reset-password.test.tsx`.
+- Route inventory is reconciled: §13.4 has 64 customer + 45 admin = 109 required routes; all are represented in the matrix. `/offline` is an extra convenience route. Matrix: 90 PARTIAL, 15 BLOCKED, 2 SOURCE ADDED, 3 IMPLEMENTED IN SOURCE, 0 COMPLETE.
+- Exact-head CI is required for this reset-page/test change. Local checkout isn't available; do not claim a test PASS unless Actions reports it for the resulting exact SHA.
+- Remaining major blockers: 90 PARTIAL workflows still need screen/action acceptance; 15 BLOCKED capabilities are enumerated in the same matrix; authenticated checkout/order read-after-write; live finance document/PDF/manifest routes and privacy; intended Supabase ref `ffxxjaolfntzbapmfbuv` remains permission-denied in saved evidence; exact Lovable project and sync/published SHA are unknown; true backend writes/delivery for company/profile/approval/payment, AI execution/governance, invitations, dev-AI, production restore, Onyx and WhatsApp/push remain unverified.
+- Resume cursor: `AGH-RESET-PASSWORD-ROBUSTNESS-001`. First prove the current head through full CI, then resume the next source-backed PARTIAL screen while refusing to simulate unavailable backend actions.
 
 ---
 ## LATEST EXECUTION POINTER — 2026-10-16 (checkout and order-history acceptance expanded)
