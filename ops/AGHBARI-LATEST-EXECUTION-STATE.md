@@ -8,7 +8,7 @@
 
 ## Exact-SHA evidence and latest-head discipline
 - **Latest source change accepted:** `84cb6350d6fb797206c6c56ba74653f1253d4512`, [Actions 38835322893](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38835322893) **SUCCESS**. The earlier `2ef8aa181bd787cb829e3158e569acdf5ce848a3` run failed only because the test used a non-file `import.meta.url` after Vitest transformation. The test now uses a repository-relative path. CI passed 21/21 test files, isolated PostgreSQL 17 migration/workflow acceptance, logical backup/restore, lint, build and preview/dev smoke. This proves the source candidate only; live AI provider/Edge deployment remains unproven.
-- **Last remote PR HEAD observed before this checkpoint write:** `db4d84fae0d3030456da1d035b41e983008e8a96` (documentation-only checkpoint), exact-head Actions [38835716890](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38835716890) was **IN PROGRESS** at last check. This state update creates a newer commit. Resolve the new live branch HEAD and its exact-SHA CI after this write; do not transfer a result from either prior SHA.
+- Documentation-only checkpoint commits were added after the source candidate passed. Their CI is SHA-specific. On every resume, resolve the live remote branch HEAD and its matching Actions run once; do not assume any earlier documentation commit/run is current. The source proof above applies to source SHA `84cb6350d6fb797206c6c56ba74653f1253d4512`, not to subsequent commit SHAs.
 - No local checkout is mounted in this execution context; no local `git fetch/status/HEAD` command was run. GitHub remote refs/files/Actions are the evidence source.
 
 ## Only task cursor
