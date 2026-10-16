@@ -204,6 +204,10 @@ describe("customer storefront saved discovery", () => {
 
     expect(imageButton?.tagName).toBe("BUTTON");
     expect(imageButton?.getAttribute("aria-label")).toBe("عرض تفاصيل Rice");
+    const favouriteAction = Array.from(catalog.host.querySelectorAll<HTMLButtonElement>(".sf-card-actions button"))
+      .find((button) => button.getAttribute("aria-label") === "إضافة Rice للمفضلة");
+    expect(favouriteAction).toBeDefined();
+
     imageButton?.focus();
     expect(document.activeElement).toBe(imageButton);
 
@@ -213,9 +217,6 @@ describe("customer storefront saved discovery", () => {
     });
 
     expect(catalog.router.state.location.pathname).toBe("/product/product-1");
-    expect(Array.from(catalog.host.querySelectorAll<HTMLButtonElement>(".sf-card-actions button"))
-      .map((button) => button.getAttribute("aria-label")))
-      .toContain("إضافة Rice للمفضلة");
   });
 
   it("distinguishes an empty published catalog from a filtered empty result", async () => {
