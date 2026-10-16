@@ -18,8 +18,8 @@ Treat the following as **not implemented, partial, or not proven** until each ro
 
 ## 2026-10-16 — Tenant isolation and dev-AI nested routes
 
-- The PostgreSQL acceptance test saw two prompt rows for the foreign reviewer where one was required. The test now verifies the foreign JWT/profile/organization identity before checking visible prompt and audit rows.
-- Additive migration `20261016200000_ai_prompt_tenant_isolation_hardening.sql` adds RESTRICTIVE tenant RLS for prompt templates and prompt audit rows, so an extra permissive SELECT policy cannot broaden visibility beyond `current_organization_id()`.
+- The PostgreSQL governance test reused the same profile/auth UUIDs as an earlier company-invitation test. Its `ON CONFLICT (id) DO NOTHING` retained the earlier primary-tenant profile, so `current_organization_id()` read the existing primary-tenant row instead of the intended foreign tenant. The governance fixture now uses unique UUIDs and validates JWT/profile/organization independently.
+- Additive migration `20261016200000_ai_prompt_tenant_isolation_hardening.sql` also adds RESTRICTIVE tenant RLS for prompt templates and audit rows as independent defense-in-depth, so extra permissive policies cannot broaden visibility beyond `current_organization_id()`.
 - `/admin/dev-ai` had the same parent-without-`Outlet` defect as the prior AI center. The index keeps its overview while nested `audit`, `patches`, and `settings` paths render their registered screen components. Three direct-route tests require the appropriate honest `BLOCKED / NOT CONFIGURED` state.
 - Exact-head CI must prove both DB isolation and nested screen behavior before closure.
 

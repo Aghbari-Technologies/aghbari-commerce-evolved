@@ -2417,8 +2417,8 @@ async function main() {
     // AGH-AI-PROMPT-GOVERNANCE-001: tenant isolation, immutable versions, maker-checker and audit trail.
   const governanceReviewerProfileId = "f7777777-7777-4777-8777-777777777777";
   const governanceReviewerAuthUserId = "77777777-7777-4777-8777-777777777777";
-  const foreignGovernanceProfileId = "f8888888-8888-4888-8888-888888888888";
-  const foreignGovernanceAuthUserId = "88888888-8888-4888-8888-888888888888";
+  const foreignGovernanceProfileId = "f0e1d2c3-b4a5-4678-9abc-def012345678";
+  const foreignGovernanceAuthUserId = "a0e1d2c3-b4a5-4678-9abc-def012345678";
   await db.unsafe(
     "insert into public.profiles(id,auth_user_id,organization_id,full_name,email,is_active) values($1,$2,$3,'CI Governance Reviewer','ci-governance-reviewer@example.test',true) on conflict(id) do nothing",
     [governanceReviewerProfileId,governanceReviewerAuthUserId,organizationId],
