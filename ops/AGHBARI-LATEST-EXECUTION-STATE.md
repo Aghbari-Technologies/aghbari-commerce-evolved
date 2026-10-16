@@ -1,15 +1,15 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
-## LATEST EXECUTION POINTER — 2026-10-16 (admin route CI verified)
+## LATEST EXECUTION POINTER — 2026-10-16 (storefront routes and saved-list privacy verified)
 
-- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this documentation update: `eb6d294c68dcc55993e56537e5e2e71f0ec9ad91`.
-- Admin source batch: `3b748d041cf47def279b033850e87e39fd397168`; official TanStack tree sync: `eb6d294c68dcc55993e56537e5e2e71f0ec9ad91`.
-- **Exact-head CI PASS** [run 38852875873](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852875873): build PASS, official generated route-tree guard PASS, **29 test files / 394 tests PASS**, PostgreSQL 17 migrations/core workflows PASS, isolated logical backup/restore PASS, lint PASS, preview smoke 4173 PASS, dev smoke 5173 PASS.
-- Added 22 direct admin route modules, test assertions for their route IDs, and official generator output. Coverage rows now distinguish source-backed read screens from `BLOCKED / NOT CONFIGURED` features whose server contracts do not exist. Do not mark those blocked feature functions PASS without backend implementation.
-- Current source-inventory estimate: 77/109 route modules using the existing matrix counting convention. Route modules and route-match tests do not prove all actions or live behavior.
-- Next task cursor: `AGH-ADMIN-SCREEN-BEHAVIOR-001` — continue implementation with focused component tests and exact-head CI after every batch; next improve a source-backed recommendation/alert workflow and deeper customer-discovery interactions without duplicating engines.
-- External gates remain distinct: Lovable project access/publish, authorized intended Supabase ref `ffxxjaolfntzbapmfbuv`, and a signed-in browser are not proven here. No production mutation, deployment or Lovable publish was performed.
-- Docs-only commit based on the verified source SHA must receive its own CI run before its HEAD inherits any PASS designation.
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this docs update: `812ca4e816c2becbf061a1a9554a2adc83f35eee`.
+- Completed cursor: `AGH-STOREFRONT-DISCOVERY-PRIVACY-001`.
+- Exact-head source CI [38854760631](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38854760631) on `812ca4e816c2becbf061a1a9554a2adc83f35eee` PASS: build, official generated route tree, unit tests, PostgreSQL 17 migrations/workflows, isolated logical backup/restore, lint, preview smoke 4173 and dev smoke 5173.
+- Verified work includes: 22 direct admin route modules with route-ID assertions; official TanStack tree sync; server-ranked `/popular`; database-backed/admin-editable `/featured`; `/product/:id` detail and unknown-ID tests; `/wishlist` and `/compare` profile/origin-scoped storage with a two-profile isolation regression.
+- Source-inventory convention remains 77/109; route presence does not mean every business action or live integration is complete. Some administration functions remain explicitly `BLOCKED / NOT CONFIGURED` when verified backend contracts do not exist.
+- External gates remain unproven: sync/publish to Lovable, target Supabase project `ffxxjaolfntzbapmfbuv`, and authenticated live-browser E2E. No production migration, mutation, deployment or Lovable publish was performed. Legacy v1 saved lists are not imported automatically into profile-scoped v2 keys, to avoid cross-profile disclosure.
+- Next cursor: `AGH-STOREFRONT-ROUTE-ACCEPTANCE-002` — continue source-backed customer journey testing around cart/checkout/order history and explicit authorization/error states; preserve server-authoritative prices, atomic order creation, and tenant isolation. Do not simulate success when backend contracts are absent.
+- This documentation-only commit needs its own exact-head CI before its HEAD can be marked PASS.
 
 ---
 

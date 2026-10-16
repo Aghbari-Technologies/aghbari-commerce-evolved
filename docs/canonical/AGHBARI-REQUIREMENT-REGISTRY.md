@@ -1,3 +1,11 @@
+## 2026-10-16 — Storefront discovery and saved-list isolation verified
+
+- Exact-head CI [38854760631](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38854760631) on `812ca4e816c2becbf061a1a9554a2adc83f35eee` passed build, generated route-tree guard, unit tests, PostgreSQL 17 workflows, isolated backup/restore, lint, preview 4173 and dev 5173.
+- `/popular` is based on tenant-derived order-line data and returns ranked product IDs/positions only. UI/database acceptance verifies eligible states, pending exclusion, limits, safe result shape and tenant isolation.
+- `/featured` uses a persisted `is_featured` field editable in the existing staff product form; the RPC filters active products under server-derived tenant context and returns IDs/positions only.
+- `/product/:id` direct details/not-found behavior and wishlist/compare profile-scoped storage have regression tests. Wishlist/compare remain local-only.
+- Production Supabase, Lovable publishing and signed-in live-browser acceptance remain external unproven gates.
+
 ## 2026-10-16 — Admin route tree synchronized and verified
 
 - Exact-head CI [38852875873](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852875873) on `eb6d294c68dcc55993e56537e5e2e71f0ec9ad91`: PASS for build, route-tree generator drift guard, **29 test files / 394 tests**, isolated PostgreSQL 17 migration/core workflow acceptance, logical backup/restore, lint, preview smoke on 4173, and dev smoke on 5173.
