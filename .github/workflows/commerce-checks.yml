@@ -153,6 +153,67 @@ jobs:
             printf '%s' "$signature"
           }
 
+          catalog_security_signature() {
+            local database="$1"
+            docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              SELECT
+                (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relrowsecurity)::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relforcerowsecurity)::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', n.nspname, c.relname, c.relrowsecurity::text, c.relforcerowsecurity::text), E'\n' ORDER BY n.nspname, c.relname)
+                  FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  WHERE n.nspname='public' AND c.relkind IN ('r','p')), '')) || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_policies WHERE schemaname='public')::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', schemaname, tablename, policyname, permissive, roles::text, cmd, coalesce(qual,''), coalesce(with_check,'')), E'\n' ORDER BY schemaname, tablename, policyname)
+                  FROM pg_catalog.pg_policies WHERE schemaname='public'), '')) || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  WHERE n.nspname='public' AND NOT t.tgisinternal)::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', n.nspname, c.relname, t.tgname, t.tgenabled, pg_catalog.pg_get_triggerdef(t.oid, true)), E'\n' ORDER BY n.nspname, c.relname, t.tgname)
+                  FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  WHERE n.nspname='public' AND NOT t.tgisinternal), '')) || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S')::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_extension)::text || ':' ||
+                md5(coalesce((SELECT string_agg(concat_ws('|', e.extname, e.extversion, n.nspname), E'\n' ORDER BY e.extname)
+                  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid=e.extnamespace), ''));
+            "
+          }
+
+          sequence_state_signature() {
+            local database="$1"
+            local output signature
+            output="$(docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              DO \$dr\$
+              DECLARE
+                item record;
+                state record;
+                sequence_summary text := '';
+              BEGIN
+                FOR item IN
+                  SELECT n.nspname, c.relname, s.seqstart, s.seqincrement, s.seqmax, s.seqmin, s.seqcache, s.seqcycle, s.seqtypid::regtype::text AS seqtype
+                  FROM pg_catalog.pg_class c
+                  JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                  JOIN pg_catalog.pg_sequence s ON s.seqrelid=c.oid
+                  WHERE n.nspname='public' AND c.relkind='S'
+                  ORDER BY n.nspname, c.relname
+                LOOP
+                  EXECUTE format('SELECT last_value::text, is_called::text FROM %I.%I', item.nspname, item.relname) INTO state;
+                  sequence_summary := sequence_summary || concat_ws('|',
+                    item.nspname, item.relname, item.seqstart, item.seqincrement, item.seqmax,
+                    item.seqmin, item.seqcache, item.seqcycle, item.seqtype, state.last_value, state.is_called
+                  ) || E'\n';
+                END LOOP;
+                RAISE NOTICE 'AGHBARI_SEQUENCE_SIGNATURE=%', md5(sequence_summary);
+              END
+              \$dr\$;
+            " 2>&1)"
+            signature="$(printf '%s\n' "$output" | sed -n 's/^NOTICE:  AGHBARI_SEQUENCE_SIGNATURE=//p' | tail -n 1)"
+            if [[ -z "$signature" ]]; then
+              echo "Could not calculate PostgreSQL sequence state signature." >&2
+              printf '%s\n' "$output" >&2
+              return 1
+            fi
+            printf '%s' "$signature"
+          }
+
           source_schema="$(schema_signature aghbari_test)"
           restored_schema="$(schema_signature aghbari_restore_test)"
           if [[ -z "$source_schema" || "$source_schema" != "$restored_schema" ]]; then
@@ -165,7 +226,19 @@ jobs:
             echo "Row-data signature mismatch after logical restore: source=$source_data restored=$restored_data"
             exit 1
           fi
-          echo "PASS isolated PostgreSQL 17 logical backup/restore; schema_signature=$source_schema data_signature=$source_data"
+          source_catalog="$(catalog_security_signature aghbari_test)"
+          restored_catalog="$(catalog_security_signature aghbari_restore_test)"
+          if [[ -z "$source_catalog" || "$source_catalog" != "$restored_catalog" ]]; then
+            echo "Security catalog signature mismatch after restore: source=$source_catalog restored=$restored_catalog"
+            exit 1
+          fi
+          source_sequences="$(sequence_state_signature aghbari_test)"
+          restored_sequences="$(sequence_state_signature aghbari_restore_test)"
+          if [[ -z "$source_sequences" || "$source_sequences" != "$restored_sequences" ]]; then
+            echo "Sequence state signature mismatch after restore: source=$source_sequences restored=$restored_sequences"
+            exit 1
+          fi
+          echo "PASS isolated PostgreSQL 17 logical backup/restore; schema_signature=$source_schema data_signature=$source_data security_catalog_signature=$source_catalog sequence_signature=$source_sequences"
 
       # The repository-wide Prettier rule currently reports thousands of pre-existing formatting errors.
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
