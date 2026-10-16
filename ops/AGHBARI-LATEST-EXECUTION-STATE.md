@@ -95,3 +95,11 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - Source evidence: current flow is imported snapshots + deterministic PostgreSQL analytics + comparison-only reconciliation + client-built 27-column XLSX export/audit. Export audit explicitly records `compatibility_verified=false` and `download_completion_verified=false`. No verified external Onyx endpoint/credential adapter or target-version import contract was found in repository references.
 - Live reconciliation checkpoint says intended Supabase ref `ffxxjaolfntzbapmfbuv` is absent from the connected project list; similarly named `mrcyqezbhpncuvaehwgf` has materially different schema. Do not redirect migrations/functions or invent API/field contracts. No source change is justified without the vendor contract and intended target access.
 - Task disposition: PARTIAL / BLOCKED EXTERNALLY. Continue to `AGH-ONYX-XLSX-001` for source-testable package hardening; production/browser acceptance remains a separate gate.
+
+
+## AGH-ONYX-XLSX-001 source-test batch
+- Active branch/PR: `fix/acceptance-hardening-cart-finance-20261015` / PR #72; parent `bdd80d2c5ad7802e8a2218cf11afc6041853e243`.
+- Last full exact-SHA CI: `3b26bd09ebfce6245f7f2f5f7d6521faaf4e7795`, Actions [38834000106](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38834000106) SUCCESS. This new test SHA must pass its own CI.
+- Existing `src/test/onyx-export.test.ts` checked 27 columns and package-token presence, but did not prove the generated workbook was readable by the production XLSX parser. Added a round-trip regression using `parseXlsxFirstWorksheet`; it verifies worksheet name, row count, exact headers, leading-zero item codes, approved quantity/price and order number.
+- Local `npx vitest run src/test/onyx-export.test.ts` NOT RUN because this runtime has no checkout and GitHub DNS resolution is blocked. Exact-SHA CI is pending. This proves internal parser interoperability only, not compatibility with the owner's Onyx version or browser-download completion.
+- Keep `AGH-ONYX-XLSX-001` active until exact-SHA CI passes or failures are corrected.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildOnyxDetailRows, buildOnyxOrderWorkbook, ONYX_ORDER_COLUMNS, onyxOrderWorkbookFilename } from '@/lib/onyx-export';
+import { parseXlsxFirstWorksheet } from '@/lib/unified-import';
 
 const order = {
   orderId: '11111111-1111-4111-8111-111111111111',
@@ -66,6 +67,24 @@ describe('Onyx order workbook draft', () => {
     expect(archiveText).toContain('شركة اختبار الأغبري');
     expect(archiveText).toContain('غير مثبت');
     expect(archiveText).toContain('inlineStr');
+  });
+
+  it('round-trips generated XLSX through the production first-worksheet parser', async () => {
+    const bytes = buildOnyxOrderWorkbook(order);
+    const rows: string[][] = [];
+    const result = await parseXlsxFirstWorksheet(
+      new Blob([new Uint8Array(bytes).buffer as ArrayBuffer]),
+      (row) => { rows.push(row); },
+    );
+
+    expect(result.worksheetName).toBe('تفاصيل الأصناف');
+    expect(result.rowCount).toBe(2);
+    expect(rows[0]).toEqual([...ONYX_ORDER_COLUMNS]);
+    expect(rows[1]).toHaveLength(27);
+    expect(rows[1][0]).toBe('000125');
+    expect(rows[1][4]).toBe('3');
+    expect(rows[1][6]).toBe('12.5');
+    expect(rows[1][22]).toBe('ORD-000125');
   });
 
   it('removes XML 1.0-forbidden control characters from dirty imported cells', () => {
