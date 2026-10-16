@@ -8,7 +8,16 @@ async function forgeCentralDirectoryUncompressedSize(
   targetName: string,
   claimedSize: number,
 ): Promise<Blob> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error('Unable to read ZIP test fixture bytes.'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read ZIP test fixture bytes.'));
+    reader.readAsArrayBuffer(blob);
+  });
+  const bytes = new Uint8Array(buffer);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder();
   let offset = 0;
