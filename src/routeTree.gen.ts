@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AddressesRouteImport } from './routes/addresses'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as BarcodeRouteImport } from './routes/barcode'
@@ -40,13 +41,23 @@ import { Route as AdminQuotesRouteImport } from './routes/admin_.quotes'
 import { Route as AdminReportsRouteImport } from './routes/admin_.reports'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as AdminSuppliersRouteImport } from './routes/admin_.suppliers'
+import { Route as ApiStatementPdfRouteImport } from './routes/api.statement-pdf'
+import { Route as CompanyAcceptInvitationRouteImport } from './routes/company.accept-invitation'
+import { Route as CompanyContactsRouteImport } from './routes/company.contacts'
+import { Route as CompanyMembersRouteImport } from './routes/company.members'
 import { Route as OrdersIndexRouteImport } from './routes/orders.index'
 import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
+import { Route as ApiInvoicePdfInvoiceIdRouteImport } from './routes/api.invoice-pdf.$invoiceId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddressesRoute = AddressesRouteImport.update({
+  id: '/addresses',
+  path: '/addresses',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -199,6 +210,26 @@ const AdminSuppliersRoute = AdminSuppliersRouteImport.update({
   path: '/admin/suppliers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStatementPdfRoute = ApiStatementPdfRouteImport.update({
+  id: '/api/statement-pdf',
+  path: '/api/statement-pdf',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyAcceptInvitationRoute = CompanyAcceptInvitationRouteImport.update({
+  id: '/company/accept-invitation',
+  path: '/company/accept-invitation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyContactsRoute = CompanyContactsRouteImport.update({
+  id: '/company/contacts',
+  path: '/company/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyMembersRoute = CompanyMembersRouteImport.update({
+  id: '/company/members',
+  path: '/company/members',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersIndexRoute = OrdersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -214,9 +245,15 @@ const ProductIdRoute = ProductIdRouteImport.update({
   path: '/product/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInvoicePdfInvoiceIdRoute = ApiInvoicePdfInvoiceIdRouteImport.update({
+  id: '/api/invoice-pdf/$invoiceId',
+  path: '/api/invoice-pdf/$invoiceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/addresses': typeof AddressesRoute
   '/admin': typeof AdminRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
@@ -247,12 +284,18 @@ export interface FileRoutesByFullPath {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/suppliers': typeof AdminSuppliersRoute
+  '/api/statement-pdf': typeof ApiStatementPdfRoute
+  '/company/accept-invitation': typeof CompanyAcceptInvitationRoute
+  '/company/contacts': typeof CompanyContactsRoute
+  '/company/members': typeof CompanyMembersRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
   '/orders/': typeof OrdersIndexRoute
+  '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/addresses': typeof AddressesRoute
   '/admin': typeof AdminRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
@@ -282,13 +325,19 @@ export interface FileRoutesByTo {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/suppliers': typeof AdminSuppliersRoute
+  '/api/statement-pdf': typeof ApiStatementPdfRoute
+  '/company/accept-invitation': typeof CompanyAcceptInvitationRoute
+  '/company/contacts': typeof CompanyContactsRoute
+  '/company/members': typeof CompanyMembersRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
   '/orders': typeof OrdersIndexRoute
+  '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/addresses': typeof AddressesRoute
   '/admin': typeof AdminRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
@@ -319,14 +368,20 @@ export interface FileRoutesById {
   '/admin_/reports': typeof AdminReportsRoute
   '/admin_/settings': typeof AdminSettingsRoute
   '/admin_/suppliers': typeof AdminSuppliersRoute
+  '/api/statement-pdf': typeof ApiStatementPdfRoute
+  '/company/accept-invitation': typeof CompanyAcceptInvitationRoute
+  '/company/contacts': typeof CompanyContactsRoute
+  '/company/members': typeof CompanyMembersRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
   '/orders/': typeof OrdersIndexRoute
+  '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/addresses'
     | '/admin'
     | '/assistant'
     | '/barcode'
@@ -357,12 +412,18 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/suppliers'
+    | '/api/statement-pdf'
+    | '/company/accept-invitation'
+    | '/company/contacts'
+    | '/company/members'
     | '/orders/$id'
     | '/product/$id'
     | '/orders/'
+    | '/api/invoice-pdf/$invoiceId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/addresses'
     | '/admin'
     | '/assistant'
     | '/barcode'
@@ -392,12 +453,18 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/suppliers'
+    | '/api/statement-pdf'
+    | '/company/accept-invitation'
+    | '/company/contacts'
+    | '/company/members'
     | '/orders/$id'
     | '/product/$id'
     | '/orders'
+    | '/api/invoice-pdf/$invoiceId'
   id:
     | '__root__'
     | '/'
+    | '/addresses'
     | '/admin'
     | '/assistant'
     | '/barcode'
@@ -428,13 +495,19 @@ export interface FileRouteTypes {
     | '/admin_/reports'
     | '/admin_/settings'
     | '/admin_/suppliers'
+    | '/api/statement-pdf'
+    | '/company/accept-invitation'
+    | '/company/contacts'
+    | '/company/members'
     | '/orders/$id'
     | '/product/$id'
     | '/orders/'
+    | '/api/invoice-pdf/$invoiceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AddressesRoute: typeof AddressesRoute
   AdminRoute: typeof AdminRoute
   AssistantRoute: typeof AssistantRoute
   BarcodeRoute: typeof BarcodeRoute
@@ -465,7 +538,12 @@ export interface RootRouteChildren {
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminSuppliersRoute: typeof AdminSuppliersRoute
+  ApiStatementPdfRoute: typeof ApiStatementPdfRoute
+  CompanyAcceptInvitationRoute: typeof CompanyAcceptInvitationRoute
+  CompanyContactsRoute: typeof CompanyContactsRoute
+  CompanyMembersRoute: typeof CompanyMembersRoute
   ProductIdRoute: typeof ProductIdRoute
+  ApiInvoicePdfInvoiceIdRoute: typeof ApiInvoicePdfInvoiceIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -475,6 +553,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/addresses': {
+      id: '/addresses'
+      path: '/addresses'
+      fullPath: '/addresses'
+      preLoaderRoute: typeof AddressesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -687,6 +772,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSuppliersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/statement-pdf': {
+      id: '/api/statement-pdf'
+      path: '/api/statement-pdf'
+      fullPath: '/api/statement-pdf'
+      preLoaderRoute: typeof ApiStatementPdfRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/accept-invitation': {
+      id: '/company/accept-invitation'
+      path: '/company/accept-invitation'
+      fullPath: '/company/accept-invitation'
+      preLoaderRoute: typeof CompanyAcceptInvitationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/contacts': {
+      id: '/company/contacts'
+      path: '/company/contacts'
+      fullPath: '/company/contacts'
+      preLoaderRoute: typeof CompanyContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/members': {
+      id: '/company/members'
+      path: '/company/members'
+      fullPath: '/company/members'
+      preLoaderRoute: typeof CompanyMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders/': {
       id: '/orders/'
       path: '/'
@@ -708,6 +821,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/invoice-pdf/$invoiceId': {
+      id: '/api/invoice-pdf/$invoiceId'
+      path: '/api/invoice-pdf/$invoiceId'
+      fullPath: '/api/invoice-pdf/$invoiceId'
+      preLoaderRoute: typeof ApiInvoicePdfInvoiceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -726,6 +846,7 @@ const OrdersRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AddressesRoute: AddressesRoute,
   AdminRoute: AdminRoute,
   AssistantRoute: AssistantRoute,
   BarcodeRoute: BarcodeRoute,
@@ -756,7 +877,12 @@ const rootRouteChildren: RootRouteChildren = {
   AdminReportsRoute: AdminReportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminSuppliersRoute: AdminSuppliersRoute,
+  ApiStatementPdfRoute: ApiStatementPdfRoute,
+  CompanyAcceptInvitationRoute: CompanyAcceptInvitationRoute,
+  CompanyContactsRoute: CompanyContactsRoute,
+  CompanyMembersRoute: CompanyMembersRoute,
   ProductIdRoute: ProductIdRoute,
+  ApiInvoicePdfInvoiceIdRoute: ApiInvoicePdfInvoiceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

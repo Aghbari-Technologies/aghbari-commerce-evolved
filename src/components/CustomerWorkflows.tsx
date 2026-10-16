@@ -375,10 +375,10 @@ function Invoices() {
         contact_name: payload.customer?.contact_name ?? null,
       });
       setChosenFinancials({
-        currency: payload.invoice.currency,
-        subtotal: payload.invoice.subtotal,
-        tax_amount: payload.invoice.tax_amount,
-        total_amount: payload.invoice.total_amount,
+        currency: payload.invoice!.currency,
+        subtotal: payload.invoice!.subtotal,
+        tax_amount: payload.invoice!.tax_amount,
+        total_amount: payload.invoice!.total_amount,
       });
       setInvoiceOrder(
         orderResult.data as {
@@ -1777,7 +1777,7 @@ function Offline() {
   const [message, setMessage] = useState("");
   const refresh = useCallback(() => {
     try {
-      let safeCatalog = [];
+      let safeCatalog: ReturnType<typeof sanitizePublicCatalogCache> = [];
       try {
         safeCatalog = sanitizePublicCatalogCache(
           JSON.parse(localStorage.getItem("aghbari:catalog:v1") || "[]"),

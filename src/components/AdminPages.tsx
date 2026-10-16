@@ -1,5 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useBlocker } from '@tanstack/react-router';
+import type { CSSProperties } from 'react';
+
+const card: CSSProperties = { background: 'var(--card, #fff)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: 16 };
+const quiet: CSSProperties = { margin: 0, color: 'var(--muted-foreground, #64748b)', fontSize: 13 };
+const field: CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border, #cbd5e1)', background: 'var(--background, #fff)', font: 'inherit' };
 import {
   AlertTriangle, Bell, Bot, Check, ChevronLeft, Database,
   Package, Plus, RefreshCw, Search, Settings, Smartphone,
