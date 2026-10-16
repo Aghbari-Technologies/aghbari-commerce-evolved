@@ -7,7 +7,7 @@
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72; branch `fix/acceptance-hardening-cart-finance-20261015`.
 - Current source HEAD at the start of this slice: `36f5430511fc84c36552925228e9b26f81b69896`; this documentation and route slice adds `/templates` using the existing reorder-template workflow. Exact-head CI for the new commits is pending.
 - Exact-head CI on `d2a232fc52d94d821cea95f0daaaa24692462e30` was IN PROGRESS at last readback: [Actions 38843235344](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38843235344).
-- §13.4 requires 64 customer paths and 45 admin paths (109 total). The tree has 49 route modules excluding the root layout (including the API endpoints). 34/109 (31.2%) have an exact matching source route module before considering partial candidates/aliases; alias candidates do not count as exact paths.
+- §13.4 requires 64 customer paths and 45 admin paths (109 total). The tree has 49 route modules excluding the root layout (including the API endpoints). 33/109 (30.3%) have an exact matching source route module before considering partial candidates/aliases; alias candidates do not count as exact paths.
 
 ## Behavior contracts by screen family
 
