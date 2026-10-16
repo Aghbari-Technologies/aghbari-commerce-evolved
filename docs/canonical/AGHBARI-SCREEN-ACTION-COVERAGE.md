@@ -14,7 +14,7 @@
 - Added distinct route modules: `/profile`, `/company/details`, `/account/pending`, `/onboarding/profile`, and `/onboarding/company`.
 - Reused current auth and company-membership contracts. Profile editing and approval-state mutation are explicitly unavailable because no verified server contract exists; the UI does not simulate either action.
 - Added behavioral tests for logout success/failure, company data read/retry, and truthful approval-state disclosure.
-- The committed `routeTree.gen.ts` still needs to be replaced by the output captured from the official TanStack Vite route generator; this batch does not claim source-tree synchronization until that artifact is committed. Exact-head CI for the new routes remains pending.
+- CI run [38847419772](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38847419772) captured the output emitted by the official TanStack Vite generator after build (56 route imports); that generated output is committed in the follow-up. The same run exposed four failures from incorrect test-mock references, now corrected. Exact-head CI for the repair remains pending.
 
 ## Behavior contracts by screen family
 

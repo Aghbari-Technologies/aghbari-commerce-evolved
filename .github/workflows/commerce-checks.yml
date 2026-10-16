@@ -55,13 +55,8 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
         run: npm run build
 
-      - name: Route tree generation evidence (TanStack official Vite plugin)
-        if: always()
-        shell: bash
-        run: |
-          echo "AGHBARI_GENERATED_ROUTE_TREE_BEGIN"
-          cat src/routeTree.gen.ts
-          echo "AGHBARI_GENERATED_ROUTE_TREE_END"
+      - name: Verify committed TanStack route tree matches official generation
+        run: git diff --exit-code -- src/routeTree.gen.ts
 
       - name: Unit tests
         run: npm test

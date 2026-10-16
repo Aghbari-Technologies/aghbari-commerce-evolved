@@ -174,3 +174,11 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - `.github/workflows/commerce-checks.yml` now emits the post-build TanStack-generated route tree as temporary diagnostic evidence; use that output to synchronize `src/routeTree.gen.ts` from the official Vite plugin result, then remove the diagnostic step and keep a drift guard if supported.
 - **Verification:** local commands not run (no local checkout). Exact-head CI for the slice is **PENDING**. Route tree must not be called source-synchronized until generated output from the new route files is committed.
 - Next action: read the generated tree from the latest workflow run, commit generated route-tree output, add route-tree drift protection, then continue remaining account and admin paths.
+
+
+## 2026-10-16 — route-tree synchronization and account-test repair
+- Parent HEAD: `5bb354a113f5450251965f9e728c1c110e877efb`; PR #72 remained OPEN on `fix/acceptance-hardening-cart-finance-20261015`.
+- Exact parent workflow [38847419772](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38847419772) **FAILED** during unit tests: 26 files / 290 tests passed and 1 file / 4 tests failed. All four new account-screen failures shared the same fixture error: `mocks.signOut` was undefined; corrected references are `mocks.auth.signOut`.
+- The same CI build ran the official TanStack Vite generator. Its captured `src/routeTree.gen.ts` contains **56 route imports**, including addresses, templates, checkout review/confirm, company details/users/contacts/members, profile, approval status and onboarding paths. The generated output is committed in this follow-up, and the temporary log-dump step is replaced with a route-tree drift check.
+- Added direct route-ID assertions for customer account/company paths, checkout review/confirmation, addresses and purchase templates; existing component-level tests assert logout success/failure, RPC-backed company read/retry, and non-inferred approval state.
+- New repair SHA / exact-head CI: pending at checkpoint creation; no local checkout means local commands were not run. Continue from the latest PR head and repair any remaining exact-head CI failure before broadening route coverage.

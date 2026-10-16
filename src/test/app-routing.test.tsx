@@ -66,4 +66,22 @@ describe("App routing", () => {
     const matches = makeRouter().matchRoutes(path as never);
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
   });
+
+  it.each([
+    { path: "/profile", routeId: "/profile" },
+    { path: "/company/details", routeId: "/company/details" },
+    { path: "/company/contacts", routeId: "/company/contacts" },
+    { path: "/company/users", routeId: "/company/users" },
+    { path: "/account/pending", routeId: "/account/pending" },
+    { path: "/onboarding/company", routeId: "/onboarding/company" },
+    { path: "/onboarding/profile", routeId: "/onboarding/profile" },
+    { path: "/addresses", routeId: "/addresses" },
+    { path: "/templates", routeId: "/templates" },
+    { path: "/checkout/review", routeId: "/checkout_/review" },
+    { path: "/checkout/confirm", routeId: "/checkout_/confirm" },
+  ])("resolves $path to its intended file route", ({ path, routeId }) => {
+    const matches = makeRouter().matchRoutes(path as never);
+    expect(matches.some((match) => match.routeId === routeId)).toBe(true);
+  });
+
 });

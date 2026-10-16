@@ -12,7 +12,7 @@
 - Source slice added `CustomerAccount.tsx` plus routes for profile, company details, approval status, and the two onboarding entry paths; route smoke coverage and behavior tests were expanded.
 - `CompanyDetailsPage` reads the existing `list_customer_company_members` contract and has loading/error/retry handling. `CustomerProfilePage` displays the authenticated identity and performs a real Supabase Auth sign-out. No profile/company write or approval status is simulated.
 - Known gap remains: profile/company edit mutations and an authoritative account-approval-status API have not been verified, so related controls remain unavailable.
-- Official route-tree regeneration capture was added to the CI workflow, but `src/routeTree.gen.ts` synchronization and exact-head CI for this slice remain pending.
+- Official output from the TanStack Vite generator in exact parent run [38847419772](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38847419772) contains 56 route imports and is committed in this repair; CI now checks that build regeneration produces no diff in `src/routeTree.gen.ts`. The parent run failed four new account tests because the test fixture referenced `mocks.signOut` instead of `mocks.auth.signOut`; that defect is corrected here. This repair still needs exact-head CI.
 - Parent source/workflow SHA: `9826d0a3cc8b2264b59207dc0fad0cd25593d469`. Local tests were not run in this remote GitHub-only session.
 
 # Aghbari Commerce — Requirement Registry and Execution Rules

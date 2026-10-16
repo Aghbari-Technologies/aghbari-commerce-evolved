@@ -10,21 +10,30 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AddressesRouteImport } from './routes/addresses'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as BarcodeRouteImport } from './routes/barcode'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CompareRouteImport } from './routes/compare'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OfflineRouteImport } from './routes/offline'
 import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as QuotesRouteImport } from './routes/quotes'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ReorderRouteImport } from './routes/reorder'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as StatementRouteImport } from './routes/statement'
+import { Route as StatementsRouteImport } from './routes/statements'
+import { Route as StoreRouteImport } from './routes/store'
+import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as WishlistRouteImport } from './routes/wishlist'
+import { Route as AccountPendingRouteImport } from './routes/account.pending'
 import { Route as AdminAiRouteImport } from './routes/admin_.ai'
 import { Route as AdminCustomersRouteImport } from './routes/admin_.customers'
 import { Route as AdminDataRouteImport } from './routes/admin_.data'
@@ -40,13 +49,30 @@ import { Route as AdminQuotesRouteImport } from './routes/admin_.quotes'
 import { Route as AdminReportsRouteImport } from './routes/admin_.reports'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as AdminSuppliersRouteImport } from './routes/admin_.suppliers'
+import { Route as ApiStatementPdfRouteImport } from './routes/api.statement-pdf'
+import { Route as CheckoutConfirmRouteImport } from './routes/checkout_.confirm'
+import { Route as CheckoutReviewRouteImport } from './routes/checkout_.review'
+import { Route as CompanyAcceptInvitationRouteImport } from './routes/company.accept-invitation'
+import { Route as CompanyContactsRouteImport } from './routes/company.contacts'
+import { Route as CompanyDetailsRouteImport } from './routes/company.details'
+import { Route as CompanyMembersRouteImport } from './routes/company.members'
+import { Route as CompanyUsersRouteImport } from './routes/company.users'
+import { Route as InviteTokenRouteImport } from './routes/invite.$token'
+import { Route as OnboardingCompanyRouteImport } from './routes/onboarding.company'
+import { Route as OnboardingProfileRouteImport } from './routes/onboarding.profile'
 import { Route as OrdersIndexRouteImport } from './routes/orders.index'
 import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
+import { Route as ApiInvoicePdfInvoiceIdRouteImport } from './routes/api.invoice-pdf.$invoiceId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AddressesRoute = AddressesRouteImport.update({
+  id: '/addresses',
+  path: '/addresses',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -79,6 +105,11 @@ const CompareRoute = CompareRouteImport.update({
   path: '/compare',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesRoute = InvoicesRouteImport.update({
   id: '/invoices',
   path: '/invoices',
@@ -99,9 +130,19 @@ const OrdersRoute = OrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QuotesRoute = QuotesRouteImport.update({
   id: '/quotes',
   path: '/quotes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReorderRoute = ReorderRouteImport.update({
@@ -119,9 +160,34 @@ const StatementRoute = StatementRouteImport.update({
   path: '/statement',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatementsRoute = StatementsRouteImport.update({
+  id: '/statements',
+  path: '/statements',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StoreRoute = StoreRouteImport.update({
+  id: '/store',
+  path: '/store',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyRoute = VerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WishlistRoute = WishlistRouteImport.update({
   id: '/wishlist',
   path: '/wishlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountPendingRoute = AccountPendingRouteImport.update({
+  id: '/account/pending',
+  path: '/account/pending',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminAiRoute = AdminAiRouteImport.update({
@@ -199,6 +265,61 @@ const AdminSuppliersRoute = AdminSuppliersRouteImport.update({
   path: '/admin/suppliers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiStatementPdfRoute = ApiStatementPdfRouteImport.update({
+  id: '/api/statement-pdf',
+  path: '/api/statement-pdf',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutConfirmRoute = CheckoutConfirmRouteImport.update({
+  id: '/checkout_/confirm',
+  path: '/checkout/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckoutReviewRoute = CheckoutReviewRouteImport.update({
+  id: '/checkout_/review',
+  path: '/checkout/review',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyAcceptInvitationRoute = CompanyAcceptInvitationRouteImport.update({
+  id: '/company/accept-invitation',
+  path: '/company/accept-invitation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyContactsRoute = CompanyContactsRouteImport.update({
+  id: '/company/contacts',
+  path: '/company/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyDetailsRoute = CompanyDetailsRouteImport.update({
+  id: '/company/details',
+  path: '/company/details',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyMembersRoute = CompanyMembersRouteImport.update({
+  id: '/company/members',
+  path: '/company/members',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompanyUsersRoute = CompanyUsersRouteImport.update({
+  id: '/company/users',
+  path: '/company/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingCompanyRoute = OnboardingCompanyRouteImport.update({
+  id: '/onboarding/company',
+  path: '/onboarding/company',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingProfileRoute = OnboardingProfileRouteImport.update({
+  id: '/onboarding/profile',
+  path: '/onboarding/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersIndexRoute = OrdersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -214,24 +335,38 @@ const ProductIdRoute = ProductIdRouteImport.update({
   path: '/product/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiInvoicePdfInvoiceIdRoute = ApiInvoicePdfInvoiceIdRouteImport.update({
+  id: '/api/invoice-pdf/$invoiceId',
+  path: '/api/invoice-pdf/$invoiceId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/addresses': typeof AddressesRoute
   '/admin': typeof AdminRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
   '/compare': typeof CompareRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/orders': typeof OrdersRouteWithChildren
+  '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
+  '/register': typeof RegisterRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
+  '/statements': typeof StatementsRoute
+  '/store': typeof StoreRoute
+  '/templates': typeof TemplatesRoute
+  '/verify': typeof VerifyRoute
   '/wishlist': typeof WishlistRoute
+  '/account/pending': typeof AccountPendingRoute
   '/admin/ai': typeof AdminAiRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/data': typeof AdminDataRoute
@@ -247,26 +382,47 @@ export interface FileRoutesByFullPath {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/suppliers': typeof AdminSuppliersRoute
+  '/api/statement-pdf': typeof ApiStatementPdfRoute
+  '/checkout/confirm': typeof CheckoutConfirmRoute
+  '/checkout/review': typeof CheckoutReviewRoute
+  '/company/accept-invitation': typeof CompanyAcceptInvitationRoute
+  '/company/contacts': typeof CompanyContactsRoute
+  '/company/details': typeof CompanyDetailsRoute
+  '/company/members': typeof CompanyMembersRoute
+  '/company/users': typeof CompanyUsersRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/onboarding/company': typeof OnboardingCompanyRoute
+  '/onboarding/profile': typeof OnboardingProfileRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
   '/orders/': typeof OrdersIndexRoute
+  '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/addresses': typeof AddressesRoute
   '/admin': typeof AdminRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
   '/compare': typeof CompareRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
+  '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
+  '/register': typeof RegisterRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
+  '/statements': typeof StatementsRoute
+  '/store': typeof StoreRoute
+  '/templates': typeof TemplatesRoute
+  '/verify': typeof VerifyRoute
   '/wishlist': typeof WishlistRoute
+  '/account/pending': typeof AccountPendingRoute
   '/admin/ai': typeof AdminAiRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/data': typeof AdminDataRoute
@@ -282,28 +438,49 @@ export interface FileRoutesByTo {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/suppliers': typeof AdminSuppliersRoute
+  '/api/statement-pdf': typeof ApiStatementPdfRoute
+  '/checkout/confirm': typeof CheckoutConfirmRoute
+  '/checkout/review': typeof CheckoutReviewRoute
+  '/company/accept-invitation': typeof CompanyAcceptInvitationRoute
+  '/company/contacts': typeof CompanyContactsRoute
+  '/company/details': typeof CompanyDetailsRoute
+  '/company/members': typeof CompanyMembersRoute
+  '/company/users': typeof CompanyUsersRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/onboarding/company': typeof OnboardingCompanyRoute
+  '/onboarding/profile': typeof OnboardingProfileRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
   '/orders': typeof OrdersIndexRoute
+  '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/addresses': typeof AddressesRoute
   '/admin': typeof AdminRoute
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
   '/compare': typeof CompareRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/orders': typeof OrdersRouteWithChildren
+  '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
+  '/register': typeof RegisterRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
   '/statement': typeof StatementRoute
+  '/statements': typeof StatementsRoute
+  '/store': typeof StoreRoute
+  '/templates': typeof TemplatesRoute
+  '/verify': typeof VerifyRoute
   '/wishlist': typeof WishlistRoute
+  '/account/pending': typeof AccountPendingRoute
   '/admin_/ai': typeof AdminAiRoute
   '/admin_/customers': typeof AdminCustomersRoute
   '/admin_/data': typeof AdminDataRoute
@@ -319,29 +496,50 @@ export interface FileRoutesById {
   '/admin_/reports': typeof AdminReportsRoute
   '/admin_/settings': typeof AdminSettingsRoute
   '/admin_/suppliers': typeof AdminSuppliersRoute
+  '/api/statement-pdf': typeof ApiStatementPdfRoute
+  '/checkout_/confirm': typeof CheckoutConfirmRoute
+  '/checkout_/review': typeof CheckoutReviewRoute
+  '/company/accept-invitation': typeof CompanyAcceptInvitationRoute
+  '/company/contacts': typeof CompanyContactsRoute
+  '/company/details': typeof CompanyDetailsRoute
+  '/company/members': typeof CompanyMembersRoute
+  '/company/users': typeof CompanyUsersRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/onboarding/company': typeof OnboardingCompanyRoute
+  '/onboarding/profile': typeof OnboardingProfileRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
   '/orders/': typeof OrdersIndexRoute
+  '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/addresses'
     | '/admin'
     | '/assistant'
     | '/barcode'
     | '/cart'
     | '/checkout'
     | '/compare'
+    | '/forgot-password'
     | '/invoices'
     | '/login'
     | '/offline'
     | '/orders'
+    | '/profile'
     | '/quotes'
+    | '/register'
     | '/reorder'
     | '/reset-password'
     | '/statement'
+    | '/statements'
+    | '/store'
+    | '/templates'
+    | '/verify'
     | '/wishlist'
+    | '/account/pending'
     | '/admin/ai'
     | '/admin/customers'
     | '/admin/data'
@@ -357,26 +555,47 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/suppliers'
+    | '/api/statement-pdf'
+    | '/checkout/confirm'
+    | '/checkout/review'
+    | '/company/accept-invitation'
+    | '/company/contacts'
+    | '/company/details'
+    | '/company/members'
+    | '/company/users'
+    | '/invite/$token'
+    | '/onboarding/company'
+    | '/onboarding/profile'
     | '/orders/$id'
     | '/product/$id'
     | '/orders/'
+    | '/api/invoice-pdf/$invoiceId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/addresses'
     | '/admin'
     | '/assistant'
     | '/barcode'
     | '/cart'
     | '/checkout'
     | '/compare'
+    | '/forgot-password'
     | '/invoices'
     | '/login'
     | '/offline'
+    | '/profile'
     | '/quotes'
+    | '/register'
     | '/reorder'
     | '/reset-password'
     | '/statement'
+    | '/statements'
+    | '/store'
+    | '/templates'
+    | '/verify'
     | '/wishlist'
+    | '/account/pending'
     | '/admin/ai'
     | '/admin/customers'
     | '/admin/data'
@@ -392,27 +611,48 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/suppliers'
+    | '/api/statement-pdf'
+    | '/checkout/confirm'
+    | '/checkout/review'
+    | '/company/accept-invitation'
+    | '/company/contacts'
+    | '/company/details'
+    | '/company/members'
+    | '/company/users'
+    | '/invite/$token'
+    | '/onboarding/company'
+    | '/onboarding/profile'
     | '/orders/$id'
     | '/product/$id'
     | '/orders'
+    | '/api/invoice-pdf/$invoiceId'
   id:
     | '__root__'
     | '/'
+    | '/addresses'
     | '/admin'
     | '/assistant'
     | '/barcode'
     | '/cart'
     | '/checkout'
     | '/compare'
+    | '/forgot-password'
     | '/invoices'
     | '/login'
     | '/offline'
     | '/orders'
+    | '/profile'
     | '/quotes'
+    | '/register'
     | '/reorder'
     | '/reset-password'
     | '/statement'
+    | '/statements'
+    | '/store'
+    | '/templates'
+    | '/verify'
     | '/wishlist'
+    | '/account/pending'
     | '/admin_/ai'
     | '/admin_/customers'
     | '/admin_/data'
@@ -428,28 +668,49 @@ export interface FileRouteTypes {
     | '/admin_/reports'
     | '/admin_/settings'
     | '/admin_/suppliers'
+    | '/api/statement-pdf'
+    | '/checkout_/confirm'
+    | '/checkout_/review'
+    | '/company/accept-invitation'
+    | '/company/contacts'
+    | '/company/details'
+    | '/company/members'
+    | '/company/users'
+    | '/invite/$token'
+    | '/onboarding/company'
+    | '/onboarding/profile'
     | '/orders/$id'
     | '/product/$id'
     | '/orders/'
+    | '/api/invoice-pdf/$invoiceId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AddressesRoute: typeof AddressesRoute
   AdminRoute: typeof AdminRoute
   AssistantRoute: typeof AssistantRoute
   BarcodeRoute: typeof BarcodeRoute
   CartRoute: typeof CartRoute
   CheckoutRoute: typeof CheckoutRoute
   CompareRoute: typeof CompareRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   InvoicesRoute: typeof InvoicesRoute
   LoginRoute: typeof LoginRoute
   OfflineRoute: typeof OfflineRoute
   OrdersRoute: typeof OrdersRouteWithChildren
+  ProfileRoute: typeof ProfileRoute
   QuotesRoute: typeof QuotesRoute
+  RegisterRoute: typeof RegisterRoute
   ReorderRoute: typeof ReorderRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   StatementRoute: typeof StatementRoute
+  StatementsRoute: typeof StatementsRoute
+  StoreRoute: typeof StoreRoute
+  TemplatesRoute: typeof TemplatesRoute
+  VerifyRoute: typeof VerifyRoute
   WishlistRoute: typeof WishlistRoute
+  AccountPendingRoute: typeof AccountPendingRoute
   AdminAiRoute: typeof AdminAiRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminDataRoute: typeof AdminDataRoute
@@ -465,7 +726,19 @@ export interface RootRouteChildren {
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminSuppliersRoute: typeof AdminSuppliersRoute
+  ApiStatementPdfRoute: typeof ApiStatementPdfRoute
+  CheckoutConfirmRoute: typeof CheckoutConfirmRoute
+  CheckoutReviewRoute: typeof CheckoutReviewRoute
+  CompanyAcceptInvitationRoute: typeof CompanyAcceptInvitationRoute
+  CompanyContactsRoute: typeof CompanyContactsRoute
+  CompanyDetailsRoute: typeof CompanyDetailsRoute
+  CompanyMembersRoute: typeof CompanyMembersRoute
+  CompanyUsersRoute: typeof CompanyUsersRoute
+  InviteTokenRoute: typeof InviteTokenRoute
+  OnboardingCompanyRoute: typeof OnboardingCompanyRoute
+  OnboardingProfileRoute: typeof OnboardingProfileRoute
   ProductIdRoute: typeof ProductIdRoute
+  ApiInvoicePdfInvoiceIdRoute: typeof ApiInvoicePdfInvoiceIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -475,6 +748,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/addresses': {
+      id: '/addresses'
+      path: '/addresses'
+      fullPath: '/addresses'
+      preLoaderRoute: typeof AddressesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -519,6 +799,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CompareRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invoices': {
       id: '/invoices'
       path: '/invoices'
@@ -547,11 +834,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/quotes': {
       id: '/quotes'
       path: '/quotes'
       fullPath: '/quotes'
       preLoaderRoute: typeof QuotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reorder': {
@@ -575,11 +876,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StatementRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/statements': {
+      id: '/statements'
+      path: '/statements'
+      fullPath: '/statements'
+      preLoaderRoute: typeof StatementsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/store': {
+      id: '/store'
+      path: '/store'
+      fullPath: '/store'
+      preLoaderRoute: typeof StoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify': {
+      id: '/verify'
+      path: '/verify'
+      fullPath: '/verify'
+      preLoaderRoute: typeof VerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wishlist': {
       id: '/wishlist'
       path: '/wishlist'
       fullPath: '/wishlist'
       preLoaderRoute: typeof WishlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account/pending': {
+      id: '/account/pending'
+      path: '/account/pending'
+      fullPath: '/account/pending'
+      preLoaderRoute: typeof AccountPendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/ai': {
@@ -687,6 +1023,83 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSuppliersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/statement-pdf': {
+      id: '/api/statement-pdf'
+      path: '/api/statement-pdf'
+      fullPath: '/api/statement-pdf'
+      preLoaderRoute: typeof ApiStatementPdfRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout_/confirm': {
+      id: '/checkout_/confirm'
+      path: '/checkout/confirm'
+      fullPath: '/checkout/confirm'
+      preLoaderRoute: typeof CheckoutConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkout_/review': {
+      id: '/checkout_/review'
+      path: '/checkout/review'
+      fullPath: '/checkout/review'
+      preLoaderRoute: typeof CheckoutReviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/accept-invitation': {
+      id: '/company/accept-invitation'
+      path: '/company/accept-invitation'
+      fullPath: '/company/accept-invitation'
+      preLoaderRoute: typeof CompanyAcceptInvitationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/contacts': {
+      id: '/company/contacts'
+      path: '/company/contacts'
+      fullPath: '/company/contacts'
+      preLoaderRoute: typeof CompanyContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/details': {
+      id: '/company/details'
+      path: '/company/details'
+      fullPath: '/company/details'
+      preLoaderRoute: typeof CompanyDetailsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/members': {
+      id: '/company/members'
+      path: '/company/members'
+      fullPath: '/company/members'
+      preLoaderRoute: typeof CompanyMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/company/users': {
+      id: '/company/users'
+      path: '/company/users'
+      fullPath: '/company/users'
+      preLoaderRoute: typeof CompanyUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding/company': {
+      id: '/onboarding/company'
+      path: '/onboarding/company'
+      fullPath: '/onboarding/company'
+      preLoaderRoute: typeof OnboardingCompanyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding/profile': {
+      id: '/onboarding/profile'
+      path: '/onboarding/profile'
+      fullPath: '/onboarding/profile'
+      preLoaderRoute: typeof OnboardingProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders/': {
       id: '/orders/'
       path: '/'
@@ -708,6 +1121,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/invoice-pdf/$invoiceId': {
+      id: '/api/invoice-pdf/$invoiceId'
+      path: '/api/invoice-pdf/$invoiceId'
+      fullPath: '/api/invoice-pdf/$invoiceId'
+      preLoaderRoute: typeof ApiInvoicePdfInvoiceIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -726,21 +1146,30 @@ const OrdersRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AddressesRoute: AddressesRoute,
   AdminRoute: AdminRoute,
   AssistantRoute: AssistantRoute,
   BarcodeRoute: BarcodeRoute,
   CartRoute: CartRoute,
   CheckoutRoute: CheckoutRoute,
   CompareRoute: CompareRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   InvoicesRoute: InvoicesRoute,
   LoginRoute: LoginRoute,
   OfflineRoute: OfflineRoute,
   OrdersRoute: OrdersRouteWithChildren,
+  ProfileRoute: ProfileRoute,
   QuotesRoute: QuotesRoute,
+  RegisterRoute: RegisterRoute,
   ReorderRoute: ReorderRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   StatementRoute: StatementRoute,
+  StatementsRoute: StatementsRoute,
+  StoreRoute: StoreRoute,
+  TemplatesRoute: TemplatesRoute,
+  VerifyRoute: VerifyRoute,
   WishlistRoute: WishlistRoute,
+  AccountPendingRoute: AccountPendingRoute,
   AdminAiRoute: AdminAiRoute,
   AdminCustomersRoute: AdminCustomersRoute,
   AdminDataRoute: AdminDataRoute,
@@ -756,7 +1185,19 @@ const rootRouteChildren: RootRouteChildren = {
   AdminReportsRoute: AdminReportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminSuppliersRoute: AdminSuppliersRoute,
+  ApiStatementPdfRoute: ApiStatementPdfRoute,
+  CheckoutConfirmRoute: CheckoutConfirmRoute,
+  CheckoutReviewRoute: CheckoutReviewRoute,
+  CompanyAcceptInvitationRoute: CompanyAcceptInvitationRoute,
+  CompanyContactsRoute: CompanyContactsRoute,
+  CompanyDetailsRoute: CompanyDetailsRoute,
+  CompanyMembersRoute: CompanyMembersRoute,
+  CompanyUsersRoute: CompanyUsersRoute,
+  InviteTokenRoute: InviteTokenRoute,
+  OnboardingCompanyRoute: OnboardingCompanyRoute,
+  OnboardingProfileRoute: OnboardingProfileRoute,
   ProductIdRoute: ProductIdRoute,
+  ApiInvoicePdfInvoiceIdRoute: ApiInvoicePdfInvoiceIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

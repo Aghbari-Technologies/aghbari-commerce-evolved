@@ -27,7 +27,7 @@ beforeEach(() => {
   mocks.auth.user = { id: "auth-user", profileId: "profile-1", email: "buyer@example.test", name: "مشتري تجريبي", roles: ["customer"], isStaff: false };
   mocks.auth.ready = true;
   mocks.auth.configurationError = null;
-  mocks.signOut.mockResolvedValue(undefined);
+  mocks.auth.signOut.mockResolvedValue(undefined);
   mocks.fetchWorkspace.mockResolvedValue({
     company_name: "شركة الاختبار",
     members: [{ profile_id: "member-1" }],
@@ -43,12 +43,12 @@ describe("customer account and company views", () => {
     expect(screen.getByText("buyer@example.test")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "تسجيل الخروج" }));
-    await waitFor(() => expect(mocks.signOut).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.auth.signOut).toHaveBeenCalledOnce());
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith({ to: "/login", replace: true }));
   });
 
   it("does not navigate away or claim success when logout fails", async () => {
-    mocks.signOut.mockRejectedValueOnce(new Error("انتهت مهلة الاتصال"));
+    mocks.auth.signOut.mockRejectedValueOnce(new Error("انتهت مهلة الاتصال"));
     render(<CustomerProfilePage />);
     fireEvent.click(screen.getByRole("button", { name: "تسجيل الخروج" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("انتهت مهلة الاتصال");
