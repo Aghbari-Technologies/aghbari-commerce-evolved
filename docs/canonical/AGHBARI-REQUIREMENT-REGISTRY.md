@@ -153,3 +153,10 @@ Protocol: `VERIFY ACTIVE PR/HEAD → RESUME CURRENT TASK → IMPLEMENT → TEST 
 - Coverage matrix updated to 41/109 direct source paths (37.6%); this is route-source coverage, not overall feature completion.
 - **Verification status at save time:** local test/lint/build NOT RUN because no local checkout. Exact-head CI, committed route-tree synchronization and full direct-route runtime test are NOT YET PROVEN. Use the post-build official TanStack generator output after this batch and commit that generated file verbatim; do not hand-edit generated output. External Lovable publish, intended Supabase project access and authenticated browser E2E remain separate acceptance gates.
 - Next task: obtain CI result for the latest exact HEAD; synchronize generated route tree from official build output; repair any build/test failures; then continue missing storefront and administration paths.
+
+
+## 2026-10-16 — AGH-PRODUCT-SCREEN-COVERAGE-001 continued
+- Source slices added customer discovery (category/subcategory, collections, newest, live promotions, advanced search and truthful disabled states for featured/popular when no trusted server source exists), account settings/password/local preferences, notification/device contract status, and help/FAQ/contact/policies.
+- Direct customer route modules now cover those screen families. The TanStack route tree is synchronized from official Vite plugin output captured in Actions run 38850270064; the temporary log capture is removed and the drift guard restored.
+- Template detail/create/edit/update/delete remains the next source slice; existing template creation/loading alone does not establish edit workflow acceptance.
+- Exact-head CI pending; historical runs are not transferred.

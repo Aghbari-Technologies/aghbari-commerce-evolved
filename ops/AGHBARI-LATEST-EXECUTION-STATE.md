@@ -207,3 +207,12 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - The exact generator output is being committed to `src/routeTree.gen.ts`. The temporary route dump is removed and `git diff --exit-code -- src/routeTree.gen.ts` is restored as the build drift guard.
 - Exact-head CI for this synchronized commit remains pending; do not reuse parent CI as proof for the new SHA.
 - Next slice after exact-head CI: customer catalog/search/category paths and explicit blocked status pages only where no verified server contract exists.
+
+
+## 2026-10-16 — route-tree capture + discovery/account/help checkpoint
+- Exact parent SHA: 69ab0d71b85df51db800dfa9a8819c427e1bbeb8; PR #72 remains open on fix/acceptance-hardening-cart-finance-20261015.
+- Added CustomerDiscoveryPages.tsx and route modules for catalog discovery/category/search deep links; CustomerAccountSettingsPages.tsx and account/notification routes; CustomerHelpPages.tsx and help routes; direct-route assertions in src/test/screen-route-coverage.test.tsx.
+- Official generator output captured from build of exact parent Actions [38850270064](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38850270064), route imports = 101. The drift-guard step then failed because the generated source had not yet been committed, so unit tests and later stages were skipped. Do not treat that run as passing tests.
+- This commit synchronizes src/routeTree.gen.ts with the official generated output, removes the temporary dump step, and restores git diff --exit-code -- src/routeTree.gen.ts. Exact-head rerun is required.
+- Current route-module inventory at parent: 101 files under src/routes including root/endpoint modules; this is not a count of complete business screens.
+- Next: repair exact-head CI route acceptance, then add template detail/create/edit/update/delete routes backed by a tenant-bound RPC and ownership tests.
