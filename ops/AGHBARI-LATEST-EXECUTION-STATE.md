@@ -1,5 +1,15 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
+## LATEST EXECUTION POINTER — 2026-10-16 (checkout failure/retry acceptance)
+
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; active branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Source acceptance commit `d06db0c0cb42598dc1323161e1e4a9874760d029`; follow-up test commits `d5f47c0cc971d07253b2334ae75b247d4d1a6118` and `5fdf177b5d6486920ca6169d4a6b69dcd94dbdcc`. Coverage/requirement records were then updated on `2d77f5c1c84e02379dd35fcfd5ae5e4259b1250f` and `04935345deae12aeb2e073d9693fc9522665e42c`; this state-pointer write is the next documentation-only checkpoint.
+- Implemented: checkout RPC errors now render as `role="alert"` with assertive live announcement; added a regression for rejected submit → visible error/no success/cart preserved → retry using the same idempotency key; route registration assertions now cover `/cart`, `/checkout`, `/checkout/review`, `/checkout/confirm`, `/orders`, and `/orders/:id`. The order-index assertion uses generated route ID `/orders/`; the test clears both local and session storage between cases.
+- **Verification is NOT_PROVEN:** exact-head status and Actions queries for `d06db0c0cb42598dc1323161e1e4a9874760d029` and `04935345deae12aeb2e073d9693fc9522665e42c` returned no statuses and zero workflow runs. Historical successful CI on `812ca4e816c2becbf061a1a9554a2adc83f35eee` does not certify the newer code. No local checkout is available here, so local `npm test`, lint, build, PostgreSQL and browser checks were not run. Do not mark tests PASS until an Actions run exists for the exact current branch HEAD.
+- No production database migration/mutation, deployment, or Lovable publish was performed. Lovable synchronization, intended Supabase project `ffxxjaolfntzbapmfbuv`, and authenticated browser E2E remain external open gates.
+- Active cursor remains `AGH-STOREFRONT-ROUTE-ACCEPTANCE-002`. Next: establish exact-head CI on the branch, repair any failures, then add source-backed order-list/detail authorization and read-after-write acceptance. Do not confuse route registration or test source presence with end-to-end completion.
+
+---
+
 ## LATEST EXECUTION POINTER — 2026-10-16 (storefront routes and saved-list privacy verified)
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this docs update: `812ca4e816c2becbf061a1a9554a2adc83f35eee`.
