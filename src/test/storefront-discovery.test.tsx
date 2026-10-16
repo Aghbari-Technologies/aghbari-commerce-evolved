@@ -310,17 +310,46 @@ describe("customer storefront saved discovery", () => {
     expect(cart.host.textContent).not.toContain("الإجمالي التقديري");
   });
 
+  it("isolates saved wishlist and comparison records between signed-in profiles", async () => {
+    window.localStorage.setItem("aghbari:wishlist:v2:profile:customer-a", JSON.stringify(["product-1"]));
+    window.localStorage.setItem("aghbari:wishlist:v2:profile:customer-b", JSON.stringify(["product-3"]));
+    window.localStorage.setItem("aghbari:compare:v2:profile:customer-a", JSON.stringify(["product-2"]));
+    window.localStorage.setItem("aghbari:compare:v2:profile:customer-b", JSON.stringify(["product-4"]));
+
+    mocks.user = { profileId: "customer-a", roles: ["customer"], name: "Buyer A" };
+    const wishlistA = await mountAt("/wishlist");
+    expect(wishlistA.host.textContent).toContain("Rice");
+    expect(wishlistA.host.textContent).not.toContain("Oil");
+    await unmount(wishlistA);
+
+    const compareA = await mountAt("/compare");
+    expect(compareA.host.textContent).toContain("Sugar");
+    expect(compareA.host.textContent).not.toContain("Beans");
+    await unmount(compareA);
+
+    mocks.user = { profileId: "customer-b", roles: ["customer"], name: "Buyer B" };
+    const wishlistB = await mountAt("/wishlist");
+    expect(wishlistB.host.textContent).toContain("Oil");
+    expect(wishlistB.host.textContent).not.toContain("Rice");
+    await unmount(wishlistB);
+
+    const compareB = await mountAt("/compare");
+    expect(compareB.host.textContent).toContain("Beans");
+    expect(compareB.host.textContent).not.toContain("Sugar");
+  });
+
   it("persists wishlist and caps comparison at three across direct route loads", async () => {
+    mocks.user = { profileId: "saved-list-profile", roles: ["customer"], name: "CI Buyer" };
     const first = await mountAt("/");
     expect(first.host.textContent).toContain("المنتجات");
 
     clickButton(first.host, 'button[aria-label="إضافة للمفضلة"]', 0);
-    await waitForStorage("aghbari:wishlist:v1", ["product-1"]);
+    await waitForStorage("aghbari:wishlist:v2:profile:saved-list-profile", ["product-1"]);
 
     for (let index = 0; index < 4; index++) {
       clickButton(first.host, 'button[aria-label="إضافة للمقارنة"]', index);
     }
-    await waitForStorage("aghbari:compare:v1", ["product-1", "product-2", "product-3"]);
+    await waitForStorage("aghbari:compare:v2:profile:saved-list-profile", ["product-1", "product-2", "product-3"]);
     expect(first.host.textContent).toContain("يمكن مقارنة ثلاثة أصناف فقط");
 
     await unmount(first);

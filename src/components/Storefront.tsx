@@ -59,6 +59,48 @@ function readSavedProductIds(key: string, maxItems: number): string[] {
     return [];
   }
 }
+type SavedProductIdsUpdate = string[] | ((previous: string[]) => string[]);
+
+function savedProductListStorageKey(kind: 'wishlist' | 'compare', profileId: string | null, origin: string): string {
+  const scope = profileId?.trim()
+    ? `profile:${encodeURIComponent(profileId.trim())}`
+    : `guest:${encodeURIComponent(origin)}`;
+  return `aghbari:${kind}:v2:${scope}`;
+}
+
+/**
+ * Saved discovery state is isolated by authenticated profile, or by browser origin for guests.
+ * When auth scope changes, old IDs are never rendered or copied into the new account's storage key.
+ */
+function useScopedSavedProductIds(storageKey: string, maxItems: number): [string[], (update: SavedProductIdsUpdate) => void] {
+  const [stored, setStored] = useState(() => ({
+    storageKey,
+    ids: readSavedProductIds(storageKey, maxItems),
+  }));
+  const ids = stored.storageKey === storageKey ? stored.ids : [];
+
+  const setIds = (update: SavedProductIdsUpdate) => {
+    setStored((current) => {
+      const previous = current.storageKey === storageKey
+        ? current.ids
+        : readSavedProductIds(storageKey, maxItems);
+      const next = typeof update === 'function' ? update(previous) : update;
+      return { storageKey, ids: normalizeSavedProductIds(next, maxItems) };
+    });
+  };
+
+  useEffect(() => {
+    setStored({ storageKey, ids: readSavedProductIds(storageKey, maxItems) });
+  }, [storageKey, maxItems]);
+
+  useEffect(() => {
+    if (stored.storageKey !== storageKey) return;
+    try { window.localStorage.setItem(storageKey, JSON.stringify(stored.ids)); } catch { /* saved preferences are optional */ }
+  }, [storageKey, stored]);
+
+  return [ids, setIds];
+}
+
 
 export function Storefront({ onExit, initialView = 'shop', initialProductId, initialQuery, initialCategorySlug, initialSubcategorySlug, initialCatalogMode = 'default' }: {
   onExit: () => void;
@@ -111,8 +153,11 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
   const [lastOrderNo, setLastOrderNo] = useState('');
   const [lastOrderId, setLastOrderId] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ProductWithInventory | null>(null);
-  const [wishlist, setWishlist] = useState<string[]>(() => readSavedProductIds('aghbari:wishlist:v1', 500));
-  const [compare, setCompare] = useState<string[]>(() => readSavedProductIds('aghbari:compare:v1', 3));
+  const savedListOrigin = typeof window === 'undefined' ? 'server-render' : window.location.origin;
+  const wishlistStorageKey = savedProductListStorageKey('wishlist', user?.profileId ?? null, savedListOrigin);
+  const compareStorageKey = savedProductListStorageKey('compare', user?.profileId ?? null, savedListOrigin);
+  const [wishlist, setWishlist] = useScopedSavedProductIds(wishlistStorageKey, 500);
+  const [compare, setCompare] = useScopedSavedProductIds(compareStorageKey, 3);
   const [savedListNotice, setSavedListNotice] = useState('');
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
 
@@ -133,14 +178,6 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId, ini
     setCachedCatalog({ scopeKey: cartScopeKey, products: safeCatalog });
     try { window.localStorage.setItem(getOfflineCatalogCacheKey(cartScopeKey), JSON.stringify(safeCatalog)); } catch { /* cache is optional */ }
   }, [liveProducts, cartScopeKey]);
-
-  useEffect(() => {
-    try { window.localStorage.setItem('aghbari:wishlist:v1', JSON.stringify(wishlist)); } catch { /* saved preferences are optional */ }
-  }, [wishlist]);
-
-  useEffect(() => {
-    try { window.localStorage.setItem('aghbari:compare:v1', JSON.stringify(compare)); } catch { /* saved preferences are optional */ }
-  }, [compare]);
 
   useEffect(() => {
     if (initialView !== 'product' || !initialProductId || !products.length) return;
