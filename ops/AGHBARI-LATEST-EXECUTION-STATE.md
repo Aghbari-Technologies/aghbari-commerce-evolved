@@ -182,3 +182,11 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - The same CI build ran the official TanStack Vite generator. Its captured `src/routeTree.gen.ts` contains **56 route imports**, including addresses, templates, checkout review/confirm, company details/users/contacts/members, profile, approval status and onboarding paths. The generated output is committed in this follow-up, and the temporary log-dump step is replaced with a route-tree drift check.
 - Added direct route-ID assertions for customer account/company paths, checkout review/confirmation, addresses and purchase templates; existing component-level tests assert logout success/failure, RPC-backed company read/retry, and non-inferred approval state.
 - New repair SHA / exact-head CI: pending at checkpoint creation; no local checkout means local commands were not run. Continue from the latest PR head and repair any remaining exact-head CI failure before broadening route coverage.
+
+
+## 2026-10-16 — administration operational routes batch (pre-generator checkpoint)
+- Parent source SHA: `d6bf05ffb649b04540ef846a83c225f4e1ef5e80`; same open PR #72 and branch `fix/acceptance-hardening-cart-finance-20261015`.
+- Components now support deep-link initial tabs for import engine/history, Onyx, stock reconciliation, and AI alerts/tasks.
+- Added 14 exact route modules for the operational/admin paths listed in the coverage matrix and route-ID tests in `src/test/app-routing.test.tsx`.
+- `src/routeTree.gen.ts` is deliberately waiting for the official output from this batch's Vite/TanStack build; the workflow temporarily emits that generator output so the resulting source file can be committed exactly and the drift guard restored.
+- Exact-head CI for this batch pending. No local commands were run in this GitHub-only session.

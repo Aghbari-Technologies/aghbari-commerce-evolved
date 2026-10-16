@@ -1,3 +1,10 @@
+## 2026-10-16 — Administration operational route slice
+
+- Added direct route modules for `/admin/workspace`, `/admin/catalog`, `/admin/data-center`, `/admin/import`, `/admin/import-logs`, `/admin/onyx`, `/admin/ai/stock-sync`, `/admin/ai/sync`, `/admin/finance-data`, `/admin/order/:id`, `/admin/ai/alerts`, `/admin/ai/tasks`, `/admin/ai/reports`, and `/admin/ai/executive`.
+- Reused current APIs/components. Operations and AI centers have route-selected initial tabs. Import history reads server job records and only offers resume for an exact matching original file; it does not create a second upload workflow.
+- Dynamic order detail validates UUID input and selects the existing server-backed order detail view. AI report/executive routes are explicitly disclosed aliases, not newly claimed independent engines.
+- Source tree must be regenerated from the official TanStack generator output and the exact-head CI must pass before labeling this batch complete.
+
 ## ضوابط التنفيذ الحالية — مصدر مهمة واحد
 
 - استمر في PR #72 على الفرع `fix/acceptance-hardening-cart-finance-20261015` ما دام مفتوحًا؛ لا تدفع إلى `main`.
