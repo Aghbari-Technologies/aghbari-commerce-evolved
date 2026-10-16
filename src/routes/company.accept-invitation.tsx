@@ -3,7 +3,9 @@ import { CompanyInvitationAcceptancePage } from "@/components/CustomerCompanyMem
 
 export const Route = createFileRoute("/company/accept-invitation")({
   validateSearch: (search: Record<string, unknown>) => ({
-    token: typeof search.token === "string" ? search.token : "",
+    token: typeof search.token === "string" && /^[0-9a-f]{64}$/i.test(search.token)
+      ? search.token
+      : undefined,
   }),
   head: () => ({
     meta: [
