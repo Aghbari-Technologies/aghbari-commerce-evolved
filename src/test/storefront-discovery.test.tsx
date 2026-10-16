@@ -139,6 +139,22 @@ describe("customer storefront saved discovery", () => {
     expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
   });
 
+  it("renders the correct active product details from a direct dynamic URL without leaking base price", async () => {
+    const detail = await mountAt("/product/product-3");
+    expect(detail.host.querySelector(".sf-product-detail h2")?.textContent).toBe("Oil");
+    expect(detail.host.textContent).toContain("SKU: SKU-003");
+    expect(detail.host.querySelector(".sf-btn-primary")?.textContent).toContain("إضافة إلى السلة");
+    expect(detail.host.textContent).toContain("أضف للمفضلة");
+    expect(detail.host.textContent).not.toContain("1500");
+  });
+
+  it("renders an explicit unavailable state for an unknown product identifier", async () => {
+    const detail = await mountAt("/product/not-a-real-product");
+    expect(detail.host.textContent).toContain("المنتج غير متاح");
+    expect(detail.host.textContent).toContain("تعذر العثور على المنتج ضمن الكتالوج الحالي");
+    expect(detail.host.querySelector(".sf-product-detail")).toBeNull();
+  });
+
   it("renders the featured storefront using only server-selected catalog items", async () => {
     const featured = await mountAt("/featured");
     const names = Array.from(featured.host.querySelectorAll("article h3")).map((node) => node.textContent);
