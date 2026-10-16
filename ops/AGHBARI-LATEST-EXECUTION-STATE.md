@@ -8,9 +8,10 @@
 
 ## Only next task
 - **`next_task_id = AGH-OPS-DR-001` — OPEN / PARTIAL.**
-- **Completed source work:** PWA icon/manifest acceptance; 100,000-row CSV streaming boundary; 100 MiB file-size guard; 100-column and 4,000-character cell boundaries; XLSX archive-expansion budget and adversarial central-directory fixture.
-- **Next implementation step:** add a repeatable CSV streaming performance probe that records elapsed time and sampled heap/RSS on the 100,000-row input without storing the full CSV; then continue safe backup/restore and recovery checks only where a non-production environment/provider access is available.
-- Do not mark operational performance, production 100 MiB behavior, backup restore, or DR drill complete from unit tests alone. Do not repeat broad discovery or already-passing tests unless related code changes.
+- **Implemented in candidate source SHA `c241970e648f7292178e0a9a88bdf4938a69ef2f`:** the streaming CSV parser now retains at most 101 cells for a hostile over-wide row while preserving a deterministic rejection signal; XLSX cells over 4,000 characters are passed downstream as a bounded invalid sentinel. Regression fixtures exercise the actual XLSX ZIP reader at 100/101 columns, 4,000/4,001 characters, and a forged central-directory expansion claim.
+- **Exact-head CI:** [38828317225](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38828317225) is **IN_PROGRESS** for candidate `c241970e648f7292178e0a9a88bdf4938a69ef2f`; do not record PASS until Actions completes. Local npm test was **NOT RUN** because this runtime cannot resolve github.com for a checkout.
+- **Performance probe:** parent commit `41e5bb5bbf40a0c462bb73e553db0b9babc77424` adds `scripts/benchmark-import-streaming.ts` and an Actions step measuring elapsed time, throughput and sampled heap/RSS over 100,000 rows without retaining the complete generated file. Candidate SHA changes import code, so this run should exercise the benchmark gate.
+- **Next implementation step:** consume the exact-SHA CI/benchmark result, fix any regressions, then continue a safe backup/restore drill only against an isolated non-production database. Do not mark actual 100 MiB file processing, production performance, restore, failover or DR complete from unit tests alone.
 - Keep `AGH-SEC-BROWSER-E2E-001` as a separate external blocker; it does not prevent source work.
 
 ## Evidence checkpoint
