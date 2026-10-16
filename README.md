@@ -11,12 +11,14 @@ This project was built with [Lovable](https://lovable.dev).
 Continue developing this project in the [Lovable editor](https://lovable.dev/projects/851f6f5c-d23d-45a6-9568-1452d5cfdd73).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+- **Stay in sync**: changes may flow between Lovable and the configured Git branch; verify the actual branch and synchronization state instead of assuming.
+- **Full ownership**: preserve commits and use the active PR workflow. Do not push in-flight work directly to `main` while its PR is open. A Git push does not prove editor sync or production publication.
 
 ## Canonical project memory and session recovery
 
-Start new or resumed work from [PROJECT_MEMORY.md](./PROJECT_MEMORY.md), then read [the session resume prompt](./ops/AGHBARI-SESSION-RESUME.md), [latest execution state](./ops/AGHBARI-LATEST-EXECUTION-STATE.md), [requirement registry](./docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md), and [execution mandate](./docs/canonical/AGHBARI-EXECUTION-MANDATE.md). The full owner-provided specification is preserved at [AGHBARI-MASTER-PROJECT-SPECIFICATION.md](./docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md). Always verify the live `main` SHA and CI before continuing; saved SHAs are history, not a substitute for checking current state.
+**Do not start a discovery loop.** Read root [`AGENTS.md`](./AGENTS.md), then read only the first/current task cursor in [latest execution state](./ops/AGHBARI-LATEST-EXECUTION-STATE.md). Match that one task to its row in [the requirement registry](./docs/canonical/AGHBARI-REQUIREMENT-REGISTRY.md), then read only the relevant source/spec clauses. `PROJECT_MEMORY.md`, [the session resume prompt](./ops/AGHBARI-SESSION-RESUME.md), and [execution mandate](./docs/canonical/AGHBARI-EXECUTION-MANDATE.md) are supporting references—not a requirement to reread every file on every session. The full product acceptance specification is [here](./docs/canonical/AGHBARI-MASTER-PROJECT-SPECIFICATION.md).
+
+The first/current pointer in `ops/AGHBARI-LATEST-EXECUTION-STATE.md` is the **only active task cursor**. Older task IDs elsewhere are historical. If current-head CI fails, fix that failure before moving on. Save the existing state and registry after each coherent batch and before every response, pause, timeout/context limit or session end. Record the actual HEAD, changed files, real test results, tested SHA/CI, next task, and blockers. Verify actual Lovable synchronization and publish separately.
 
 ## Development
 
