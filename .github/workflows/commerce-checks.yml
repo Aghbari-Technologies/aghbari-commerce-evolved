@@ -87,6 +87,86 @@ jobs:
             done
           fi
           exit "$db_status"
+
+      - name: Isolated PostgreSQL logical backup and restore drill
+        shell: bash
+        run: |
+          set -euo pipefail
+          postgres_container="$(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 == "postgres:17" {print $1; exit}')"
+          if [[ -z "$postgres_container" ]]; then
+            echo "PostgreSQL 17 service container was not found; refusing to report a restore PASS."
+            exit 1
+          fi
+
+          backup_file="$RUNNER_TEMP/aghbari-isolated-restore-drill.dump"
+          trap 'rm -f "$backup_file"; docker exec "$postgres_container" dropdb -U postgres --if-exists aghbari_restore_test >/dev/null 2>&1 || true' EXIT
+          docker exec "$postgres_container" pg_dump --version
+          docker exec "$postgres_container" pg_dump --format=custom --no-owner --no-privileges -U postgres -d aghbari_test > "$backup_file"
+          test -s "$backup_file"
+          docker exec "$postgres_container" createdb -U postgres -T template0 aghbari_restore_test
+          docker exec -i "$postgres_container" pg_restore --exit-on-error --no-owner --no-privileges -U postgres -d aghbari_restore_test < "$backup_file"
+
+          schema_signature() {
+            local database="$1"
+            docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              SELECT
+                (SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE')::text || ':' ||
+                (SELECT count(*) FROM information_schema.columns WHERE table_schema='public')::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prokind IN ('f','p'))::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_constraint c JOIN pg_catalog.pg_class t ON t.oid=c.conrelid JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public')::text || ':' ||
+                (SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname='public');
+            "
+          }
+
+          data_signature() {
+            local database="$1"
+            local output signature
+            output="$(docker exec "$postgres_container" psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d "$database" -c "
+              DO \$dr\$
+              DECLARE
+                item record;
+                row_hash text;
+                data_summary text := '';
+              BEGIN
+                FOR item IN
+                  SELECT schemaname, tablename
+                  FROM pg_catalog.pg_tables
+                  WHERE schemaname='public'
+                  ORDER BY schemaname, tablename
+                LOOP
+                  EXECUTE format(
+                    'SELECT md5(coalesce(string_agg(md5(to_jsonb(r)::text), '''' ORDER BY md5(to_jsonb(r)::text)), '''')) FROM %I.%I AS r',
+                    item.schemaname, item.tablename
+                  ) INTO row_hash;
+                  data_summary := data_summary || item.schemaname || '.' || item.tablename || ':' || row_hash || ';';
+                END LOOP;
+                RAISE NOTICE 'AGHBARI_DATA_SIGNATURE=%', md5(data_summary);
+              END
+              \$dr\$;
+            " 2>&1)"
+            signature="$(printf '%s\n' "$output" | sed -n 's/^NOTICE:  AGHBARI_DATA_SIGNATURE=//p' | tail -n 1)"
+            if [[ -z "$signature" ]]; then
+              echo "Could not calculate the restored database row signature." >&2
+              printf '%s\n' "$output" >&2
+              return 1
+            fi
+            printf '%s' "$signature"
+          }
+
+          source_schema="$(schema_signature aghbari_test)"
+          restored_schema="$(schema_signature aghbari_restore_test)"
+          if [[ -z "$source_schema" || "$source_schema" != "$restored_schema" ]]; then
+            echo "Schema signature mismatch after logical restore: source=$source_schema restored=$restored_schema"
+            exit 1
+          fi
+          source_data="$(data_signature aghbari_test)"
+          restored_data="$(data_signature aghbari_restore_test)"
+          if [[ "$source_data" != "$restored_data" ]]; then
+            echo "Row-data signature mismatch after logical restore: source=$source_data restored=$restored_data"
+            exit 1
+          fi
+          echo "PASS isolated PostgreSQL 17 logical backup/restore; schema_signature=$source_schema data_signature=$source_data"
+
       # The repository-wide Prettier rule currently reports thousands of pre-existing formatting errors.
       # Keep ESLint correctness rules enabled here and do not let that legacy formatting backlog hide build results.
       - name: Lint (excluding repository-wide Prettier formatting rule)
