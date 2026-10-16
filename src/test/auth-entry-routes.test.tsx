@@ -8,6 +8,12 @@ const authMock = vi.hoisted(() => ({
   loading: false,
 }));
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children, ...props }: { to: string; children: import("react").ReactNode; className?: string }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
+}));
+
 vi.mock("@/lib/auth", () => ({ useAuth: () => authMock }));
 
 import { Login } from "@/components/Login";
