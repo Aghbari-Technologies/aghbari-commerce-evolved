@@ -450,10 +450,12 @@ function Invoices() {
   async function open(i: Invoice) {
     setChosen(i);
     setDetailBusy(true);
+    setError("");
     setChosenFinancials(null);
     setAmountsVisible(false);
     setItems([]);
-    const [invoicePayloadResult, orderResult] = await Promise.all([
+    try {
+      const [invoicePayloadResult, orderResult] = await Promise.all([
       supabase.rpc("get_customer_invoice_pdf", { p_invoice_id: i.id }),
       supabase
         .from("orders")
@@ -512,7 +514,16 @@ function Invoices() {
         } | null,
       );
     }
-    setDetailBusy(false);
+    } catch {
+      setError("تعذر تحميل تفاصيل الفاتورة ومبالغها المصرح بها. تحقق من صلاحية الفاتورة ونشر مخطط المالية.");
+      setChosen(null);
+      setChosenCustomer(null);
+      setChosenFinancials(null);
+      setItems([]);
+      setInvoiceOrder(null);
+    } finally {
+      setDetailBusy(false);
+    }
   }
   async function downloadInvoicePdf(invoiceId: string) {
     setPdfBusyId(invoiceId);
