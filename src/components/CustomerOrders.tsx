@@ -96,7 +96,7 @@ export function OrderInvoice({ id }: { id: string }) {
 
 function OrderInvoiceInner({ id }: { id: string }) {
   const { user } = useAuth();
-  const { data, loading, error } = useFetch(async () => {
+  const { data, loading, error, refetch } = useFetch(async () => {
     const [o, i, h, financialResult] = await Promise.all([
       supabase.from('orders').select('id,order_number,customer_id,status,total_items,notes,created_at,quantity_review_required,customer_adjustment_note,customer_payment_requested_at,customer_confirmed_at,payment_request_status,delivery_address_snapshot').eq('id', id).maybeSingle(),
       supabase.from('order_items').select('id,item_code,product_name_snapshot,unit_snapshot,quantity,requested_quantity,approved_quantity').eq('order_id', id),
@@ -127,7 +127,7 @@ function OrderInvoiceInner({ id }: { id: string }) {
   }, [id]);
 
   if (loading) return <Shell><p role="status">جارٍ تحميل الطلب...</p></Shell>;
-  if (error) return <Shell><div style={card} role="alert">{error}</div></Shell>;
+  if (error) return <Shell><div style={card} role="alert">{error} <button className="sf-link" type="button" onClick={refetch}>إعادة المحاولة</button></div></Shell>;
   if (!data?.order) return <Shell><div style={card}>الطلب غير موجود أو لا تملك صلاحية عرضه. <Link to="/orders" className="sf-link">طلباتي</Link></div></Shell>;
   const { order, items, history, customer, financials } = data;
 
