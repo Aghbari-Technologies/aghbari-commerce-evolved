@@ -30,17 +30,25 @@ BEGIN
      WHERE p.id=v_profile
        AND p.auth_user_id=auth.uid()
        AND p.is_active
+       AND p.organization_id=public.current_organization_id()
   ) THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='authenticated active customer required for account statement';
   END IF;
 
-  SELECT c.id, c.organization_id INTO v_customer, v_org
-    FROM public.customers c
-   WHERE c.profile_id=v_profile
-   ORDER BY c.created_at, c.id
-   LIMIT 1;
+  -- Preserve the membership-aware customer scope and capability gate from the
+  -- company-membership migration. A later full-ledger replacement must not
+  -- silently revert finance members to profile-owned customers only.
+  IF NOT public.current_customer_can('statement.read') THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='company member is not allowed to read the account statement';
+  END IF;
 
-  IF v_customer IS NULL OR v_org IS NULL THEN
+  v_customer := public.current_customer_id();
+  v_org := public.current_organization_id();
+
+  IF v_customer IS NULL OR v_org IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.customers c
+    WHERE c.id=v_customer AND c.organization_id=v_org
+  ) THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='customer account is not linked to the active profile';
   END IF;
 

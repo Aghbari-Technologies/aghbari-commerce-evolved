@@ -1131,6 +1131,24 @@ async function main() {
     "server-side account totals must cover the complete ledger grouped by currency",
   );
 
+  // Finance company members share only the explicitly permitted statement scope.
+  // This specifically guards against the full-ledger replacement reverting to
+  // customers.profile_id and losing membership-linked finance users.
+  await db.unsafe("reset role");
+  await setIdentity(financeAuthUserId, "ci-invited-finance@example.test");
+  await db.unsafe("set role authenticated");
+  const financeMemberStatementRows=await db.unsafe("select public.get_customer_account_statement() as result");
+  const financeMemberStatement=financeMemberStatementRows[0].result;
+  assert.ok(financeMemberStatement.invoices.some((row)=>row.id===invoice.id),
+    "finance member must see invoices for the invited company");
+  assert.equal(financeMemberStatement.summary.invoice_count,1,
+    "finance member statement summary must retain the linked company scope");
+  assert.equal(Number(financeMemberStatement.summary.totals_by_currency[0].invoiced),370000,
+    "finance member can read authorized statement totals");
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
+  await db.unsafe("set role authenticated");
+
   // Exercise both detail caps with isolated fixtures. The full summary and per-invoice
   // balances must include rows that are intentionally absent from the returned detail arrays.
   await db.unsafe("reset role");
@@ -2020,6 +2038,9 @@ async function main() {
   assert.equal(companyScope[0].customer_id,customerOneId,"member is bound to the invited customer, not a new company");
   assert.equal(companyScope[0].can_order,true,"buyer is allowed to create company orders");
   assert.equal(companyScope[0].can_statement,false,"buyer is not allowed to read finance statements");
+  await expectFailure("buyer membership cannot read the finance account statement",
+    ()=>db.unsafe("select public.get_customer_account_statement()"),
+    /company member is not allowed to read the account statement/i);
   assert.equal((await db.unsafe("select id from public.customers where id=$1",[customerOneId])).length,1);
   assert.equal((await db.unsafe("select id from public.customers where profile_id=$1",[secondProfileId])).length,0,"member cannot read a different customer in the same organization");
   assert.equal((await db.unsafe("select id from public.customer_addresses where id=$1",[firstId])).length,1,"buyer is scoped to the invited company's addresses");
