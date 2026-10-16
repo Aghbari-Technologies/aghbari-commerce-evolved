@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   signOut: vi.fn(),
   responses: {} as Record<string, unknown[]>,
+  queryErrors: {} as Record<string, string>,
   queries: [] as Array<{
     table: string;
     columns?: string;
@@ -108,16 +109,16 @@ function makeQuery(table: string) {
     maybeSingle() {
       return Promise.resolve({
         data: (mocks.responses[table] ?? [])[0] ?? null,
-        error: null,
+        error: mocks.queryErrors[table] ? { message: mocks.queryErrors[table] } : null,
       });
     },
-    then<TResult1 = { data: unknown[]; error: null }, TResult2 = never>(
-      onfulfilled?: ((value: { data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+    then<TResult1 = { data: unknown[]; error: { message: string } | null }, TResult2 = never>(
+      onfulfilled?: ((value: { data: unknown[]; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
     ): Promise<TResult1 | TResult2> {
       return Promise.resolve({
         data: mocks.responses[table] ?? [],
-        error: null,
+        error: mocks.queryErrors[table] ? { message: mocks.queryErrors[table] } : null,
       }).then(onfulfilled ?? undefined, onrejected ?? undefined);
     },
   };
@@ -156,6 +157,7 @@ describe("customer workflow tenant and monetary display boundaries", () => {
       }],
       sales_quotes: [],
     };
+    mocks.queryErrors = {};
     mocks.getCurrentTenantScope.mockResolvedValue({
       profileId: PROFILE_ID,
       organizationId: ORGANIZATION_ID,
@@ -254,6 +256,29 @@ describe("customer workflow tenant and monetary display boundaries", () => {
     };
   }
 
+
+  it("offers a retry after an order-detail read fails", async () => {
+    const orderId = "33333333-3333-4333-8333-333333333333";
+    configureCustomerOrderFixture(orderId);
+    mocks.queryErrors.orders = "temporary read failure";
+
+    await mountQuoteWorkspace("/orders/" + orderId);
+
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain("تعذر تحميل الطلب");
+    const retry = Array.from(host?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+      .find((button) => button.textContent?.trim() === "إعادة المحاولة");
+    expect(retry).toBeDefined();
+
+    mocks.queryErrors.orders = "";
+    await act(async () => {
+      retry?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host?.textContent).toContain("تأكيد طلب");
+    expect(host?.textContent).toContain("SO-UI-001");
+    expect(host?.querySelector('[role="alert"]')?.textContent ?? "").not.toContain("تعذر تحميل الطلب");
+  });
 
   it("keeps recorded order money hidden when the server policy is off", async () => {
     const orderId = "33333333-3333-4333-8333-333333333333";
