@@ -84,7 +84,7 @@ This is an execution index, not proof that every feature is complete. A route, c
 6. Build AI gateway and queue workers only against verified contracts, with budgets/privacy gates/rule fallback.
 7. Record responsive RTL browser UAT and exact-SHA evidence.
 
-Protocol: `INSPECT → CLASSIFY GAPS → IMPLEMENT → CONNECT → TEST → FIX → VERIFY → COMMIT → PUSH MAIN → SYNC LOVABLE`. A Git push alone is not proof of Lovable sync.
+Protocol: `VERIFY ACTIVE PR/HEAD → RESUME CURRENT TASK → IMPLEMENT → TEST → FIX → CHECKPOINT → COMMIT/PUSH ACTIVE PR BRANCH → CONTINUE`. Do not push directly to `main` while an implementation PR is open. A Git push alone is not proof of Lovable sync.
 
 
 ## XLSX export evidence (2026-10-15)
