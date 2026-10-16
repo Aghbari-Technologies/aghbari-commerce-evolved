@@ -38,8 +38,8 @@ function normalizeCategoryRouteKey(value: string): string {
     .normalize('NFKC')
     .trim()
     .toLocaleLowerCase()
-    .replace(/[\\s_]+/g, '-')
-    .replace(/[^\\p{L}\\p{N}-]/gu, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]/gu, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 }
