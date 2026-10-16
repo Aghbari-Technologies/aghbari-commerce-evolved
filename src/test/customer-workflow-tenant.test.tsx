@@ -1433,13 +1433,13 @@ describe("customer workflow tenant and monetary display boundaries", () => {
         status: "confirmed",
       }],
     };
-    mocks.rpc.mockRejectedValueOnce(new Error("invoice detail read failed"));
-
     await mountQuoteWorkspace("/invoices");
     const openButton = Array.from(host?.querySelectorAll("button") ?? []).find((button) =>
       button.textContent?.includes("عرض / طباعة"),
     );
     expect(openButton).toBeDefined();
+    // Set the rejection after list loading so only the deliberate detail RPC consumes it.
+    mocks.rpc.mockRejectedValueOnce(new Error("invoice detail read failed"));
 
     await act(async () => {
       openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
