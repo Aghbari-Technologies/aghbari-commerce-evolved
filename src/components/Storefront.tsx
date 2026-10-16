@@ -102,7 +102,7 @@ function useScopedSavedProductIds(storageKey: string, maxItems: number): [string
 }
 
 
-export function Storefront({ onExit, onExitLabel = 'لوحة التحكم', initialView = 'shop', initialProductId, initialQuery, initialCategorySlug, initialSubcategorySlug, initialCatalogMode = 'default' }: {
+export function Storefront({ onExit, onExitLabel, initialView = 'shop', initialProductId, initialQuery, initialCategorySlug, initialSubcategorySlug, initialCatalogMode = 'default' }: {
   onExit: () => void;
   onExitLabel?: string;
   initialView?: StorefrontInitialView;

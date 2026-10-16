@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
     { product_id: "product-1", ranking_position: 2 },
   ],
   fetchSettingsMap: vi.fn(),
-  user: null as null | { profileId: string; roles: string[]; name: string },
+  user: null as null | { id?: string; profileId: string; email?: string; roles: string[]; name: string; isStaff?: boolean },
   rpc: vi.fn(async (_name?: string, _args?: Record<string, unknown>) => ({ data: null as unknown, error: null as unknown })),
   products: [
     { id: "product-1", name: "Rice", item_code: "SKU-001", barcode: null, description: null, unit: "carton", base_price: 1000, cost_price: 600, min_stock: 0, status: "active", category_id: null, image_url: null, created_at: "2026-01-01T00:00:00Z", retail_price: 1000, wholesale_price: 900, inventory: { id: "inv-1", product_id: "product-1", warehouse_id: "warehouse-1", quantity_on_hand: 20, quantity_reserved: 0, quantity_available: 20, reorder_point: 0 } },
@@ -156,6 +156,29 @@ describe("customer storefront saved discovery", () => {
       expect(screen.router.state.location.pathname).not.toBe("/admin");
     },
   );
+
+  it("keeps the dashboard action for staff users", async () => {
+    mocks.user = {
+      id: USER_ID,
+      profileId: PROFILE_ID,
+      email: "ci-staff@example.test",
+      name: "CI Staff",
+      roles: ["staff"],
+      isStaff: true,
+    };
+
+    const screen = await mountAt("/catalog");
+    const exitButton = screen.host.querySelector<HTMLButtonElement>(".sf-admin-btn");
+
+    expect(exitButton?.textContent).toContain("لوحة التحكم");
+
+    await act(async () => {
+      exitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.router.state.location.pathname).toBe("/admin");
+  });
 
   it.each(["/checkout", "/checkout/review"])(
     "returns to the cart from the checkout header on %s",

@@ -16,7 +16,7 @@ Treat the following as **not implemented, partial, or not proven** until each ro
 
 ## 2026-10-16 — Shared storefront exit routing regression
 
-- The shared Storefront header now keeps staff's configured dashboard action but sends guests/customers to the store instead of routing them into the protected `/admin` area.
+- The shared Storefront header now retains staff's configured dashboard action but sends guests/customers to the store instead of routing them into the protected `/admin` area. An initial default-parameter value masked the role distinction; it has been removed so the explicit override is only present on routes that deliberately provide it.
 - Added five direct-route behavior cases for `/catalog`, `/cart`, `/product/product-3`, `/wishlist`, and `/compare`. The existing checkout/review cases preserve their explicit `العودة إلى السلة` → `/cart` behavior.
 - This corrects a common shared-component defect without duplicating route-specific work. Exact-head CI is still pending, and no local run is claimed.
 
