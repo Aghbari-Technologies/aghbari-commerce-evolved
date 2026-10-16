@@ -66,7 +66,7 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
       .eq('status', 'active')
       .order('name');
     if (error) throw error;
-    products = (data ?? []) as Product[];
+    products = (data ?? []) as unknown as Product[];
   }
 
   const customerPriceMap = isStaff
@@ -83,7 +83,7 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   if (inventoryError) throw inventoryError;
 
   const invMap = new Map<string, InventoryBalance>();
-  inventory?.forEach((inv: InventoryBalance) => invMap.set(inv.product_id, inv));
+  (inventory as unknown as InventoryBalance[] | null)?.forEach((inv) => invMap.set(inv.product_id, inv));
 
   let categoriesQuery = supabase
     .from('categories')
@@ -95,7 +95,7 @@ export async function fetchProducts(): Promise<ProductWithInventory[]> {
   const { data: categories, error: categoryError } = await categoriesQuery;
   if (categoryError) throw categoryError;
   const catMap = new Map<string, Category>();
-  categories?.forEach((cat: Category) => catMap.set(cat.id, cat));
+  (categories as unknown as Category[] | null)?.forEach((cat) => catMap.set(cat.id, cat));
 
   return (products as Product[]).map((p) => {
     const displayPrice = isStaff ? Number(p.base_price) : customerPriceMap?.get(p.id);
@@ -157,7 +157,7 @@ export async function fetchCategories(): Promise<Category[]> {
   if (!isStaff) query = query.eq('is_active', true);
   const { data, error } = await query.order('sort_order');
   if (error) throw error;
-  return data as Category[];
+  return data as unknown as Category[];
 }
 
 export async function createCategory(c: Partial<Category>): Promise<Category> {

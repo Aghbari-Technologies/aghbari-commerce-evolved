@@ -339,7 +339,7 @@ function CollectionView({ title, icon: Icon, products, wishlist, compare, loadin
   onWishlist: (id: string) => void; onCompare: (id: string) => void; onBack: () => void; empty: string;
 }) {
   return <section className="sf-collection"><button className="sf-back-link" onClick={onBack}><ArrowRight size={16} /> العودة للمتجر</button><div className="sf-products-head"><div><h2><Icon size={21} /> {title}</h2><span>{products.length} منتجات</span></div></div>
-    {products.length ? <ProductGrid products={products} wishlist={wishlist} compare={compare} onOpen={onOpen} onAdd={onAdd} onWishlist={onWishlist} onCompare={onCompare} /> :
+    {products.length ? <ProductGrid products={products} wishlist={wishlist} compare={compare} emptyTitle={empty} emptyDescription="" onOpen={onOpen} onAdd={onAdd} onWishlist={onWishlist} onCompare={onCompare} /> :
       loading ? <div className="sf-empty" role="status">جار تحميل قائمة المنتجات...</div> :
       error ? <div className="sf-empty" role="alert"><strong>تعذر تحميل قائمة المنتجات</strong><small>{error}</small><button type="button" className="sf-btn-secondary" onClick={onRetry}>إعادة المحاولة</button></div> :
       <div className="sf-empty"><Icon size={32} /><span>{empty}</span><button className="sf-link" onClick={onBack}>تصفح الكتالوج</button></div>}
