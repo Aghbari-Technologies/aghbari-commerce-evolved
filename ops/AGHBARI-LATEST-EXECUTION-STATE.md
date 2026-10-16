@@ -1,5 +1,18 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
+## LATEST EXECUTION POINTER — 2026-10-16 (official route-tree sync)
+
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this sync commit: `3b748d041cf47def279b033850e87e39fd397168`.
+- Added the remaining 22 admin screen modules and exact-route-ID assertions in the preceding source commit `3b748d041cf47def279b033850e87e39fd397168`.
+- Exact-head CI run [38852692602](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852692602) on that preceding SHA: dependency/lockfile verification PASS; **build PASS**; route-tree drift guard FAIL because the generated output was not yet committed; unit tests, migration/restore, lint and smoke tests were skipped by the guard failure. Do not treat this as a full CI pass.
+- Updated `src/routeTree.gen.ts` using the exact file diff emitted by the official TanStack build generator in that run. Blob prefix is expected to match generated index `241f0f8`; the next exact-head run must prove the drift guard.
+- Updated screen-action matrix and requirement registry to record the source-backed screens and explicit unavailable contracts. No production database writes, deployment, or Lovable publishing.
+- Next task: `AGH-ADMIN-ROUTE-ACCEPTANCE-001` — verify the generated-tree guard and run unit tests, PostgreSQL 17 migrations/workflows, lint, build, and both smoke checks on the synchronized current head. Fix any source failure before advancing.
+- Local commands remain NOT RUN because there is no local checkout. Live authenticated browser, intended Supabase, and Lovable publish gates remain separately blocked.
+
+---
+
+
 ## LATEST EXECUTION POINTER — 2026-10-16 (administration route slice)
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72) remains OPEN; target branch: `fix/acceptance-hardening-cart-finance-20261015` → `main`.

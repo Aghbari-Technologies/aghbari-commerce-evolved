@@ -2,7 +2,7 @@
 
 - Source batch adds 22 missing administrative direct route modules from specification §13.4 and route-ID assertions for every route.
 - Existing trusted components are reused: tenant-scoped operational screens for live diagnostics and ledgers, admin-only user roles, and existing appearance settings. Unsupported server contracts are disclosed as `BLOCKED / NOT CONFIGURED`, not simulated.
-- Official TanStack route tree generation and exact-head CI are the immediate next gate; paths are not marked registered or PASS until generated-tree and current-head evidence prove it.
+- Official TanStack route-tree output from [Actions 38852692602](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38852692602) is included in this follow-up. That run passed the build but failed the route-tree drift guard by design because generation had not yet been committed; unit tests and later gates were skipped. Re-run all gates on the synchronized HEAD before marking PASS.
 
 ## 2026-10-16 — Administration operational route slice
 

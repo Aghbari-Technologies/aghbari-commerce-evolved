@@ -57,15 +57,24 @@ import { Route as AccountPasswordRouteImport } from './routes/account.password'
 import { Route as AccountPendingRouteImport } from './routes/account.pending'
 import { Route as AccountSettingsRouteImport } from './routes/account.settings'
 import { Route as AdminAiRouteImport } from './routes/admin_.ai'
+import { Route as AdminAppearanceRouteImport } from './routes/admin_.appearance'
+import { Route as AdminArchitectureRouteImport } from './routes/admin_.architecture'
+import { Route as AdminAuditRouteImport } from './routes/admin_.audit'
 import { Route as AdminCatalogRouteImport } from './routes/admin_.catalog'
 import { Route as AdminCustomersRouteImport } from './routes/admin_.customers'
 import { Route as AdminDataRouteImport } from './routes/admin_.data'
 import { Route as AdminDataCenterRouteImport } from './routes/admin_.data-center'
+import { Route as AdminDevAiRouteImport } from './routes/admin_.dev-ai'
 import { Route as AdminDevicesRouteImport } from './routes/admin_.devices'
+import { Route as AdminEnginesRouteImport } from './routes/admin_.engines'
+import { Route as AdminErrorsRouteImport } from './routes/admin_.errors'
 import { Route as AdminFinanceRouteImport } from './routes/admin_.finance'
 import { Route as AdminFinanceDataRouteImport } from './routes/admin_.finance-data'
+import { Route as AdminHealthRouteImport } from './routes/admin_.health'
+import { Route as AdminImagesRouteImport } from './routes/admin_.images'
 import { Route as AdminImportRouteImport } from './routes/admin_.import'
 import { Route as AdminImportLogsRouteImport } from './routes/admin_.import-logs'
+import { Route as AdminInvitesRouteImport } from './routes/admin_.invites'
 import { Route as AdminNotificationsRouteImport } from './routes/admin_.notifications'
 import { Route as AdminOffersRouteImport } from './routes/admin_.offers'
 import { Route as AdminOnyxRouteImport } from './routes/admin_.onyx'
@@ -73,10 +82,13 @@ import { Route as AdminOperationsRouteImport } from './routes/admin_.operations'
 import { Route as AdminOrdersRouteImport } from './routes/admin_.orders'
 import { Route as AdminPricingRouteImport } from './routes/admin_.pricing'
 import { Route as AdminProductsRouteImport } from './routes/admin_.products'
+import { Route as AdminQueuesRouteImport } from './routes/admin_.queues'
 import { Route as AdminQuotesRouteImport } from './routes/admin_.quotes'
 import { Route as AdminReportsRouteImport } from './routes/admin_.reports'
+import { Route as AdminRestoreRouteImport } from './routes/admin_.restore'
 import { Route as AdminSettingsRouteImport } from './routes/admin_.settings'
 import { Route as AdminSuppliersRouteImport } from './routes/admin_.suppliers'
+import { Route as AdminUsersRouteImport } from './routes/admin_.users'
 import { Route as AdminWorkspaceRouteImport } from './routes/admin_.workspace'
 import { Route as ApiStatementPdfRouteImport } from './routes/api.statement-pdf'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
@@ -104,11 +116,21 @@ import { Route as SearchAdvancedRouteImport } from './routes/search_.advanced'
 import { Route as TemplatesIdRouteImport } from './routes/templates_.$id'
 import { Route as TemplatesNewRouteImport } from './routes/templates_.new'
 import { Route as AdminAiAlertsRouteImport } from './routes/admin_.ai.alerts'
+import { Route as AdminAiAssistantRouteImport } from './routes/admin_.ai.assistant'
+import { Route as AdminAiAuditRouteImport } from './routes/admin_.ai.audit'
 import { Route as AdminAiExecutiveRouteImport } from './routes/admin_.ai.executive'
+import { Route as AdminAiGovernanceRouteImport } from './routes/admin_.ai.governance'
+import { Route as AdminAiInsightsRouteImport } from './routes/admin_.ai.insights'
+import { Route as AdminAiModelsRouteImport } from './routes/admin_.ai.models'
+import { Route as AdminAiPromptsRouteImport } from './routes/admin_.ai.prompts'
 import { Route as AdminAiReportsRouteImport } from './routes/admin_.ai.reports'
+import { Route as AdminAiSettingsRouteImport } from './routes/admin_.ai.settings'
 import { Route as AdminAiStockSyncRouteImport } from './routes/admin_.ai.stock-sync'
 import { Route as AdminAiSyncRouteImport } from './routes/admin_.ai.sync'
 import { Route as AdminAiTasksRouteImport } from './routes/admin_.ai.tasks'
+import { Route as AdminDevAiAuditRouteImport } from './routes/admin_.dev-ai.audit'
+import { Route as AdminDevAiPatchesRouteImport } from './routes/admin_.dev-ai.patches'
+import { Route as AdminDevAiSettingsRouteImport } from './routes/admin_.dev-ai.settings'
 import { Route as AdminOrderIdRouteImport } from './routes/admin_.order.$id'
 import { Route as ApiInvoicePdfInvoiceIdRouteImport } from './routes/api.invoice-pdf.$invoiceId'
 import { Route as TemplatesIdEditRouteImport } from './routes/templates_.$id.edit'
@@ -354,6 +376,21 @@ const AdminAiRoute = AdminAiRouteImport.update({
   path: '/admin/ai',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminAppearanceRoute = AdminAppearanceRouteImport.update({
+  id: '/admin_/appearance',
+  path: '/admin/appearance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminArchitectureRoute = AdminArchitectureRouteImport.update({
+  id: '/admin_/architecture',
+  path: '/admin/architecture',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAuditRoute = AdminAuditRouteImport.update({
+  id: '/admin_/audit',
+  path: '/admin/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminCatalogRoute = AdminCatalogRouteImport.update({
   id: '/admin_/catalog',
   path: '/admin/catalog',
@@ -374,9 +411,24 @@ const AdminDataCenterRoute = AdminDataCenterRouteImport.update({
   path: '/admin/data-center',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminDevAiRoute = AdminDevAiRouteImport.update({
+  id: '/admin_/dev-ai',
+  path: '/admin/dev-ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminDevicesRoute = AdminDevicesRouteImport.update({
   id: '/admin_/devices',
   path: '/admin/devices',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminEnginesRoute = AdminEnginesRouteImport.update({
+  id: '/admin_/engines',
+  path: '/admin/engines',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminErrorsRoute = AdminErrorsRouteImport.update({
+  id: '/admin_/errors',
+  path: '/admin/errors',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminFinanceRoute = AdminFinanceRouteImport.update({
@@ -389,6 +441,16 @@ const AdminFinanceDataRoute = AdminFinanceDataRouteImport.update({
   path: '/admin/finance-data',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminHealthRoute = AdminHealthRouteImport.update({
+  id: '/admin_/health',
+  path: '/admin/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminImagesRoute = AdminImagesRouteImport.update({
+  id: '/admin_/images',
+  path: '/admin/images',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminImportRoute = AdminImportRouteImport.update({
   id: '/admin_/import',
   path: '/admin/import',
@@ -397,6 +459,11 @@ const AdminImportRoute = AdminImportRouteImport.update({
 const AdminImportLogsRoute = AdminImportLogsRouteImport.update({
   id: '/admin_/import-logs',
   path: '/admin/import-logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminInvitesRoute = AdminInvitesRouteImport.update({
+  id: '/admin_/invites',
+  path: '/admin/invites',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
@@ -434,6 +501,11 @@ const AdminProductsRoute = AdminProductsRouteImport.update({
   path: '/admin/products',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminQueuesRoute = AdminQueuesRouteImport.update({
+  id: '/admin_/queues',
+  path: '/admin/queues',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminQuotesRoute = AdminQuotesRouteImport.update({
   id: '/admin_/quotes',
   path: '/admin/quotes',
@@ -444,6 +516,11 @@ const AdminReportsRoute = AdminReportsRouteImport.update({
   path: '/admin/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRestoreRoute = AdminRestoreRouteImport.update({
+  id: '/admin_/restore',
+  path: '/admin/restore',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/admin_/settings',
   path: '/admin/settings',
@@ -452,6 +529,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
 const AdminSuppliersRoute = AdminSuppliersRouteImport.update({
   id: '/admin_/suppliers',
   path: '/admin/suppliers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/admin_/users',
+  path: '/admin/users',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminWorkspaceRoute = AdminWorkspaceRouteImport.update({
@@ -589,14 +671,49 @@ const AdminAiAlertsRoute = AdminAiAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => AdminAiRoute,
 } as any)
+const AdminAiAssistantRoute = AdminAiAssistantRouteImport.update({
+  id: '/assistant',
+  path: '/assistant',
+  getParentRoute: () => AdminAiRoute,
+} as any)
+const AdminAiAuditRoute = AdminAiAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminAiRoute,
+} as any)
 const AdminAiExecutiveRoute = AdminAiExecutiveRouteImport.update({
   id: '/executive',
   path: '/executive',
   getParentRoute: () => AdminAiRoute,
 } as any)
+const AdminAiGovernanceRoute = AdminAiGovernanceRouteImport.update({
+  id: '/governance',
+  path: '/governance',
+  getParentRoute: () => AdminAiRoute,
+} as any)
+const AdminAiInsightsRoute = AdminAiInsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => AdminAiRoute,
+} as any)
+const AdminAiModelsRoute = AdminAiModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
+  getParentRoute: () => AdminAiRoute,
+} as any)
+const AdminAiPromptsRoute = AdminAiPromptsRouteImport.update({
+  id: '/prompts',
+  path: '/prompts',
+  getParentRoute: () => AdminAiRoute,
+} as any)
 const AdminAiReportsRoute = AdminAiReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AdminAiRoute,
+} as any)
+const AdminAiSettingsRoute = AdminAiSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AdminAiRoute,
 } as any)
 const AdminAiStockSyncRoute = AdminAiStockSyncRouteImport.update({
@@ -613,6 +730,21 @@ const AdminAiTasksRoute = AdminAiTasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
   getParentRoute: () => AdminAiRoute,
+} as any)
+const AdminDevAiAuditRoute = AdminDevAiAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AdminDevAiRoute,
+} as any)
+const AdminDevAiPatchesRoute = AdminDevAiPatchesRouteImport.update({
+  id: '/patches',
+  path: '/patches',
+  getParentRoute: () => AdminDevAiRoute,
+} as any)
+const AdminDevAiSettingsRoute = AdminDevAiSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminDevAiRoute,
 } as any)
 const AdminOrderIdRoute = AdminOrderIdRouteImport.update({
   id: '/admin_/order/$id',
@@ -685,15 +817,24 @@ export interface FileRoutesByFullPath {
   '/account/pending': typeof AccountPendingRoute
   '/account/settings': typeof AccountSettingsRoute
   '/admin/ai': typeof AdminAiRouteWithChildren
+  '/admin/appearance': typeof AdminAppearanceRoute
+  '/admin/architecture': typeof AdminArchitectureRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/data': typeof AdminDataRoute
   '/admin/data-center': typeof AdminDataCenterRoute
+  '/admin/dev-ai': typeof AdminDevAiRouteWithChildren
   '/admin/devices': typeof AdminDevicesRoute
+  '/admin/engines': typeof AdminEnginesRoute
+  '/admin/errors': typeof AdminErrorsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/finance-data': typeof AdminFinanceDataRoute
+  '/admin/health': typeof AdminHealthRoute
+  '/admin/images': typeof AdminImagesRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/import-logs': typeof AdminImportLogsRoute
+  '/admin/invites': typeof AdminInvitesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/offers': typeof AdminOffersRoute
   '/admin/onyx': typeof AdminOnyxRoute
@@ -701,10 +842,13 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pricing': typeof AdminPricingRoute
   '/admin/products': typeof AdminProductsRoute
+  '/admin/queues': typeof AdminQueuesRoute
   '/admin/quotes': typeof AdminQuotesRoute
   '/admin/reports': typeof AdminReportsRoute
+  '/admin/restore': typeof AdminRestoreRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/suppliers': typeof AdminSuppliersRoute
+  '/admin/users': typeof AdminUsersRoute
   '/admin/workspace': typeof AdminWorkspaceRoute
   '/api/statement-pdf': typeof ApiStatementPdfRoute
   '/category/$slug': typeof CategorySlugRouteWithChildren
@@ -732,11 +876,21 @@ export interface FileRoutesByFullPath {
   '/templates/new': typeof TemplatesNewRoute
   '/orders/': typeof OrdersIndexRoute
   '/admin/ai/alerts': typeof AdminAiAlertsRoute
+  '/admin/ai/assistant': typeof AdminAiAssistantRoute
+  '/admin/ai/audit': typeof AdminAiAuditRoute
   '/admin/ai/executive': typeof AdminAiExecutiveRoute
+  '/admin/ai/governance': typeof AdminAiGovernanceRoute
+  '/admin/ai/insights': typeof AdminAiInsightsRoute
+  '/admin/ai/models': typeof AdminAiModelsRoute
+  '/admin/ai/prompts': typeof AdminAiPromptsRoute
   '/admin/ai/reports': typeof AdminAiReportsRoute
+  '/admin/ai/settings': typeof AdminAiSettingsRoute
   '/admin/ai/stock-sync': typeof AdminAiStockSyncRoute
   '/admin/ai/sync': typeof AdminAiSyncRoute
   '/admin/ai/tasks': typeof AdminAiTasksRoute
+  '/admin/dev-ai/audit': typeof AdminDevAiAuditRoute
+  '/admin/dev-ai/patches': typeof AdminDevAiPatchesRoute
+  '/admin/dev-ai/settings': typeof AdminDevAiSettingsRoute
   '/admin/order/$id': typeof AdminOrderIdRoute
   '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
   '/templates/$id/edit': typeof TemplatesIdEditRoute
@@ -790,15 +944,24 @@ export interface FileRoutesByTo {
   '/account/pending': typeof AccountPendingRoute
   '/account/settings': typeof AccountSettingsRoute
   '/admin/ai': typeof AdminAiRouteWithChildren
+  '/admin/appearance': typeof AdminAppearanceRoute
+  '/admin/architecture': typeof AdminArchitectureRoute
+  '/admin/audit': typeof AdminAuditRoute
   '/admin/catalog': typeof AdminCatalogRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/data': typeof AdminDataRoute
   '/admin/data-center': typeof AdminDataCenterRoute
+  '/admin/dev-ai': typeof AdminDevAiRouteWithChildren
   '/admin/devices': typeof AdminDevicesRoute
+  '/admin/engines': typeof AdminEnginesRoute
+  '/admin/errors': typeof AdminErrorsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/finance-data': typeof AdminFinanceDataRoute
+  '/admin/health': typeof AdminHealthRoute
+  '/admin/images': typeof AdminImagesRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/import-logs': typeof AdminImportLogsRoute
+  '/admin/invites': typeof AdminInvitesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/offers': typeof AdminOffersRoute
   '/admin/onyx': typeof AdminOnyxRoute
@@ -806,10 +969,13 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/pricing': typeof AdminPricingRoute
   '/admin/products': typeof AdminProductsRoute
+  '/admin/queues': typeof AdminQueuesRoute
   '/admin/quotes': typeof AdminQuotesRoute
   '/admin/reports': typeof AdminReportsRoute
+  '/admin/restore': typeof AdminRestoreRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/suppliers': typeof AdminSuppliersRoute
+  '/admin/users': typeof AdminUsersRoute
   '/admin/workspace': typeof AdminWorkspaceRoute
   '/api/statement-pdf': typeof ApiStatementPdfRoute
   '/category/$slug': typeof CategorySlugRouteWithChildren
@@ -837,11 +1003,21 @@ export interface FileRoutesByTo {
   '/templates/new': typeof TemplatesNewRoute
   '/orders': typeof OrdersIndexRoute
   '/admin/ai/alerts': typeof AdminAiAlertsRoute
+  '/admin/ai/assistant': typeof AdminAiAssistantRoute
+  '/admin/ai/audit': typeof AdminAiAuditRoute
   '/admin/ai/executive': typeof AdminAiExecutiveRoute
+  '/admin/ai/governance': typeof AdminAiGovernanceRoute
+  '/admin/ai/insights': typeof AdminAiInsightsRoute
+  '/admin/ai/models': typeof AdminAiModelsRoute
+  '/admin/ai/prompts': typeof AdminAiPromptsRoute
   '/admin/ai/reports': typeof AdminAiReportsRoute
+  '/admin/ai/settings': typeof AdminAiSettingsRoute
   '/admin/ai/stock-sync': typeof AdminAiStockSyncRoute
   '/admin/ai/sync': typeof AdminAiSyncRoute
   '/admin/ai/tasks': typeof AdminAiTasksRoute
+  '/admin/dev-ai/audit': typeof AdminDevAiAuditRoute
+  '/admin/dev-ai/patches': typeof AdminDevAiPatchesRoute
+  '/admin/dev-ai/settings': typeof AdminDevAiSettingsRoute
   '/admin/order/$id': typeof AdminOrderIdRoute
   '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
   '/templates/$id/edit': typeof TemplatesIdEditRoute
@@ -897,15 +1073,24 @@ export interface FileRoutesById {
   '/account/pending': typeof AccountPendingRoute
   '/account/settings': typeof AccountSettingsRoute
   '/admin_/ai': typeof AdminAiRouteWithChildren
+  '/admin_/appearance': typeof AdminAppearanceRoute
+  '/admin_/architecture': typeof AdminArchitectureRoute
+  '/admin_/audit': typeof AdminAuditRoute
   '/admin_/catalog': typeof AdminCatalogRoute
   '/admin_/customers': typeof AdminCustomersRoute
   '/admin_/data': typeof AdminDataRoute
   '/admin_/data-center': typeof AdminDataCenterRoute
+  '/admin_/dev-ai': typeof AdminDevAiRouteWithChildren
   '/admin_/devices': typeof AdminDevicesRoute
+  '/admin_/engines': typeof AdminEnginesRoute
+  '/admin_/errors': typeof AdminErrorsRoute
   '/admin_/finance': typeof AdminFinanceRoute
   '/admin_/finance-data': typeof AdminFinanceDataRoute
+  '/admin_/health': typeof AdminHealthRoute
+  '/admin_/images': typeof AdminImagesRoute
   '/admin_/import': typeof AdminImportRoute
   '/admin_/import-logs': typeof AdminImportLogsRoute
+  '/admin_/invites': typeof AdminInvitesRoute
   '/admin_/notifications': typeof AdminNotificationsRoute
   '/admin_/offers': typeof AdminOffersRoute
   '/admin_/onyx': typeof AdminOnyxRoute
@@ -913,10 +1098,13 @@ export interface FileRoutesById {
   '/admin_/orders': typeof AdminOrdersRoute
   '/admin_/pricing': typeof AdminPricingRoute
   '/admin_/products': typeof AdminProductsRoute
+  '/admin_/queues': typeof AdminQueuesRoute
   '/admin_/quotes': typeof AdminQuotesRoute
   '/admin_/reports': typeof AdminReportsRoute
+  '/admin_/restore': typeof AdminRestoreRoute
   '/admin_/settings': typeof AdminSettingsRoute
   '/admin_/suppliers': typeof AdminSuppliersRoute
+  '/admin_/users': typeof AdminUsersRoute
   '/admin_/workspace': typeof AdminWorkspaceRoute
   '/api/statement-pdf': typeof ApiStatementPdfRoute
   '/category/$slug': typeof CategorySlugRouteWithChildren
@@ -944,11 +1132,21 @@ export interface FileRoutesById {
   '/templates_/new': typeof TemplatesNewRoute
   '/orders/': typeof OrdersIndexRoute
   '/admin_/ai/alerts': typeof AdminAiAlertsRoute
+  '/admin_/ai/assistant': typeof AdminAiAssistantRoute
+  '/admin_/ai/audit': typeof AdminAiAuditRoute
   '/admin_/ai/executive': typeof AdminAiExecutiveRoute
+  '/admin_/ai/governance': typeof AdminAiGovernanceRoute
+  '/admin_/ai/insights': typeof AdminAiInsightsRoute
+  '/admin_/ai/models': typeof AdminAiModelsRoute
+  '/admin_/ai/prompts': typeof AdminAiPromptsRoute
   '/admin_/ai/reports': typeof AdminAiReportsRoute
+  '/admin_/ai/settings': typeof AdminAiSettingsRoute
   '/admin_/ai/stock-sync': typeof AdminAiStockSyncRoute
   '/admin_/ai/sync': typeof AdminAiSyncRoute
   '/admin_/ai/tasks': typeof AdminAiTasksRoute
+  '/admin_/dev-ai/audit': typeof AdminDevAiAuditRoute
+  '/admin_/dev-ai/patches': typeof AdminDevAiPatchesRoute
+  '/admin_/dev-ai/settings': typeof AdminDevAiSettingsRoute
   '/admin_/order/$id': typeof AdminOrderIdRoute
   '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
   '/templates_/$id/edit': typeof TemplatesIdEditRoute
@@ -1005,15 +1203,24 @@ export interface FileRouteTypes {
     | '/account/pending'
     | '/account/settings'
     | '/admin/ai'
+    | '/admin/appearance'
+    | '/admin/architecture'
+    | '/admin/audit'
     | '/admin/catalog'
     | '/admin/customers'
     | '/admin/data'
     | '/admin/data-center'
+    | '/admin/dev-ai'
     | '/admin/devices'
+    | '/admin/engines'
+    | '/admin/errors'
     | '/admin/finance'
     | '/admin/finance-data'
+    | '/admin/health'
+    | '/admin/images'
     | '/admin/import'
     | '/admin/import-logs'
+    | '/admin/invites'
     | '/admin/notifications'
     | '/admin/offers'
     | '/admin/onyx'
@@ -1021,10 +1228,13 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pricing'
     | '/admin/products'
+    | '/admin/queues'
     | '/admin/quotes'
     | '/admin/reports'
+    | '/admin/restore'
     | '/admin/settings'
     | '/admin/suppliers'
+    | '/admin/users'
     | '/admin/workspace'
     | '/api/statement-pdf'
     | '/category/$slug'
@@ -1052,11 +1262,21 @@ export interface FileRouteTypes {
     | '/templates/new'
     | '/orders/'
     | '/admin/ai/alerts'
+    | '/admin/ai/assistant'
+    | '/admin/ai/audit'
     | '/admin/ai/executive'
+    | '/admin/ai/governance'
+    | '/admin/ai/insights'
+    | '/admin/ai/models'
+    | '/admin/ai/prompts'
     | '/admin/ai/reports'
+    | '/admin/ai/settings'
     | '/admin/ai/stock-sync'
     | '/admin/ai/sync'
     | '/admin/ai/tasks'
+    | '/admin/dev-ai/audit'
+    | '/admin/dev-ai/patches'
+    | '/admin/dev-ai/settings'
     | '/admin/order/$id'
     | '/api/invoice-pdf/$invoiceId'
     | '/templates/$id/edit'
@@ -1110,15 +1330,24 @@ export interface FileRouteTypes {
     | '/account/pending'
     | '/account/settings'
     | '/admin/ai'
+    | '/admin/appearance'
+    | '/admin/architecture'
+    | '/admin/audit'
     | '/admin/catalog'
     | '/admin/customers'
     | '/admin/data'
     | '/admin/data-center'
+    | '/admin/dev-ai'
     | '/admin/devices'
+    | '/admin/engines'
+    | '/admin/errors'
     | '/admin/finance'
     | '/admin/finance-data'
+    | '/admin/health'
+    | '/admin/images'
     | '/admin/import'
     | '/admin/import-logs'
+    | '/admin/invites'
     | '/admin/notifications'
     | '/admin/offers'
     | '/admin/onyx'
@@ -1126,10 +1355,13 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/admin/pricing'
     | '/admin/products'
+    | '/admin/queues'
     | '/admin/quotes'
     | '/admin/reports'
+    | '/admin/restore'
     | '/admin/settings'
     | '/admin/suppliers'
+    | '/admin/users'
     | '/admin/workspace'
     | '/api/statement-pdf'
     | '/category/$slug'
@@ -1157,11 +1389,21 @@ export interface FileRouteTypes {
     | '/templates/new'
     | '/orders'
     | '/admin/ai/alerts'
+    | '/admin/ai/assistant'
+    | '/admin/ai/audit'
     | '/admin/ai/executive'
+    | '/admin/ai/governance'
+    | '/admin/ai/insights'
+    | '/admin/ai/models'
+    | '/admin/ai/prompts'
     | '/admin/ai/reports'
+    | '/admin/ai/settings'
     | '/admin/ai/stock-sync'
     | '/admin/ai/sync'
     | '/admin/ai/tasks'
+    | '/admin/dev-ai/audit'
+    | '/admin/dev-ai/patches'
+    | '/admin/dev-ai/settings'
     | '/admin/order/$id'
     | '/api/invoice-pdf/$invoiceId'
     | '/templates/$id/edit'
@@ -1216,15 +1458,24 @@ export interface FileRouteTypes {
     | '/account/pending'
     | '/account/settings'
     | '/admin_/ai'
+    | '/admin_/appearance'
+    | '/admin_/architecture'
+    | '/admin_/audit'
     | '/admin_/catalog'
     | '/admin_/customers'
     | '/admin_/data'
     | '/admin_/data-center'
+    | '/admin_/dev-ai'
     | '/admin_/devices'
+    | '/admin_/engines'
+    | '/admin_/errors'
     | '/admin_/finance'
     | '/admin_/finance-data'
+    | '/admin_/health'
+    | '/admin_/images'
     | '/admin_/import'
     | '/admin_/import-logs'
+    | '/admin_/invites'
     | '/admin_/notifications'
     | '/admin_/offers'
     | '/admin_/onyx'
@@ -1232,10 +1483,13 @@ export interface FileRouteTypes {
     | '/admin_/orders'
     | '/admin_/pricing'
     | '/admin_/products'
+    | '/admin_/queues'
     | '/admin_/quotes'
     | '/admin_/reports'
+    | '/admin_/restore'
     | '/admin_/settings'
     | '/admin_/suppliers'
+    | '/admin_/users'
     | '/admin_/workspace'
     | '/api/statement-pdf'
     | '/category/$slug'
@@ -1263,11 +1517,21 @@ export interface FileRouteTypes {
     | '/templates_/new'
     | '/orders/'
     | '/admin_/ai/alerts'
+    | '/admin_/ai/assistant'
+    | '/admin_/ai/audit'
     | '/admin_/ai/executive'
+    | '/admin_/ai/governance'
+    | '/admin_/ai/insights'
+    | '/admin_/ai/models'
+    | '/admin_/ai/prompts'
     | '/admin_/ai/reports'
+    | '/admin_/ai/settings'
     | '/admin_/ai/stock-sync'
     | '/admin_/ai/sync'
     | '/admin_/ai/tasks'
+    | '/admin_/dev-ai/audit'
+    | '/admin_/dev-ai/patches'
+    | '/admin_/dev-ai/settings'
     | '/admin_/order/$id'
     | '/api/invoice-pdf/$invoiceId'
     | '/templates_/$id/edit'
@@ -1323,15 +1587,24 @@ export interface RootRouteChildren {
   AccountPendingRoute: typeof AccountPendingRoute
   AccountSettingsRoute: typeof AccountSettingsRoute
   AdminAiRoute: typeof AdminAiRouteWithChildren
+  AdminAppearanceRoute: typeof AdminAppearanceRoute
+  AdminArchitectureRoute: typeof AdminArchitectureRoute
+  AdminAuditRoute: typeof AdminAuditRoute
   AdminCatalogRoute: typeof AdminCatalogRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminDataRoute: typeof AdminDataRoute
   AdminDataCenterRoute: typeof AdminDataCenterRoute
+  AdminDevAiRoute: typeof AdminDevAiRouteWithChildren
   AdminDevicesRoute: typeof AdminDevicesRoute
+  AdminEnginesRoute: typeof AdminEnginesRoute
+  AdminErrorsRoute: typeof AdminErrorsRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
   AdminFinanceDataRoute: typeof AdminFinanceDataRoute
+  AdminHealthRoute: typeof AdminHealthRoute
+  AdminImagesRoute: typeof AdminImagesRoute
   AdminImportRoute: typeof AdminImportRoute
   AdminImportLogsRoute: typeof AdminImportLogsRoute
+  AdminInvitesRoute: typeof AdminInvitesRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
   AdminOffersRoute: typeof AdminOffersRoute
   AdminOnyxRoute: typeof AdminOnyxRoute
@@ -1339,10 +1612,13 @@ export interface RootRouteChildren {
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminPricingRoute: typeof AdminPricingRoute
   AdminProductsRoute: typeof AdminProductsRoute
+  AdminQueuesRoute: typeof AdminQueuesRoute
   AdminQuotesRoute: typeof AdminQuotesRoute
   AdminReportsRoute: typeof AdminReportsRoute
+  AdminRestoreRoute: typeof AdminRestoreRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminSuppliersRoute: typeof AdminSuppliersRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   AdminWorkspaceRoute: typeof AdminWorkspaceRoute
   ApiStatementPdfRoute: typeof ApiStatementPdfRoute
   CategorySlugRoute: typeof CategorySlugRouteWithChildren
@@ -1709,6 +1985,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/appearance': {
+      id: '/admin_/appearance'
+      path: '/admin/appearance'
+      fullPath: '/admin/appearance'
+      preLoaderRoute: typeof AdminAppearanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/architecture': {
+      id: '/admin_/architecture'
+      path: '/admin/architecture'
+      fullPath: '/admin/architecture'
+      preLoaderRoute: typeof AdminArchitectureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/audit': {
+      id: '/admin_/audit'
+      path: '/admin/audit'
+      fullPath: '/admin/audit'
+      preLoaderRoute: typeof AdminAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/catalog': {
       id: '/admin_/catalog'
       path: '/admin/catalog'
@@ -1737,11 +2034,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDataCenterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/dev-ai': {
+      id: '/admin_/dev-ai'
+      path: '/admin/dev-ai'
+      fullPath: '/admin/dev-ai'
+      preLoaderRoute: typeof AdminDevAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/devices': {
       id: '/admin_/devices'
       path: '/admin/devices'
       fullPath: '/admin/devices'
       preLoaderRoute: typeof AdminDevicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/engines': {
+      id: '/admin_/engines'
+      path: '/admin/engines'
+      fullPath: '/admin/engines'
+      preLoaderRoute: typeof AdminEnginesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/errors': {
+      id: '/admin_/errors'
+      path: '/admin/errors'
+      fullPath: '/admin/errors'
+      preLoaderRoute: typeof AdminErrorsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/finance': {
@@ -1758,6 +2076,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminFinanceDataRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/health': {
+      id: '/admin_/health'
+      path: '/admin/health'
+      fullPath: '/admin/health'
+      preLoaderRoute: typeof AdminHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/images': {
+      id: '/admin_/images'
+      path: '/admin/images'
+      fullPath: '/admin/images'
+      preLoaderRoute: typeof AdminImagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/import': {
       id: '/admin_/import'
       path: '/admin/import'
@@ -1770,6 +2102,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/import-logs'
       fullPath: '/admin/import-logs'
       preLoaderRoute: typeof AdminImportLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/invites': {
+      id: '/admin_/invites'
+      path: '/admin/invites'
+      fullPath: '/admin/invites'
+      preLoaderRoute: typeof AdminInvitesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/notifications': {
@@ -1821,6 +2160,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminProductsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/queues': {
+      id: '/admin_/queues'
+      path: '/admin/queues'
+      fullPath: '/admin/queues'
+      preLoaderRoute: typeof AdminQueuesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/quotes': {
       id: '/admin_/quotes'
       path: '/admin/quotes'
@@ -1835,6 +2181,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin_/restore': {
+      id: '/admin_/restore'
+      path: '/admin/restore'
+      fullPath: '/admin/restore'
+      preLoaderRoute: typeof AdminRestoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin_/settings': {
       id: '/admin_/settings'
       path: '/admin/settings'
@@ -1847,6 +2200,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/suppliers'
       fullPath: '/admin/suppliers'
       preLoaderRoute: typeof AdminSuppliersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin_/users': {
+      id: '/admin_/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/workspace': {
@@ -2038,6 +2398,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAiAlertsRouteImport
       parentRoute: typeof AdminAiRoute
     }
+    '/admin_/ai/assistant': {
+      id: '/admin_/ai/assistant'
+      path: '/assistant'
+      fullPath: '/admin/ai/assistant'
+      preLoaderRoute: typeof AdminAiAssistantRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
+    '/admin_/ai/audit': {
+      id: '/admin_/ai/audit'
+      path: '/audit'
+      fullPath: '/admin/ai/audit'
+      preLoaderRoute: typeof AdminAiAuditRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
     '/admin_/ai/executive': {
       id: '/admin_/ai/executive'
       path: '/executive'
@@ -2045,11 +2419,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAiExecutiveRouteImport
       parentRoute: typeof AdminAiRoute
     }
+    '/admin_/ai/governance': {
+      id: '/admin_/ai/governance'
+      path: '/governance'
+      fullPath: '/admin/ai/governance'
+      preLoaderRoute: typeof AdminAiGovernanceRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
+    '/admin_/ai/insights': {
+      id: '/admin_/ai/insights'
+      path: '/insights'
+      fullPath: '/admin/ai/insights'
+      preLoaderRoute: typeof AdminAiInsightsRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
+    '/admin_/ai/models': {
+      id: '/admin_/ai/models'
+      path: '/models'
+      fullPath: '/admin/ai/models'
+      preLoaderRoute: typeof AdminAiModelsRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
+    '/admin_/ai/prompts': {
+      id: '/admin_/ai/prompts'
+      path: '/prompts'
+      fullPath: '/admin/ai/prompts'
+      preLoaderRoute: typeof AdminAiPromptsRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
     '/admin_/ai/reports': {
       id: '/admin_/ai/reports'
       path: '/reports'
       fullPath: '/admin/ai/reports'
       preLoaderRoute: typeof AdminAiReportsRouteImport
+      parentRoute: typeof AdminAiRoute
+    }
+    '/admin_/ai/settings': {
+      id: '/admin_/ai/settings'
+      path: '/settings'
+      fullPath: '/admin/ai/settings'
+      preLoaderRoute: typeof AdminAiSettingsRouteImport
       parentRoute: typeof AdminAiRoute
     }
     '/admin_/ai/stock-sync': {
@@ -2072,6 +2481,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/ai/tasks'
       preLoaderRoute: typeof AdminAiTasksRouteImport
       parentRoute: typeof AdminAiRoute
+    }
+    '/admin_/dev-ai/audit': {
+      id: '/admin_/dev-ai/audit'
+      path: '/audit'
+      fullPath: '/admin/dev-ai/audit'
+      preLoaderRoute: typeof AdminDevAiAuditRouteImport
+      parentRoute: typeof AdminDevAiRoute
+    }
+    '/admin_/dev-ai/patches': {
+      id: '/admin_/dev-ai/patches'
+      path: '/patches'
+      fullPath: '/admin/dev-ai/patches'
+      preLoaderRoute: typeof AdminDevAiPatchesRouteImport
+      parentRoute: typeof AdminDevAiRoute
+    }
+    '/admin_/dev-ai/settings': {
+      id: '/admin_/dev-ai/settings'
+      path: '/settings'
+      fullPath: '/admin/dev-ai/settings'
+      preLoaderRoute: typeof AdminDevAiSettingsRouteImport
+      parentRoute: typeof AdminDevAiRoute
     }
     '/admin_/order/$id': {
       id: '/admin_/order/$id'
@@ -2119,8 +2549,15 @@ const OrdersRouteWithChildren =
 
 interface AdminAiRouteChildren {
   AdminAiAlertsRoute: typeof AdminAiAlertsRoute
+  AdminAiAssistantRoute: typeof AdminAiAssistantRoute
+  AdminAiAuditRoute: typeof AdminAiAuditRoute
   AdminAiExecutiveRoute: typeof AdminAiExecutiveRoute
+  AdminAiGovernanceRoute: typeof AdminAiGovernanceRoute
+  AdminAiInsightsRoute: typeof AdminAiInsightsRoute
+  AdminAiModelsRoute: typeof AdminAiModelsRoute
+  AdminAiPromptsRoute: typeof AdminAiPromptsRoute
   AdminAiReportsRoute: typeof AdminAiReportsRoute
+  AdminAiSettingsRoute: typeof AdminAiSettingsRoute
   AdminAiStockSyncRoute: typeof AdminAiStockSyncRoute
   AdminAiSyncRoute: typeof AdminAiSyncRoute
   AdminAiTasksRoute: typeof AdminAiTasksRoute
@@ -2128,8 +2565,15 @@ interface AdminAiRouteChildren {
 
 const AdminAiRouteChildren: AdminAiRouteChildren = {
   AdminAiAlertsRoute: AdminAiAlertsRoute,
+  AdminAiAssistantRoute: AdminAiAssistantRoute,
+  AdminAiAuditRoute: AdminAiAuditRoute,
   AdminAiExecutiveRoute: AdminAiExecutiveRoute,
+  AdminAiGovernanceRoute: AdminAiGovernanceRoute,
+  AdminAiInsightsRoute: AdminAiInsightsRoute,
+  AdminAiModelsRoute: AdminAiModelsRoute,
+  AdminAiPromptsRoute: AdminAiPromptsRoute,
   AdminAiReportsRoute: AdminAiReportsRoute,
+  AdminAiSettingsRoute: AdminAiSettingsRoute,
   AdminAiStockSyncRoute: AdminAiStockSyncRoute,
   AdminAiSyncRoute: AdminAiSyncRoute,
   AdminAiTasksRoute: AdminAiTasksRoute,
@@ -2137,6 +2581,22 @@ const AdminAiRouteChildren: AdminAiRouteChildren = {
 
 const AdminAiRouteWithChildren =
   AdminAiRoute._addFileChildren(AdminAiRouteChildren)
+
+interface AdminDevAiRouteChildren {
+  AdminDevAiAuditRoute: typeof AdminDevAiAuditRoute
+  AdminDevAiPatchesRoute: typeof AdminDevAiPatchesRoute
+  AdminDevAiSettingsRoute: typeof AdminDevAiSettingsRoute
+}
+
+const AdminDevAiRouteChildren: AdminDevAiRouteChildren = {
+  AdminDevAiAuditRoute: AdminDevAiAuditRoute,
+  AdminDevAiPatchesRoute: AdminDevAiPatchesRoute,
+  AdminDevAiSettingsRoute: AdminDevAiSettingsRoute,
+}
+
+const AdminDevAiRouteWithChildren = AdminDevAiRoute._addFileChildren(
+  AdminDevAiRouteChildren,
+)
 
 interface CategorySlugRouteChildren {
   CategorySlugSubcategorySubcategorySlugRoute: typeof CategorySlugSubcategorySubcategorySlugRoute
@@ -2212,15 +2672,24 @@ const rootRouteChildren: RootRouteChildren = {
   AccountPendingRoute: AccountPendingRoute,
   AccountSettingsRoute: AccountSettingsRoute,
   AdminAiRoute: AdminAiRouteWithChildren,
+  AdminAppearanceRoute: AdminAppearanceRoute,
+  AdminArchitectureRoute: AdminArchitectureRoute,
+  AdminAuditRoute: AdminAuditRoute,
   AdminCatalogRoute: AdminCatalogRoute,
   AdminCustomersRoute: AdminCustomersRoute,
   AdminDataRoute: AdminDataRoute,
   AdminDataCenterRoute: AdminDataCenterRoute,
+  AdminDevAiRoute: AdminDevAiRouteWithChildren,
   AdminDevicesRoute: AdminDevicesRoute,
+  AdminEnginesRoute: AdminEnginesRoute,
+  AdminErrorsRoute: AdminErrorsRoute,
   AdminFinanceRoute: AdminFinanceRoute,
   AdminFinanceDataRoute: AdminFinanceDataRoute,
+  AdminHealthRoute: AdminHealthRoute,
+  AdminImagesRoute: AdminImagesRoute,
   AdminImportRoute: AdminImportRoute,
   AdminImportLogsRoute: AdminImportLogsRoute,
+  AdminInvitesRoute: AdminInvitesRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminOffersRoute: AdminOffersRoute,
   AdminOnyxRoute: AdminOnyxRoute,
@@ -2228,10 +2697,13 @@ const rootRouteChildren: RootRouteChildren = {
   AdminOrdersRoute: AdminOrdersRoute,
   AdminPricingRoute: AdminPricingRoute,
   AdminProductsRoute: AdminProductsRoute,
+  AdminQueuesRoute: AdminQueuesRoute,
   AdminQuotesRoute: AdminQuotesRoute,
   AdminReportsRoute: AdminReportsRoute,
+  AdminRestoreRoute: AdminRestoreRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminSuppliersRoute: AdminSuppliersRoute,
+  AdminUsersRoute: AdminUsersRoute,
   AdminWorkspaceRoute: AdminWorkspaceRoute,
   ApiStatementPdfRoute: ApiStatementPdfRoute,
   CategorySlugRoute: CategorySlugRouteWithChildren,
