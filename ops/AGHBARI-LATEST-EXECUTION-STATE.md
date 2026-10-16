@@ -1,5 +1,15 @@
 # CURRENT EXECUTION POINTER — 2026-10-16
 
+## LATEST EXECUTION POINTER — 2026-10-16 (checkout and order-history acceptance expanded)
+
+- Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; active branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Parent HEAD before this state checkpoint: `805f28f685c391bebe8420a0110716a6eafd583d`. Source acceptance commits: `d06db0c0cb42598dc1323161e1e4a9874760d029`, `d5f47c0cc971d07253b2334ae75b247d4d1a6118`, `5fdf177b5d6486920ca6169d4a6b69dcd94dbdcc`, and `e583de2dd84b41563d12b87f630e4b7502f5350a`; requirement and coverage entries were refreshed on `aa0e46c47bb7b36ff2c789c9176b5fc314307716` and `805f28f685c391bebe8420a0110716a6eafd583d`.
+- Implemented in source/tests: checkout submission errors use `role="alert"` and assertive live announcement; new checkout rejection test asserts no fake success, saved cart remains intact, and retry uses the same idempotency key; route-ID coverage includes cart, checkout, review, confirmation, orders index and order details; direct order-detail navigation without login must not issue database/RPC reads; authenticated order history is restricted to a safe summary field projection without monetary amounts.
+- **Exact-head verification is NOT_PROVEN:** GitHub status and Actions queries for the latest source/coverage commit `805f28f685c391bebe8420a0110716a6eafd583d` returned no status checks and zero workflow runs. The historical PASS on `812ca4e816c2becbf061a1a9554a2adc83f35eee` does not certify newer code. No local repository checkout is available; local unit/lint/build/database/browser checks were not run. Re-check the exact resulting state-commit SHA too; do not declare PASS without an actual run.
+- No production database migration/mutation, deployment, or Lovable publish was performed. Lovable synchronization, intended Supabase project `ffxxjaolfntzbapmfbuv`, and authenticated browser E2E remain open.
+- Active cursor remains `AGH-STOREFRONT-ROUTE-ACCEPTANCE-002`. Next: establish an authorized CI run for the exact active branch HEAD and fix any test/build/lint/database failure it reports; then continue read-after-write, order state, and order-detail authorization acceptance. Route presence and test source alone are not completion evidence.
+
+---
+
 ## LATEST EXECUTION POINTER — 2026-10-16 (checkout failure/retry acceptance)
 
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72 OPEN; active branch `fix/acceptance-hardening-cart-finance-20261015` → `main`. Source acceptance commit `d06db0c0cb42598dc1323161e1e4a9874760d029`; follow-up test commits `d5f47c0cc971d07253b2334ae75b247d4d1a6118` and `5fdf177b5d6486920ca6169d4a6b69dcd94dbdcc`. Coverage/requirement records were then updated on `2d77f5c1c84e02379dd35fcfd5ae5e4259b1250f` and `04935345deae12aeb2e073d9693fc9522665e42c`; this state-pointer write is the next documentation-only checkpoint.
