@@ -1720,7 +1720,83 @@ async function main() {
      values($1,$2,'CI-ONYX-FOREIGN-ITEM','Foreign item','unit',1,0,0)`,
     [foreignAuditOrderId, otherProductId],
   );
+  await db.unsafe(
+    "update public.order_items set requested_quantity=1,approved_quantity=1 where order_id=$1",
+    [foreignAuditOrderId],
+  );
+
+  // AGH-CUSTOMER-DISCOVERY-POPULAR-001: tenant-isolated ranking from eligible order records; no raw totals returned.
+  const popularityProductId = "a1000000-0000-0000-0000-000000000099";
+  const pendingOnlyProductId = "a1000000-0000-0000-0000-000000000098";
+  const popularityOrderOneId = "b1000000-0000-0000-0000-000000000099";
+  const popularityOrderTwoId = "b1000000-0000-0000-0000-000000000098";
+  const popularityPendingOrderId = "b1000000-0000-0000-0000-000000000097";
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Popularity Product','CI-POPULAR-01','unit',1,'active') on conflict(id) do update set status='active'",
+    [popularityProductId, organizationId],
+  );
+  await db.unsafe(
+    "insert into public.products(id,organization_id,name,item_code,unit,base_price,status) values($1,$2,'CI Pending-Only Product','CI-POPULAR-PENDING-01','unit',1,'active') on conflict(id) do update set status='active'",
+    [pendingOnlyProductId, organizationId],
+  );
+  await db.unsafe(
+    `insert into public.orders(id,organization_id,customer_id,order_number,status,total_amount,total_items,created_by)
+     values
+       ($1,$2,$3,'CI-POPULAR-ORDER-001','delivered',0,1,$4),
+       ($5,$2,$3,'CI-POPULAR-ORDER-002','confirmed',0,1,$4),
+       ($6,$2,$3,'CI-POPULAR-ORDER-003','pending',0,1,$4)
+     on conflict(id) do update set status=excluded.status`,
+    [popularityOrderOneId, organizationId, customerOneId, profileId, popularityOrderTwoId, popularityPendingOrderId],
+  );
+  await db.unsafe(
+    `insert into public.order_items(id,order_id,product_id,item_code,product_name_snapshot,unit_snapshot,quantity,unit_price_snapshot,line_total,requested_quantity,approved_quantity,approved_unit_price)
+     values
+       ('c1000000-0000-0000-0000-000000000099',$1,$2,'CI-POPULAR-01','CI Popularity Product','unit',20,0,0,20,20,0),
+       ('c1000000-0000-0000-0000-000000000098',$3,$2,'CI-POPULAR-01','CI Popularity Product','unit',5,0,0,5,5,0),
+       ('c1000000-0000-0000-0000-000000000097',$4,$5,'CI-POPULAR-PENDING-01','CI Pending-Only Product','unit',100,0,0,100,100,0)
+     on conflict(id) do update set product_id=excluded.product_id,quantity=excluded.quantity,approved_quantity=excluded.approved_quantity`,
+    [popularityOrderOneId, popularityProductId, popularityOrderTwoId, popularityPendingOrderId, pendingOnlyProductId],
+  );
+
+  await db.unsafe("reset role");
+  await db.unsafe("select set_config('request.jwt.claim.sub','',false), set_config('request.jwt.claims','{}',false)");
+  await db.unsafe("set role anon");
+  const anonymousPopularity = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_popular_products($1)",
+    [10],
+  );
+  assert.equal(anonymousPopularity[0]?.product_id, popularityProductId, "published storefront ranking uses real eligible order records");
+  assert.equal(Number(anonymousPopularity[0]?.ranking_position), 1);
+  assert.ok(anonymousPopularity.every((row) => row.product_id !== otherProductId), "anonymous ranking cannot include another organization's products");
+  assert.ok(anonymousPopularity.every((row) => row.product_id !== pendingOnlyProductId), "pending orders do not contribute to the public popularity ranking");
+  assert.deepEqual(Object.keys(anonymousPopularity[0]).sort(), ["product_id","ranking_position"], "public ranking never exposes unit counts or financial totals");
+  const anonymousOneResult = await db.unsafe("select product_id,ranking_position from public.fetch_public_popular_products($1)", [1]);
+  assert.equal(anonymousOneResult.length, 1, "server honors the requested ranking limit");
+
+  await db.unsafe("reset role");
+  await setIdentity(authUserId, "ci-customer-one@example.test");
   await db.unsafe("set role authenticated");
+  const ownPopularity = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_popular_products($1)",
+    [20],
+  );
+  assert.equal(ownPopularity[0]?.product_id, popularityProductId, "highest eligible ordered quantity ranks first");
+  assert.equal(Number(ownPopularity[0]?.ranking_position), 1);
+  assert.ok(!ownPopularity.some((row) => row.product_id === otherProductId), "customer ranking remains in the signed-in tenant");
+  assert.ok(!ownPopularity.some((row) => row.product_id === pendingOnlyProductId), "pending-only products are not included");
+
+  await db.unsafe("reset role");
+  await setIdentity(foreignAuthUserId, "foreign-ci-profile@example.test");
+  await db.unsafe("set role authenticated");
+  const foreignPopularity = await db.unsafe(
+    "select product_id,ranking_position from public.fetch_public_popular_products($1)",
+    [20],
+  );
+  assert.ok(foreignPopularity.some((row) => row.product_id === otherProductId), "signed-in foreign tenant sees its own eligible popular product");
+  assert.ok(!foreignPopularity.some((row) => row.product_id === popularityProductId), "tenant product IDs do not cross the ranking boundary");
+
+  await db.unsafe("reset role");
+  await setIdentity(staffAuthUserId, "admin@aghbari.ye");
   await expectFailure(
     "staff cannot create an Onyx export audit for an order in another organization",
     () => db.unsafe("select public.record_onyx_order_export($1::uuid,$2::integer)", [foreignAuditOrderId, 1]),

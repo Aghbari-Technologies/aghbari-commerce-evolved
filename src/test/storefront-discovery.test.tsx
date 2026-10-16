@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   fetchCategories: vi.fn(),
   fetchPromotions: vi.fn(),
+  fetchPopularProductRanking: vi.fn(),
+  popularRanking: [
+    { product_id: "product-99", ranking_position: 1 },
+    { product_id: "product-3", ranking_position: 2 },
+    { product_id: "product-1", ranking_position: 3 },
+  ],
   fetchSettingsMap: vi.fn(),
   user: null as null | { profileId: string; roles: string[]; name: string },
   rpc: vi.fn(async () => ({ data: null as unknown, error: null as unknown })),
@@ -20,11 +26,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const initialProducts = [...mocks.products];
+const initialPopularRanking = [...mocks.popularRanking];
 
 vi.mock("@/lib/api", () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCategories: mocks.fetchCategories,
   fetchPromotions: mocks.fetchPromotions,
+  fetchPopularProductRanking: mocks.fetchPopularProductRanking,
   fetchSettingsMap: mocks.fetchSettingsMap,
 }));
 
@@ -33,6 +41,7 @@ vi.mock("@/lib/useFetch", () => ({
     if (fetcher === mocks.fetchProducts) return { data: mocks.products, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchCategories) return { data: [], loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchPromotions) return { data: [], loading: false, error: null, refetch: vi.fn() };
+    if (fetcher === mocks.fetchPopularProductRanking) return { data: mocks.popularRanking, loading: false, error: null, refetch: vi.fn() };
     if (fetcher === mocks.fetchSettingsMap) return { data: {}, loading: false, error: null, refetch: vi.fn() };
     return { data: null, loading: false, error: null, refetch: vi.fn() };
   },
@@ -102,6 +111,7 @@ describe("customer storefront saved discovery", () => {
   beforeEach(() => {
     window.localStorage.clear();
     mocks.products.splice(0, mocks.products.length, ...initialProducts);
+    mocks.popularRanking.splice(0, mocks.popularRanking.length, ...initialPopularRanking);
     mocks.user = null;
     mocks.rpc.mockReset();
     mocks.rpc.mockResolvedValue({ data: null, error: null });
@@ -119,6 +129,23 @@ describe("customer storefront saved discovery", () => {
     expect(empty.host.textContent).toContain("لا توجد أصناف منشورة حالياً");
     expect(empty.host.textContent).toContain("لا توجد أصناف نشطة متاحة للعرض في المتجر حالياً");
     expect(empty.host.textContent).not.toContain("جرّب تغيير البحث أو التصنيف");
+  });
+
+  it("orders the popular route by the server ranking and hides raw sales totals", async () => {
+    const popular = await mountAt("/popular");
+    const names = Array.from(popular.host.querySelectorAll("article h3")).map((node) => node.textContent);
+    expect(popular.host.textContent).toContain("الأكثر طلبًا");
+    expect(names).toEqual(["Oil", "Rice"]);
+    expect(popular.host.textContent).toContain("الترتيب حسب الطلبات المعتمدة");
+    expect(popular.host.textContent).toContain("لا تُعرض إجماليات المبيعات");
+    expect(popular.host.textContent).not.toContain("Unknown product");
+  });
+
+  it("shows an explicit empty state when no server-backed popularity ranking exists", async () => {
+    mocks.popularRanking.splice(0, mocks.popularRanking.length);
+    const popular = await mountAt("/popular");
+    expect(popular.host.textContent).toContain("لا توجد طلبات مؤهلة كافية");
+    expect(popular.host.querySelector("article h3")).toBeNull();
   });
 
   it("isolates durable cart drafts by profile after the legacy cart is claimed", async () => {
