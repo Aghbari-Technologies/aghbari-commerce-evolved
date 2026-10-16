@@ -1,3 +1,17 @@
+## EXECUTION-FIRST OVERRIDE — 2026-10-16 (takes precedence over older notes below)
+
+**Do work; do not restart discovery.** The active workstream is PR [#72](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/pull/72), branch `fix/acceptance-hardening-cart-finance-20261015`, based on `main`. Preserve this branch and all existing changes. Do not switch to another work branch, create a duplicate branch, or push work to `main` while this PR is open. Continue on this PR branch until its work is complete and the PR is deliberately integrated.
+
+**Single task cursor:** read only the topmost `Current execution pointer` in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; ignore older `next_task_id` mentions in historical sections. The current next task is `AGH-OPS-DR-001`: add focused acceptance tests for the existing 100 MB file, 100-column, 4,000-character cell, and XLSX archive-expansion boundaries; then implement/fix only what those tests prove is missing. Continue to repeatable performance/memory and backup/restore evidence when safe.
+
+**No discovery loop:** at session start, verify the active branch/PR and its current HEAD once; read the current state pointer, the exact registry row for the task, and only the source/spec sections needed to implement it. Do not re-read the entire specification or scan the repository broadly each session. A blocker on a separate external integration never blocks independent source work.
+
+**Implementation bar:** write or change production code/tests, run focused tests and relevant project gates, fix failures, and keep moving to the next open task. A plan, search, source inventory, report, route, or stub is not implementation. Keep existing behavior and uncommitted work safe. Never fake data, PASS, production access, or Lovable synchronization.
+
+**Mandatory checkpoint at every boundary:** after each coherent batch and *before any response, timeout, context limit, session end, or pause*, update the existing `ops/AGHBARI-LATEST-EXECUTION-STATE.md` and the matching registry row. Record branch/PR, actual current HEAD, changed paths, real commands/results, tested SHA, exact CI link/status when available, the next task ID, and a precise blocker. If tests were not run, state that plainly. Commit/push the checkpoint to the active PR branch when possible; if network access fails, save locally where possible and mark it UNPUSHED. Never end an execution run with the cursor unsaved. On a new conversation, resume from that checkpoint without asking the owner to repeat it.
+
+**Lovable budget:** finish source implementation and automated tests in Git first. Use Lovable's free points only for specific environment/database/browser integration, synchronization, or publishing work that cannot be proven or completed from source. Never spend them on rediscovery or rewriting instructions. Production DB writes require verified project identity and authorization.
+
 <!-- LOVABLE:BEGIN -->
 > [!IMPORTANT]
 > This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
