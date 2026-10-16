@@ -1,3 +1,7 @@
+## Current execution control (2026-10-16)
+
+Follow the highest-priority override in root `AGENTS.md`. Preserve active PR #72 on `fix/acceptance-hardening-cart-finance-20261015`; do not switch branches or send this work to `main` while PR #72 is open. Use only the topmost current pointer in `ops/AGHBARI-LATEST-EXECUTION-STATE.md`; current next task: `AGH-OPS-DR-001` (100 MB file, 100-column, 4,000-character cell, XLSX expansion boundaries). Implement and test immediately; do not repeat repo-wide discovery or reread the full spec. **Before every run/session ends or a context limit is reached, persist the current HEAD, work completed, real tests/results, next task ID and blocker in the existing state file and matching registry row.** Never claim unsaved/unpushed work is remote or tests passed without evidence.
+
 # Aghbari Commerce — repository-wide Copilot instructions
 
 Read and obey the root `AGENTS.md` before acting. It is the shared agent rulebook; do not copy or fork its full content here. Lovable's official documentation confirms that root-level `AGENTS.md` is always read by its agent; this is the free persistent-instruction path: https://docs.lovable.dev/features/knowledge.
