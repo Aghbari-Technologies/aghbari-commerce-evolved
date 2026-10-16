@@ -7,7 +7,7 @@
 - Repository: `Aghbari-Technologies/aghbari-commerce-evolved`; PR #72; branch `fix/acceptance-hardening-cart-finance-20261015`.
 - Current source HEAD at the start of this slice: `36f5430511fc84c36552925228e9b26f81b69896`; this documentation and route slice adds `/templates` using the existing reorder-template workflow. Exact-head CI for the new commits is pending.
 - Exact-head CI on `d2a232fc52d94d821cea95f0daaaa24692462e30` was IN PROGRESS at last readback: [Actions 38843235344](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38843235344).
-- §13.4 requires 64 customer paths and 45 admin paths (109 total). This batch adds 8 distinct customer route modules, bringing exact source-path coverage to 41/109 (37.6%). Route-module presence is not complete behavioral coverage: official TanStack tree synchronization, route tests on the resulting source SHA, and screen/browser acceptance are separate requirements.
+- §13.4 requires 64 customer paths and 45 admin paths (109 total). The current source inventory covers 55/109 direct route modules (50.5%): the recorded baseline of 33 plus 8 customer entry routes added in this parallel batch and 14 direct admin deep-link modules verified in the latest generated tree. This is route-source coverage only, not full behavioral or production completeness. Official route-tree synchronization after the newest customer routes and exact-head CI/browser acceptance are still required.
 
 ## 2026-10-16 — Customer account/company source slice
 
