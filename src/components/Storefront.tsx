@@ -427,7 +427,11 @@ export function Storefront({ onExit, initialView = 'shop', initialProductId }: {
           setLastOrderId(order.id);
           const cleared = commitCartMutation({ id: createOfflineCartMutationId(), kind: 'clear' });
           setView('confirm');
-          if (!cleared) setSavedListNotice('تم إنشاء الطلب من الخادم، لكن تعذر إفراغ المسودة المحلية. لا تعاود إرسالها؛ راجع طلباتي ثم أعد محاولة تنظيف المسودة.');
+          if (!cleared) {
+            setSavedListNotice('تم إنشاء الطلب من الخادم، لكن تعذر إفراغ المسودة المحلية. لا تعاود إرسالها؛ راجع طلباتي ثم أعد محاولة تنظيف المسودة.');
+          } else {
+            void navigate({ to: '/checkout/confirm', search: { orderId: order.id } });
+          }
           return cleared;
         }} />)}
         {view === 'confirm' && <OrderConfirm orderNo={lastOrderNo} orderId={lastOrderId} onContinue={() => void navigate({ to: '/' })} />}

@@ -25,6 +25,8 @@ describe("App routing", () => {
     "/forgot-password",
     "/verify",
     "/checkout",
+    "/checkout/review",
+    "/checkout/confirm",
     "/compare",
     "/product/route-smoke-test-product",
     "/wishlist",
