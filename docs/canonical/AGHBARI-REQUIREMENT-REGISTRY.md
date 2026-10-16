@@ -160,3 +160,10 @@ Protocol: `VERIFY ACTIVE PR/HEAD → RESUME CURRENT TASK → IMPLEMENT → TEST 
 - Direct customer route modules now cover those screen families. The TanStack route tree is synchronized from official Vite plugin output captured in Actions run 38850270064; the temporary log capture is removed and the drift guard restored.
 - Template detail/create/edit/update/delete remains the next source slice; existing template creation/loading alone does not establish edit workflow acceptance.
 - Exact-head CI pending; historical runs are not transferred.
+
+
+## 2026-10-16 — AGH-PRODUCT-SCREEN-COVERAGE-001 template workflow
+- Added the tenant/owner-scoped SQL update RPC and isolated-PostgreSQL regression assertions for update persistence and cross-customer update/delete denial. The SQL function locks the target row and atomically replaces lines.
+- Added a service for template list/detail/create/update/delete, input validation, and read-after-write comparisons; added list/create/detail/edit dynamic routes and direct route-match assertions.
+- Latest parent CI [38850995843](https://github.com/Aghbari-Technologies/aghbari-commerce-evolved/actions/runs/38850995843) failed unit tests because the new validator test supplied a synthetic UUID with version group 0000. Fixed fixture to version-4 UUID before this route-tree checkpoint.
+- Exact-head CI must pass after routeTree sync; no local tests are claimed.

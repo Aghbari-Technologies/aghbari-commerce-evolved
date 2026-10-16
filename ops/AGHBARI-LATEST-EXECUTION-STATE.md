@@ -216,3 +216,10 @@ Older implementation and test evidence belongs in `ops/AGHBARI-DEVELOPMENT-PROGR
 - This commit synchronizes src/routeTree.gen.ts with the official generated output, removes the temporary dump step, and restores git diff --exit-code -- src/routeTree.gen.ts. Exact-head rerun is required.
 - Current route-module inventory at parent: 101 files under src/routes including root/endpoint modules; this is not a count of complete business screens.
 - Next: repair exact-head CI route acceptance, then add template detail/create/edit/update/delete routes backed by a tenant-bound RPC and ownership tests.
+
+
+## 2026-10-16 — template routes official generation checkpoint
+- Active PR #72 / branch fix/acceptance-hardening-cart-finance-20261015; parent source SHA 68885a7cdcd432a8c1123eba42835f383b9faa2a; new route tree captured from CI build of ae465c44a5d810b598fb7eba85a80d15b7edae0a. Generator emitted 105 route imports including the 4 new template/detail/reorder route modules.
+- Source commit 3aad34546ead53d6c22efec4ab8e2ff27a6d60b5 added update_reorder_template SQL and the client service; its CI failed three focused input tests because the fixture UUID had invalid version group 0000. Commit 68885a7cdcd432a8c1123eba42835f383b9faa2a fixes the fixture to a valid version-4 UUID.
+- The build/route-capture run for ae465c44a5d810b598fb7eba85a80d15b7edae0a succeeded through build and official route generation but was expected to fail the old-tree diff guard; unit tests were skipped in that capture run. This checkpoint commits the official generated output and restores the route-tree diff guard.
+- Next task: exact-head CI and migration tests. Repair any new failures before broadening operational route scope.

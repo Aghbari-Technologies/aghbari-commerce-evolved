@@ -99,7 +99,10 @@ import { Route as OnboardingProfileRouteImport } from './routes/onboarding.profi
 import { Route as OrdersIndexRouteImport } from './routes/orders.index'
 import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
+import { Route as ReorderIdRouteImport } from './routes/reorder_.$id'
 import { Route as SearchAdvancedRouteImport } from './routes/search_.advanced'
+import { Route as TemplatesIdRouteImport } from './routes/templates_.$id'
+import { Route as TemplatesNewRouteImport } from './routes/templates_.new'
 import { Route as AdminAiAlertsRouteImport } from './routes/admin_.ai.alerts'
 import { Route as AdminAiExecutiveRouteImport } from './routes/admin_.ai.executive'
 import { Route as AdminAiReportsRouteImport } from './routes/admin_.ai.reports'
@@ -108,6 +111,7 @@ import { Route as AdminAiSyncRouteImport } from './routes/admin_.ai.sync'
 import { Route as AdminAiTasksRouteImport } from './routes/admin_.ai.tasks'
 import { Route as AdminOrderIdRouteImport } from './routes/admin_.order.$id'
 import { Route as ApiInvoicePdfInvoiceIdRouteImport } from './routes/api.invoice-pdf.$invoiceId'
+import { Route as TemplatesIdEditRouteImport } from './routes/templates_.$id.edit'
 import { Route as CategorySlugSubcategorySubcategorySlugRouteImport } from './routes/category.$slug.subcategory.$subcategorySlug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -560,9 +564,24 @@ const ProductIdRoute = ProductIdRouteImport.update({
   path: '/product/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReorderIdRoute = ReorderIdRouteImport.update({
+  id: '/reorder_/$id',
+  path: '/reorder/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchAdvancedRoute = SearchAdvancedRouteImport.update({
   id: '/search_/advanced',
   path: '/search/advanced',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesIdRoute = TemplatesIdRouteImport.update({
+  id: '/templates_/$id',
+  path: '/templates/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesNewRoute = TemplatesNewRouteImport.update({
+  id: '/templates_/new',
+  path: '/templates/new',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminAiAlertsRoute = AdminAiAlertsRouteImport.update({
@@ -604,6 +623,11 @@ const ApiInvoicePdfInvoiceIdRoute = ApiInvoicePdfInvoiceIdRouteImport.update({
   id: '/api/invoice-pdf/$invoiceId',
   path: '/api/invoice-pdf/$invoiceId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const TemplatesIdEditRoute = TemplatesIdEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => TemplatesIdRoute,
 } as any)
 const CategorySlugSubcategorySubcategorySlugRoute =
   CategorySlugSubcategorySubcategorySlugRouteImport.update({
@@ -702,7 +726,10 @@ export interface FileRoutesByFullPath {
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
+  '/reorder/$id': typeof ReorderIdRoute
   '/search/advanced': typeof SearchAdvancedRoute
+  '/templates/$id': typeof TemplatesIdRouteWithChildren
+  '/templates/new': typeof TemplatesNewRoute
   '/orders/': typeof OrdersIndexRoute
   '/admin/ai/alerts': typeof AdminAiAlertsRoute
   '/admin/ai/executive': typeof AdminAiExecutiveRoute
@@ -712,6 +739,7 @@ export interface FileRoutesByFullPath {
   '/admin/ai/tasks': typeof AdminAiTasksRoute
   '/admin/order/$id': typeof AdminOrderIdRoute
   '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
+  '/templates/$id/edit': typeof TemplatesIdEditRoute
   '/category/$slug/subcategory/$subcategorySlug': typeof CategorySlugSubcategorySubcategorySlugRoute
 }
 export interface FileRoutesByTo {
@@ -803,7 +831,10 @@ export interface FileRoutesByTo {
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
+  '/reorder/$id': typeof ReorderIdRoute
   '/search/advanced': typeof SearchAdvancedRoute
+  '/templates/$id': typeof TemplatesIdRouteWithChildren
+  '/templates/new': typeof TemplatesNewRoute
   '/orders': typeof OrdersIndexRoute
   '/admin/ai/alerts': typeof AdminAiAlertsRoute
   '/admin/ai/executive': typeof AdminAiExecutiveRoute
@@ -813,6 +844,7 @@ export interface FileRoutesByTo {
   '/admin/ai/tasks': typeof AdminAiTasksRoute
   '/admin/order/$id': typeof AdminOrderIdRoute
   '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
+  '/templates/$id/edit': typeof TemplatesIdEditRoute
   '/category/$slug/subcategory/$subcategorySlug': typeof CategorySlugSubcategorySubcategorySlugRoute
 }
 export interface FileRoutesById {
@@ -906,7 +938,10 @@ export interface FileRoutesById {
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/orders/$id': typeof OrdersIdRoute
   '/product/$id': typeof ProductIdRoute
+  '/reorder_/$id': typeof ReorderIdRoute
   '/search_/advanced': typeof SearchAdvancedRoute
+  '/templates_/$id': typeof TemplatesIdRouteWithChildren
+  '/templates_/new': typeof TemplatesNewRoute
   '/orders/': typeof OrdersIndexRoute
   '/admin_/ai/alerts': typeof AdminAiAlertsRoute
   '/admin_/ai/executive': typeof AdminAiExecutiveRoute
@@ -916,6 +951,7 @@ export interface FileRoutesById {
   '/admin_/ai/tasks': typeof AdminAiTasksRoute
   '/admin_/order/$id': typeof AdminOrderIdRoute
   '/api/invoice-pdf/$invoiceId': typeof ApiInvoicePdfInvoiceIdRoute
+  '/templates_/$id/edit': typeof TemplatesIdEditRoute
   '/category/$slug/subcategory/$subcategorySlug': typeof CategorySlugSubcategorySubcategorySlugRoute
 }
 export interface FileRouteTypes {
@@ -1010,7 +1046,10 @@ export interface FileRouteTypes {
     | '/onboarding/profile'
     | '/orders/$id'
     | '/product/$id'
+    | '/reorder/$id'
     | '/search/advanced'
+    | '/templates/$id'
+    | '/templates/new'
     | '/orders/'
     | '/admin/ai/alerts'
     | '/admin/ai/executive'
@@ -1020,6 +1059,7 @@ export interface FileRouteTypes {
     | '/admin/ai/tasks'
     | '/admin/order/$id'
     | '/api/invoice-pdf/$invoiceId'
+    | '/templates/$id/edit'
     | '/category/$slug/subcategory/$subcategorySlug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1111,7 +1151,10 @@ export interface FileRouteTypes {
     | '/onboarding/profile'
     | '/orders/$id'
     | '/product/$id'
+    | '/reorder/$id'
     | '/search/advanced'
+    | '/templates/$id'
+    | '/templates/new'
     | '/orders'
     | '/admin/ai/alerts'
     | '/admin/ai/executive'
@@ -1121,6 +1164,7 @@ export interface FileRouteTypes {
     | '/admin/ai/tasks'
     | '/admin/order/$id'
     | '/api/invoice-pdf/$invoiceId'
+    | '/templates/$id/edit'
     | '/category/$slug/subcategory/$subcategorySlug'
   id:
     | '__root__'
@@ -1213,7 +1257,10 @@ export interface FileRouteTypes {
     | '/onboarding/profile'
     | '/orders/$id'
     | '/product/$id'
+    | '/reorder_/$id'
     | '/search_/advanced'
+    | '/templates_/$id'
+    | '/templates_/new'
     | '/orders/'
     | '/admin_/ai/alerts'
     | '/admin_/ai/executive'
@@ -1223,6 +1270,7 @@ export interface FileRouteTypes {
     | '/admin_/ai/tasks'
     | '/admin_/order/$id'
     | '/api/invoice-pdf/$invoiceId'
+    | '/templates_/$id/edit'
     | '/category/$slug/subcategory/$subcategorySlug'
   fileRoutesById: FileRoutesById
 }
@@ -1315,7 +1363,10 @@ export interface RootRouteChildren {
   OnboardingCompanyRoute: typeof OnboardingCompanyRoute
   OnboardingProfileRoute: typeof OnboardingProfileRoute
   ProductIdRoute: typeof ProductIdRoute
+  ReorderIdRoute: typeof ReorderIdRoute
   SearchAdvancedRoute: typeof SearchAdvancedRoute
+  TemplatesIdRoute: typeof TemplatesIdRouteWithChildren
+  TemplatesNewRoute: typeof TemplatesNewRoute
   AdminOrderIdRoute: typeof AdminOrderIdRoute
   ApiInvoicePdfInvoiceIdRoute: typeof ApiInvoicePdfInvoiceIdRoute
 }
@@ -1952,11 +2003,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reorder_/$id': {
+      id: '/reorder_/$id'
+      path: '/reorder/$id'
+      fullPath: '/reorder/$id'
+      preLoaderRoute: typeof ReorderIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search_/advanced': {
       id: '/search_/advanced'
       path: '/search/advanced'
       fullPath: '/search/advanced'
       preLoaderRoute: typeof SearchAdvancedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates_/$id': {
+      id: '/templates_/$id'
+      path: '/templates/$id'
+      fullPath: '/templates/$id'
+      preLoaderRoute: typeof TemplatesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/templates_/new': {
+      id: '/templates_/new'
+      path: '/templates/new'
+      fullPath: '/templates/new'
+      preLoaderRoute: typeof TemplatesNewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin_/ai/alerts': {
@@ -2015,6 +2087,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInvoicePdfInvoiceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/templates_/$id/edit': {
+      id: '/templates_/$id/edit'
+      path: '/edit'
+      fullPath: '/templates/$id/edit'
+      preLoaderRoute: typeof TemplatesIdEditRouteImport
+      parentRoute: typeof TemplatesIdRoute
+    }
     '/category/$slug/subcategory/$subcategorySlug': {
       id: '/category/$slug/subcategory/$subcategorySlug'
       path: '/subcategory/$subcategorySlug'
@@ -2070,6 +2149,18 @@ const CategorySlugRouteChildren: CategorySlugRouteChildren = {
 
 const CategorySlugRouteWithChildren = CategorySlugRoute._addFileChildren(
   CategorySlugRouteChildren,
+)
+
+interface TemplatesIdRouteChildren {
+  TemplatesIdEditRoute: typeof TemplatesIdEditRoute
+}
+
+const TemplatesIdRouteChildren: TemplatesIdRouteChildren = {
+  TemplatesIdEditRoute: TemplatesIdEditRoute,
+}
+
+const TemplatesIdRouteWithChildren = TemplatesIdRoute._addFileChildren(
+  TemplatesIdRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
@@ -2161,7 +2252,10 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingCompanyRoute: OnboardingCompanyRoute,
   OnboardingProfileRoute: OnboardingProfileRoute,
   ProductIdRoute: ProductIdRoute,
+  ReorderIdRoute: ReorderIdRoute,
   SearchAdvancedRoute: SearchAdvancedRoute,
+  TemplatesIdRoute: TemplatesIdRouteWithChildren,
+  TemplatesNewRoute: TemplatesNewRoute,
   AdminOrderIdRoute: AdminOrderIdRoute,
   ApiInvoicePdfInvoiceIdRoute: ApiInvoicePdfInvoiceIdRoute,
 }
