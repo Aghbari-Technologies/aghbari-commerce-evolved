@@ -57,7 +57,7 @@ describe("AI gateway privacy, provider parsing and quota math", () => {
   });
 
   it("pins the Edge handler to bounded body reads before JSON parsing", async () => {
-    const handler = await readFile(new URL("../../supabase/functions/ai-gateway/index.ts", import.meta.url), "utf8");
+    const handler = await readFile("supabase/functions/ai-gateway/index.ts", "utf8");
     expect(handler).toContain('readBoundedRequestBody(request,4096)');
     expect(handler).toContain('if(boundedBody.reason==="too_large")return reply({error:"request_too_large"},413)');
     expect(handler).not.toContain("request.text()");
