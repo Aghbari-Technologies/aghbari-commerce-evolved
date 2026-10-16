@@ -15,18 +15,26 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as BarcodeRouteImport } from './routes/barcode'
 import { Route as CartRouteImport } from './routes/cart'
+import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as CheckoutRouteImport } from './routes/checkout'
+import { Route as CompanyRouteImport } from './routes/company_'
 import { Route as CompareRouteImport } from './routes/compare'
+import { Route as FinancialDocumentsRouteImport } from './routes/financial-documents'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OfflineRouteImport } from './routes/offline'
 import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as PaymentsRouteImport } from './routes/payments'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as ProductsRouteImport } from './routes/products'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as QuotesRouteImport } from './routes/quotes'
+import { Route as ReceivablesRouteImport } from './routes/receivables'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ReorderRouteImport } from './routes/reorder'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as StatementRouteImport } from './routes/statement'
 import { Route as StatementsRouteImport } from './routes/statements'
 import { Route as StoreRouteImport } from './routes/store'
@@ -109,14 +117,29 @@ const CartRoute = CartRouteImport.update({
   path: '/cart',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CatalogRoute = CatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckoutRoute = CheckoutRouteImport.update({
   id: '/checkout',
   path: '/checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CompanyRoute = CompanyRouteImport.update({
+  id: '/company_',
+  path: '/company',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CompareRoute = CompareRouteImport.update({
   id: '/compare',
   path: '/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinancialDocumentsRoute = FinancialDocumentsRouteImport.update({
+  id: '/financial-documents',
+  path: '/financial-documents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -144,6 +167,21 @@ const OrdersRoute = OrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PaymentsRoute = PaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductsRoute = ProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -152,6 +190,11 @@ const ProfileRoute = ProfileRouteImport.update({
 const QuotesRoute = QuotesRouteImport.update({
   id: '/quotes',
   path: '/quotes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceivablesRoute = ReceivablesRouteImport.update({
+  id: '/receivables',
+  path: '/receivables',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
@@ -167,6 +210,11 @@ const ReorderRoute = ReorderRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StatementRoute = StatementRouteImport.update({
@@ -432,18 +480,26 @@ export interface FileRoutesByFullPath {
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
   '/cart': typeof CartRoute
+  '/catalog': typeof CatalogRoute
   '/checkout': typeof CheckoutRoute
+  '/company': typeof CompanyRoute
   '/compare': typeof CompareRoute
+  '/financial-documents': typeof FinancialDocumentsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/orders': typeof OrdersRouteWithChildren
+  '/payments': typeof PaymentsRoute
+  '/pricing': typeof PricingRoute
+  '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
+  '/receivables': typeof ReceivablesRoute
   '/register': typeof RegisterRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/search': typeof SearchRoute
   '/statement': typeof StatementRoute
   '/statements': typeof StatementsRoute
   '/store': typeof StoreRoute
@@ -503,17 +559,25 @@ export interface FileRoutesByTo {
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
   '/cart': typeof CartRoute
+  '/catalog': typeof CatalogRoute
   '/checkout': typeof CheckoutRoute
+  '/company': typeof CompanyRoute
   '/compare': typeof CompareRoute
+  '/financial-documents': typeof FinancialDocumentsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
+  '/payments': typeof PaymentsRoute
+  '/pricing': typeof PricingRoute
+  '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
+  '/receivables': typeof ReceivablesRoute
   '/register': typeof RegisterRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/search': typeof SearchRoute
   '/statement': typeof StatementRoute
   '/statements': typeof StatementsRoute
   '/store': typeof StoreRoute
@@ -574,18 +638,26 @@ export interface FileRoutesById {
   '/assistant': typeof AssistantRoute
   '/barcode': typeof BarcodeRoute
   '/cart': typeof CartRoute
+  '/catalog': typeof CatalogRoute
   '/checkout': typeof CheckoutRoute
+  '/company_': typeof CompanyRoute
   '/compare': typeof CompareRoute
+  '/financial-documents': typeof FinancialDocumentsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
   '/offline': typeof OfflineRoute
   '/orders': typeof OrdersRouteWithChildren
+  '/payments': typeof PaymentsRoute
+  '/pricing': typeof PricingRoute
+  '/products': typeof ProductsRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
+  '/receivables': typeof ReceivablesRoute
   '/register': typeof RegisterRoute
   '/reorder': typeof ReorderRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/search': typeof SearchRoute
   '/statement': typeof StatementRoute
   '/statements': typeof StatementsRoute
   '/store': typeof StoreRoute
@@ -647,18 +719,26 @@ export interface FileRouteTypes {
     | '/assistant'
     | '/barcode'
     | '/cart'
+    | '/catalog'
     | '/checkout'
+    | '/company'
     | '/compare'
+    | '/financial-documents'
     | '/forgot-password'
     | '/invoices'
     | '/login'
     | '/offline'
     | '/orders'
+    | '/payments'
+    | '/pricing'
+    | '/products'
     | '/profile'
     | '/quotes'
+    | '/receivables'
     | '/register'
     | '/reorder'
     | '/reset-password'
+    | '/search'
     | '/statement'
     | '/statements'
     | '/store'
@@ -718,17 +798,25 @@ export interface FileRouteTypes {
     | '/assistant'
     | '/barcode'
     | '/cart'
+    | '/catalog'
     | '/checkout'
+    | '/company'
     | '/compare'
+    | '/financial-documents'
     | '/forgot-password'
     | '/invoices'
     | '/login'
     | '/offline'
+    | '/payments'
+    | '/pricing'
+    | '/products'
     | '/profile'
     | '/quotes'
+    | '/receivables'
     | '/register'
     | '/reorder'
     | '/reset-password'
+    | '/search'
     | '/statement'
     | '/statements'
     | '/store'
@@ -788,18 +876,26 @@ export interface FileRouteTypes {
     | '/assistant'
     | '/barcode'
     | '/cart'
+    | '/catalog'
     | '/checkout'
+    | '/company_'
     | '/compare'
+    | '/financial-documents'
     | '/forgot-password'
     | '/invoices'
     | '/login'
     | '/offline'
     | '/orders'
+    | '/payments'
+    | '/pricing'
+    | '/products'
     | '/profile'
     | '/quotes'
+    | '/receivables'
     | '/register'
     | '/reorder'
     | '/reset-password'
+    | '/search'
     | '/statement'
     | '/statements'
     | '/store'
@@ -860,18 +956,26 @@ export interface RootRouteChildren {
   AssistantRoute: typeof AssistantRoute
   BarcodeRoute: typeof BarcodeRoute
   CartRoute: typeof CartRoute
+  CatalogRoute: typeof CatalogRoute
   CheckoutRoute: typeof CheckoutRoute
+  CompanyRoute: typeof CompanyRoute
   CompareRoute: typeof CompareRoute
+  FinancialDocumentsRoute: typeof FinancialDocumentsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InvoicesRoute: typeof InvoicesRoute
   LoginRoute: typeof LoginRoute
   OfflineRoute: typeof OfflineRoute
   OrdersRoute: typeof OrdersRouteWithChildren
+  PaymentsRoute: typeof PaymentsRoute
+  PricingRoute: typeof PricingRoute
+  ProductsRoute: typeof ProductsRoute
   ProfileRoute: typeof ProfileRoute
   QuotesRoute: typeof QuotesRoute
+  ReceivablesRoute: typeof ReceivablesRoute
   RegisterRoute: typeof RegisterRoute
   ReorderRoute: typeof ReorderRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SearchRoute: typeof SearchRoute
   StatementRoute: typeof StatementRoute
   StatementsRoute: typeof StatementsRoute
   StoreRoute: typeof StoreRoute
@@ -961,6 +1065,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CartRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/catalog': {
+      id: '/catalog'
+      path: '/catalog'
+      fullPath: '/catalog'
+      preLoaderRoute: typeof CatalogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkout': {
       id: '/checkout'
       path: '/checkout'
@@ -968,11 +1079,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/company_': {
+      id: '/company_'
+      path: '/company'
+      fullPath: '/company'
+      preLoaderRoute: typeof CompanyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/compare': {
       id: '/compare'
       path: '/compare'
       fullPath: '/compare'
       preLoaderRoute: typeof CompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/financial-documents': {
+      id: '/financial-documents'
+      path: '/financial-documents'
+      fullPath: '/financial-documents'
+      preLoaderRoute: typeof FinancialDocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -1010,6 +1135,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/payments': {
+      id: '/payments'
+      path: '/payments'
+      fullPath: '/payments'
+      preLoaderRoute: typeof PaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/products': {
+      id: '/products'
+      path: '/products'
+      fullPath: '/products'
+      preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -1022,6 +1168,13 @@ declare module '@tanstack/react-router' {
       path: '/quotes'
       fullPath: '/quotes'
       preLoaderRoute: typeof QuotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receivables': {
+      id: '/receivables'
+      path: '/receivables'
+      fullPath: '/receivables'
+      preLoaderRoute: typeof ReceivablesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -1043,6 +1196,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/statement': {
@@ -1446,18 +1606,26 @@ const rootRouteChildren: RootRouteChildren = {
   AssistantRoute: AssistantRoute,
   BarcodeRoute: BarcodeRoute,
   CartRoute: CartRoute,
+  CatalogRoute: CatalogRoute,
   CheckoutRoute: CheckoutRoute,
+  CompanyRoute: CompanyRoute,
   CompareRoute: CompareRoute,
+  FinancialDocumentsRoute: FinancialDocumentsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InvoicesRoute: InvoicesRoute,
   LoginRoute: LoginRoute,
   OfflineRoute: OfflineRoute,
   OrdersRoute: OrdersRouteWithChildren,
+  PaymentsRoute: PaymentsRoute,
+  PricingRoute: PricingRoute,
+  ProductsRoute: ProductsRoute,
   ProfileRoute: ProfileRoute,
   QuotesRoute: QuotesRoute,
+  ReceivablesRoute: ReceivablesRoute,
   RegisterRoute: RegisterRoute,
   ReorderRoute: ReorderRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SearchRoute: SearchRoute,
   StatementRoute: StatementRoute,
   StatementsRoute: StatementsRoute,
   StoreRoute: StoreRoute,
